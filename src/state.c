@@ -471,7 +471,7 @@ void stateSaveToDisk(void) {
 	if (server.flush_jobs) {
 		int i = 0;
 		struct job * j = NULL;
-		dirtyJobs = calloc(sizeof(struct job *) * server.flush_jobs + 1, 1);
+		dirtyJobs = calloc(sizeof(struct job *) * (server.flush_jobs + 1), 1);
 
 		for (j = server.jobTable; j != NULL; j = j->hh.next) {
 			if (j->dirty) {

@@ -230,8 +230,16 @@ void command_agent_jobcompleted(agent * a) {
 	j->state = exitcode ? JERS_JOB_EXITED : JERS_JOB_COMPLETED;
 	j->exitcode = exitcode;
 	j->pid = -1;
+	j->dirty = 1;
 
-	j->queue->active_count--;
+	server.dirty_jobs++;
+	j->queue->stats.running--;
+	server.stats.running--;
+
+	if (exitcode == 0)
+		server.stats.completed++;
+	else
+		server.stats.exited++;
 
 	print_msg(JERS_LOG_DEBUG, "JobID: %d %s exitcode:%d", jobid, exitcode ? "EXITED" : "COMPLETED", exitcode);
 

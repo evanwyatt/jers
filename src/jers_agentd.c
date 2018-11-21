@@ -153,8 +153,10 @@ int open_logfile(char * file) {
 		time_t t = time(NULL);
 		struct tm * tm = localtime(&t);
 
-		if (!tm)
+		if (!tm) {
+			free(newfilename);
 			return -1;
+		}
 
 		/* Create a link between filename & newfilename to 'rename' that file */
 
@@ -180,6 +182,7 @@ int open_logfile(char * file) {
 		if (rename_attempts > 999) {
 			/* Wait a bit before trying again */
 			sleep(1);
+			free(newfilename);
 			continue;
 		}
 
@@ -257,6 +260,7 @@ void jersRunJob(struct jersJobSpawn * j) {
 	}
 
 	setuid(j->uid);
+	setgid(j->uid);
 
 	/* Redirect stdout/stderr before we spawn,
 	 * so we can write a summary at the end of the job */

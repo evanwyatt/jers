@@ -151,6 +151,8 @@ int main (int argc, char * argv[]) {
 	print_msg(JERS_LOG_DEBUG, "Initialising events\n");
 	initEvents();
 
+	server.candidate_recalc = 1;
+
 	print_msg(JERS_LOG_INFO, "*********************************************");
 	print_msg(JERS_LOG_INFO, "* JERSD entering main loop...");
 	print_msg(JERS_LOG_INFO, "*********************************************");

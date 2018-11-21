@@ -66,6 +66,14 @@ enum job_pending_reasons {
 
 };
 
+struct jobStats {
+        uint32_t running;
+        uint32_t pending;
+        uint32_t deferred;
+        uint32_t holding;
+        uint32_t completed;
+        uint32_t exited;
+};
 
 typedef struct client {
 	struct connectionType connection;
@@ -107,12 +115,10 @@ struct queue {
 	int state;
 	int priority;
 
-	int active_count;
-	int pending_start;
-
-
 	char * host;
 	struct agent * agent;
+
+	struct jobStats stats;
 
 	int dirty;
 	int32_t internal_state;
@@ -190,23 +196,6 @@ struct event {
 	struct event * next;
 };
 
-struct jobStats {
-	/* Jobs currently on the system */
-	uint32_t running;
-	uint32_t pending;
-	uint32_t deferred;
-	uint32_t holding;
-	uint32_t completed;
-	uint32_t exited;
-
-	/* Statistics for the current period. - Reset at 0600 by default */
-	struct period {
-		uint64_t started;
-		uint64_t completed;
-		uint64_t deleted;
-	} period;
-};
-
 struct jersServer {
 	int state_fd;
 	char * state_dir;
@@ -245,6 +234,12 @@ struct jersServer {
 	struct resource * resTable;
 
 	struct jobStats stats;
+
+	int candidate_recalc;
+
+	int64_t candidate_pool_size;
+	int64_t candidate_pool_jobs;
+	struct job ** candidate_pool;
 
 	char slow_logging;    // Write slow commands to a slow log
 	int slow_threshold_ms; // milliseconds before a cmd is considered slow.
@@ -325,6 +320,8 @@ void stateReplayJournal(void);
 void stateSaveToDisk(void);
 
 void checkJobs(void);
+void releaseDeferred(void);
+
 
 //auth.c
 int ValidateUserAction(uid_t uid, int action);

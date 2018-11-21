@@ -63,11 +63,15 @@ void checkAgentEvent(void) {
 	agent * a = server.agent_list;
 
 	while (a) {
-		if (a->msg.command)
+		while (a->msg.command)
 			runAgentCommand(a);
 
 		a = a->next;
 	}
+}
+
+void checkDeferEvent(void) {
+	releaseDeferred();
 }
 
 void flushEvent(void) {
@@ -96,12 +100,14 @@ void backgroundSaveEvent(void) {
 }
 
 void initEvents(void) {
-	registerEvent(checkJobsEvent, 800);
+	registerEvent(checkJobsEvent, server.sched_freq);
 	registerEvent(cleanupJobsEvent, 5000);
 	registerEvent(backgroundSaveEvent, server.background_save_ms);
 
 	if (server.flush.defer)
 		registerEvent(flushEvent, server.flush.defer_ms);
+
+	registerEvent(checkDeferEvent, 750);
 
 	registerEvent(checkAgentEvent, 0);
 	registerEvent(checkClientEvent, 0);

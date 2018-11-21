@@ -133,7 +133,17 @@ int addJob(struct job * j, int dirty) {
 	if (dirty) {
 		j->dirty = 1;
 		server.dirty_jobs++;
+		server.candidate_recalc = 1;
 	}
+
+	switch (j->state) {
+		case JERS_JOB_RUNNING : server.stats.running++; break;
+		case JERS_JOB_PENDING : server.stats.pending++; break;
+		case JERS_JOB_DEFERRED: server.stats.holding++; break;
+		case JERS_JOB_HOLDING : server.stats.completed++; break;
+		case JERS_JOB_EXITED  : server.stats.exited++; break;	
+	}
+
 
 	return 0;
 }
