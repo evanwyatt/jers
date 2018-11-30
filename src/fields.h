@@ -93,6 +93,9 @@ enum field_type {
 	DESC,
 	JOBLIMIT,
 
+	RESNAME,
+	RESCOUNT,
+
 	END_OF_FIELDS
 };
 

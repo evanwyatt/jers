@@ -62,7 +62,8 @@ field fields[] = {
 	{EXITCODE,   RESP_TYPE_INT,        "EXITCODE"},
 	{DESC,       RESP_TYPE_BLOBSTRING, "DESC"},
 	{JOBLIMIT,   RESP_TYPE_INT,        "JOBLIMIT"},
-
+	{RESNAME,    RESP_TYPE_BLOBSTRING, "RESNAME"},
+	{RESCOUNT,   RESP_TYPE_INT,        "RESCOUNT"},
 };
 
 char * getStringField(field *f) {
@@ -92,12 +93,12 @@ int64_t getStringArrayField(field *f, char *** array) {
 	return f->value.string_array.count;
 }
 
-static int fieldtonum(const char * field) {
+static int fieldtonum(const char * in) {
 	int i;
 	int num_fields = sizeof(fields)/sizeof(field);
 
 	for (i = 0; i < num_fields; i++) {
-		if (strcmp(field, fields[i].name) == 0) return i;
+		if (strcmp(in, fields[i].name) == 0) return i;
 	}
 
 	return -1;
