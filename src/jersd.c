@@ -126,6 +126,9 @@ int main (int argc, char * argv[]) {
 	if (stateLoadQueues())
 		error_die("init: failed to load queues from file");
 
+	if (stateLoadResources())
+		error_die("init: failed to load resources from file");
+
 	/* Load jobs from file */
 
 	if (stateLoadJobs())
