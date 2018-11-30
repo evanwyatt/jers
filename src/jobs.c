@@ -75,11 +75,6 @@ void free_job (struct job * j) {
 	}
 
 	if (j->res_count) {
-		int i;
-		for (i = 0; i < j->res_count; i++) {
-			free(j->req_resources[i]);
-		}
-
 		free(j->req_resources);
 	}
 
@@ -117,7 +112,7 @@ int cleanupJobs(int max_clean) {
 	return cleaned_up;
 }
 
-int addJob(struct job * j, int dirty) {
+int addJob(struct job * j, int state, int dirty) {
 	struct job * check_job = NULL;
 
 	/* Does a job with this ID already exist? */
@@ -130,20 +125,7 @@ int addJob(struct job * j, int dirty) {
 
 	HASH_ADD_INT(server.jobTable, jobid, j);
 
-	if (dirty) {
-		j->dirty = 1;
-		server.dirty_jobs++;
-		server.candidate_recalc = 1;
-	}
-
-	switch (j->state) {
-		case JERS_JOB_RUNNING : server.stats.running++; break;
-		case JERS_JOB_PENDING : server.stats.pending++; break;
-		case JERS_JOB_DEFERRED: server.stats.holding++; break;
-		case JERS_JOB_HOLDING : server.stats.completed++; break;
-		case JERS_JOB_EXITED  : server.stats.exited++; break;	
-	}
-
+	changeJobState(j, state, dirty);
 
 	return 0;
 }

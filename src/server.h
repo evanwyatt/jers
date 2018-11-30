@@ -183,7 +183,7 @@ struct job {
 	char ** tags;
 
 	int res_count;
-	struct jobResource ** req_resources;
+	struct jobResource * req_resources;
 
 	int dirty;
 	UT_hash_handle hh;
@@ -283,7 +283,7 @@ struct jersServer {
 extern struct jersServer server;
 
 jobid_t getNextJobID(void);
-int addJob(struct job * j, int dirty);
+int addJob(struct job * j, int state, int dirty);
 void freeRes(struct resource * r);
 
 int addRes(struct resource * r, int dirty);
@@ -316,12 +316,14 @@ int stateSaveCmd(char * cmd, int cmd_len);
 void stateInit(void);
 int stateLoadJobs(void);
 int stateLoadQueues(void);
+int stateLoadResources(void);
 void stateReplayJournal(void);
 void stateSaveToDisk(void);
 
 void checkJobs(void);
 void releaseDeferred(void);
 
+void changeJobState(struct job * j, int new_state, int dirty);
 
 //auth.c
 int ValidateUserAction(uid_t uid, int action);

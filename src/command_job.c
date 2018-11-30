@@ -167,6 +167,9 @@ int command_add_job(client * c, void * args) {
 	jersJobAdd * s = args;
 	struct job * j = NULL;
 	struct queue * q = NULL;
+	int i;
+	int state = 0;
+	struct jobResource * resources = NULL;
 
 	/* Validate the request first up */
 	if (s->queue == NULL) {
@@ -190,6 +193,32 @@ int command_add_job(client * c, void * args) {
 		return -1;
 	}
 
+	if (s->res_count) {
+		resources = malloc(sizeof(struct jobResource) * s->res_count);
+
+		/* Check the resources */
+		for (i = 0; i < s->res_count; i++) {
+			struct resource * res = NULL;
+			char * ptr = strchr(s->resources[i], ':');
+		
+			if (ptr) {
+				*ptr = '\0';
+				resources[i].needed = atoi(ptr + 1);
+			} else {
+				resources[i].needed = 1;
+			}
+
+			HASH_FIND_STR(server.resTable, s->resources[i], res);
+
+			if (res == NULL) {
+				appendError(c, "-INVRES A requested resource does not exist\n");
+				free(resources);
+				return 1;
+			}
+
+			resources[i].res = res;
+		}
+	}
 
 	/* Request looks good. Allocate a new job structure and jobid */
 	j = calloc(sizeof(struct job), 1);
@@ -213,17 +242,22 @@ int command_add_job(client * c, void * args) {
 	j->tag_count = s->tag_count;
 	j->tags = s->tags;
 
+	if (resources) {
+		j->res_count = s->res_count;
+		j->req_resources = resources;
+	}
+
 	if (j->defer_time)
-		j->state = JERS_JOB_DEFERRED;
+		state = JERS_JOB_DEFERRED;
 	else if (s->hold)
-		j->state = JERS_JOB_HOLDING;
+		state = JERS_JOB_HOLDING;
 	else
-		j->state = JERS_JOB_PENDING;
+		state = JERS_JOB_PENDING;
 
 	j->submit_time = time(NULL);
 
 	/* Add it to the hashtable */
-	addJob(j, 1);
+	addJob(j, state, 1);
 
 	/* Return the jobid */
 	resp_t * response = respNew();

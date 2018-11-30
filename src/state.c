@@ -105,22 +105,22 @@ void unescapeString(char * string) {
  *   These commands are then applied to the job/queue/res files as needed */
 
 int openStateFile(void) {
-        char state_file[PATH_MAX];
-        int fd;
-        int flags = O_CREAT | O_RDWR;
+	char state_file[PATH_MAX];
+	int fd;
+	int flags = O_CREAT | O_RDWR;
 
-        if (!server.state_dir)
-                error_die("No state directory specified");
+	if (!server.state_dir)
+		error_die("No state directory specified");
 
-        server.state_count++;
-        snprintf(state_file, sizeof(state_file), "%s/journal.%d", server.state_dir, server.state_count); //todo: error checking
-        fd = open(state_file, flags, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+	server.state_count++;
+	snprintf(state_file, sizeof(state_file), "%s/journal.%d", server.state_dir, server.state_count); //todo: error checking
+	fd = open(state_file, flags, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
 
-        if (fd == -1) {
-                error_die("Failed to open state file: %s", strerror(errno));
-        }
+	if (fd == -1) {
+		error_die("Failed to open state file: %s", strerror(errno));
+	}
 
-        return fd;
+	return fd;
 }
 
 /* Lightweight function to save the current command to disk (& flush it, if in sync mode)*/
@@ -145,11 +145,11 @@ int stateSaveCmd(char * cmd, int cmd_len) {
 
 	struct iovec iov[3];
 	iov[0].iov_base = " ";
-	iov[0].iov_len  = 1;
+	iov[0].iov_len	= 1;
 	iov[1].iov_base = cmd;
-	iov[1].iov_len  = cmd_len;
+	iov[1].iov_len	= cmd_len;
 	iov[2].iov_base = "\n";
-	iov[2].iov_len  = 1;
+	iov[2].iov_len	= 1;
 
 	start_offset = lseek(server.state_fd, 0, SEEK_CUR);
 
@@ -633,8 +633,8 @@ void stateInit(void) {
 	createDir(tmp);
 
 	for (i = 0; i < highest_dir; i++) {
-        	sprintf(tmp + len, "/%d", i);
-        	createDir(tmp);
+		sprintf(tmp + len, "/%d", i);
+		createDir(tmp);
 	}
 
 	/* Queue directory */
@@ -657,6 +657,7 @@ int stateLoadJob(char * fileName) {
 	ssize_t len;
 	jobid_t jobid = 0;
 	char * temp;
+	int state = 0;
 
 	f = fopen(fileName, "r");
 
@@ -719,7 +720,7 @@ int stateLoadJob(char * fileName) {
 		} else if (strcmp(key, "NICE") == 0) {
 			j->nice = atoi(value);
 		} else if (strcmp(key, "STATE") == 0) {
-			j->state = atoi(value);
+			state = atoi(value);
 		} else if (strcmp(key, "PRIORITY") == 0) {
 			j->priority = atoi(value);
 		} else if (strcmp(key, "SUBMITTIME") == 0) {
@@ -741,7 +742,10 @@ int stateLoadJob(char * fileName) {
 		error_die("Error loading job %d from file - No queue specified", j->jobid);
 	}
 
-	addJob(j, 0);
+	if (state == 0)
+		state = JERS_JOB_PENDING;
+
+	addJob(j, state, 0);
 
 	free(line);
 	fclose(f);
@@ -1004,3 +1008,86 @@ int stateLoadResources(void) {
 	globfree(&resFiles);
 	return 0;
 }
+
+void changeJobState(struct job * j, int new_state, int dirty) {
+
+	/* Adjust the old state */
+	switch (j->state) {
+		case JERS_JOB_RUNNING:
+			server.stats.running--;
+			j->queue->stats.running--;
+			break;
+
+		case JERS_JOB_PENDING:
+			server.stats.pending--;
+			j->queue->stats.pending--;
+			break;
+
+		case JERS_JOB_DEFERRED:
+			server.stats.deferred--;
+			j->queue->stats.deferred--;
+			break;
+
+		case JERS_JOB_HOLDING:
+			server.stats.holding--;
+			j->queue->stats.holding--;
+			break;
+
+		case JERS_JOB_COMPLETED:
+			server.stats.completed--;
+			j->queue->stats.completed--;
+			break;
+		
+		case JERS_JOB_EXITED:
+			server.stats.exited--;
+			j->queue->stats.exited--;
+			break;
+	}
+
+	/* And the new state */
+
+	switch (j->state) {
+		case JERS_JOB_RUNNING:
+			server.stats.running++;
+			j->queue->stats.running++;
+			break;
+
+		case JERS_JOB_PENDING:
+			server.stats.pending++;
+			j->queue->stats.pending++;
+			break;
+
+		case JERS_JOB_DEFERRED:
+			server.stats.deferred++;
+			j->queue->stats.deferred++;
+			break;
+
+		case JERS_JOB_HOLDING:
+			server.stats.holding++;
+			j->queue->stats.holding++;
+			break;
+
+		case JERS_JOB_COMPLETED:
+			server.stats.completed++;
+			j->queue->stats.completed++;
+			break;
+
+		case JERS_JOB_EXITED:
+			server.stats.exited++;
+			j->queue->stats.exited++;
+			break;
+	}
+
+	j->state = new_state;
+
+	/* Mark it as dirty */
+	if (dirty) {
+		if (!j->dirty) {
+			server.dirty_jobs++;
+			server.candidate_recalc = 1;
+		}
+
+		j->dirty = 1;
+	}
+}
+
