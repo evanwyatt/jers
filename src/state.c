@@ -1046,7 +1046,7 @@ void changeJobState(struct job * j, int new_state, int dirty) {
 
 	/* And the new state */
 
-	switch (j->state) {
+	switch (new_state) {
 		case JERS_JOB_RUNNING:
 			server.stats.running++;
 			j->queue->stats.running++;
