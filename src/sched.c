@@ -230,9 +230,10 @@ void checkJobs(void) {
 		/* Resources available? */
 		if (j->res_count) {
 			int res_idx;
-			for (res_idx = 0; res_idx < j->res_count; j++) {
-				if (j->req_resources[res_idx]->needed < j->req_resources[res_idx]->res->count - j->req_resources[res_idx]->res->in_use) {
+			for (res_idx = 0; res_idx < j->res_count; res_idx++) {
+				if (j->req_resources[res_idx].needed > j->req_resources[res_idx].res->count - j->req_resources[res_idx].res->in_use) {
 					j->pend_reason = PEND_REASON_WAITINGRES;
+					print_msg(JERS_LOG_DEBUG, "Not enough resources to start job %d\n", j->jobid);
 					break;
 				}
 			}
@@ -245,8 +246,8 @@ void checkJobs(void) {
 		/* Increase all the needed resources */
 		if (j->res_count) {
 			int res_idx;
-			for (res_idx = 0; res_idx < j->res_count; j++) {
-				j->req_resources[res_idx]->res->in_use += j->req_resources[res_idx]->needed;
+			for (res_idx = 0; res_idx < j->res_count; res_idx++) {
+				j->req_resources[res_idx].res->in_use += j->req_resources[res_idx].needed;
 			}
 		}
 
@@ -263,7 +264,6 @@ void checkJobs(void) {
 	}
 
 	end = getTimeMS();
-	print_msg(JERS_LOG_DEBUG, "*** Finished schedule poll in %ldms - Checked:%d Started:%d ****", end - start, checked, started);
 
 	return;
 }
