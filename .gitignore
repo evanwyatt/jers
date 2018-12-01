@@ -1,0 +1,5 @@
+*.o
+*.so
+jers
+jersd
+jers_agentd
