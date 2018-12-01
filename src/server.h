@@ -167,6 +167,7 @@ struct job {
 
 	pid_t pid;
 	int exitcode;
+	int signal;
 
 	int32_t state;
 	int32_t internal_state;
@@ -303,6 +304,9 @@ void print_msg(int level, const char * format, ...);
 //common.c
 
 long getTimeMS(void);
+
+char * print_time(struct timespec * time, int elapsed);
+void timespec_diff(const struct timespec *start, const struct timespec *end, struct timespec *diff);
 
 //config.c
 void loadConfig(char * config);

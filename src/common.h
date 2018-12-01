@@ -37,3 +37,6 @@ void uppercasestring(char * str);
 void lowercasestring(char * str);
 void _logMessage(const char * whom, int level, const char * message);
 char * gethost(void);
+
+char * print_time(struct timespec * time, int elapsed);
+void timespec_diff(const struct timespec *start, const struct timespec *end, struct timespec *diff);

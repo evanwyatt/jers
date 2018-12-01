@@ -415,6 +415,12 @@ jobid_t jersAddJob(jersJobAdd * j) {
 		addStringField(r, POSTCMD, j->post_cmd);
 	}
 
+	if (j->stdout)
+		addStringField(r, STDOUT, j->stdout);
+
+	if (j->stderr)
+		addStringField(r, STDERR, j->stderr);
+
 	respCloseMap(r);
 	respCloseArray(r);
 

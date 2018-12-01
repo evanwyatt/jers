@@ -45,6 +45,48 @@ long getTimeMS(void) {
 	return (tp.tv_sec * 1000) + (tp.tv_nsec / 1000000);
 }
 
+/* Return a formated timespec as a static string
+ *  - If elapsed is zero, print as year-month-day hour:minute:second.milliseconds
+ *    Otherwise print an elapsed time as minutes seconds milliseconds
+ *    ie 1969-07-21 02:56:15.000
+ *    or 151m 40.000s */
+
+char * print_time(struct timespec * time, int elapsed) {
+	static char formatted[64];
+
+	if (elapsed) {
+		int minutes, seconds;
+
+		minutes = time->tv_sec / 60;
+		seconds = time->tv_sec % 60;
+
+		snprintf(formatted, sizeof(formatted), "%dm %d.%03lds", minutes, seconds, time->tv_nsec / 1000000);
+
+	} else {
+		struct tm * tm = localtime(&time->tv_sec);
+		size_t len = strftime(formatted, sizeof(formatted), "%Y-%m-%d %H:%M:%S", tm);
+		len += snprintf(formatted + len, sizeof(formatted) - len, ".%03ld", time->tv_nsec / 1000000);
+		strftime(formatted + len, sizeof(formatted) - len, " %Z", tm);
+	}
+
+	return formatted;
+}
+
+/* Return the difference between 2 timespec structures */
+
+void timespec_diff(const struct timespec *start, const struct timespec *end, struct timespec *diff) {
+	diff->tv_sec = 0;
+	diff->tv_nsec = 0;
+
+	if (end->tv_nsec < start->tv_nsec) {
+		diff->tv_sec = end->tv_sec - start->tv_sec - 1;
+		diff->tv_nsec = end->tv_nsec - start->tv_nsec + 1000000000ul;
+	} else {
+		diff->tv_sec = end->tv_sec - start->tv_sec;
+		diff->tv_nsec = end->tv_nsec - start->tv_nsec;
+	}
+}
+
 void _logMessage(const char * whom, int level, const char * message) {
 	const char * levels[] = {"DEBUG", "INFO", "WARNING", "CRITICAL"};
 	char currentTime[64];

@@ -211,7 +211,7 @@ void command_agent_jobcompleted(agent * a) {
 	int i;
 	struct job * j = NULL;
 
-	for (i = 0; i < a->msg.item_count; i++) {
+	for (i = 0; i < a->msg.items[0].field_count; i++) {
 		switch(a->msg.items[0].fields[i].number) {
 			case JOBID : jobid = getNumberField(&a->msg.items[0].fields[i]); break;
 			case EXITCODE: exitcode = getNumberField(&a->msg.items[0].fields[i]); break;
@@ -227,12 +227,18 @@ void command_agent_jobcompleted(agent * a) {
 		return;
 	}
 
-	j->exitcode = exitcode;
+	if (WIFEXITED(exitcode)) {
+		j->exitcode = WEXITSTATUS(exitcode);
+	} else if (WIFSIGNALED(exitcode)) {
+		j->signal = WTERMSIG(exitcode);
+		j->exitcode = 128 + j->signal;
+	}
+
 	j->pid = -1;
 
-	changeJobState(j, exitcode ? JERS_JOB_EXITED : JERS_JOB_COMPLETED, 1);
+	changeJobState(j, j->exitcode ? JERS_JOB_EXITED : JERS_JOB_COMPLETED, 1);
 
-	print_msg(JERS_LOG_DEBUG, "JobID: %d %s exitcode:%d", jobid, exitcode ? "EXITED" : "COMPLETED", exitcode);
+	print_msg(JERS_LOG_DEBUG, "JobID: %d %s exitcode:%d", jobid, exitcode ? "EXITED" : "COMPLETED", j->exitcode);
 
 	return;
 }
