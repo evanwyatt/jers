@@ -215,6 +215,10 @@ typedef struct jersResourceMod {
 	int count;
 } jersResourceMod;
 
+typedef struct jersResourceDel {
+	char * name;
+} jersResourceDel;
+
 typedef struct jersResourceFilter {
 	int64_t filter_fields; 
 

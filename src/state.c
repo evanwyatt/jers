@@ -965,6 +965,7 @@ int stateLoadRes(char * file_name) {
 		error_die("Error reading resource file %s: %s\n", file_name, strerror(errno));
 	}
 
+	fclose(f);
 	free(line);
 
 	/* All loaded, add it to the queueTable */

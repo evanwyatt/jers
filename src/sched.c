@@ -173,10 +173,8 @@ void checkJobs(void) {
 	int64_t i = 0;
 	jobid_t checked = 0;
 	jobid_t started = 0;
+	jobid_t jobs_to_start = server.sched_max;
 	struct job * j;
-
-	long start = getTimeMS();
-	long end;
 
 	/* Don't need to do anything if we are at maximum capacity */
 	if (server.stats.running >= server.max_run_jobs)
@@ -184,8 +182,6 @@ void checkJobs(void) {
 
 	if (server.candidate_recalc)
 		generateCandidatePool();
-
-	int64_t jobs_to_start = server.sched_max;
 
 	if (jobs_to_start > server.candidate_pool_jobs)
 		jobs_to_start = server.candidate_pool_jobs;
@@ -262,8 +258,6 @@ void checkJobs(void) {
 
 		started++;
 	}
-
-	end = getTimeMS();
 
 	return;
 }

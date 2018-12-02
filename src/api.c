@@ -604,3 +604,51 @@ int jersModQueue(jersQueueMod *q) {
 
         return 0;
 }
+
+int jersAddResource(char *name, int count) {
+	if (jersInitAPI(NULL)) {
+		setError(JERS_ERROR, NULL);
+		return 1;
+	}
+
+	if (name == NULL)
+		return 1;
+	
+	resp_t * r = respNew();
+
+	respAddArray(r);
+	respAddSimpleString(r, "ADD_RESOURCE");
+	respAddInt(r, 1);
+	respAddMap(r);
+
+	addStringField(r, RESNAME, name);
+
+	if (count)
+		addIntField(r, RESCOUNT, count);
+
+	respCloseMap(r);
+	respCloseArray(r);
+
+	size_t req_len;
+	char * request = respFinish(r, &req_len);
+
+	if (sendRequest(request, req_len)) {
+		free(request);
+		return 1;
+	}
+
+	free(request);
+
+	if (readResponse())
+		return 1;
+
+	if (msg.error) {
+		setError(JERS_INVALID, "Error adding resource");
+		return 1;
+	}
+
+	free_message(&msg, &response);
+
+	return 0;
+}
+

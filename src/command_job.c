@@ -56,8 +56,10 @@ void * deserialize_add_job(msg_t * t) {
 			case DEFERTIME: s->defer_time = getNumberField(&t->items[0].fields[i]); break;
 			case TAGS     : s->tag_count = getStringArrayField(&t->items[0].fields[i], &s->tags); break;
 			case RESOURCES: s->res_count = getStringArrayField(&t->items[0].fields[i], &s->resources); break;
+			case STDOUT   : s->stdout = getStringField(&t->items[0].fields[i]); break;
+			case STDERR   : s->stderr = getStringField(&t->items[0].fields[i]); break;
 
-			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",t->items[0].fields[i].name); break;
+			default: fprintf(stderr, "Unknown field %d encountered - Ignoring\n",t->items[0].fields[i].number); break;
 		}
 
 	}

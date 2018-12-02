@@ -38,15 +38,25 @@ int submit(int argc, char * argv[]) {
 
 
 	req.name = "Test jers job";
-	char * args[] = {"echo", "hello", "world"};
+	char * args[] = {"exit", "111"};
 
-	req.queue = "test1";
+	req.queue = "local_queue";
 	req.uid = 759800001;
-	req.argc = 3;
+	req.argc = 2;
 	req.argv = args;
 	req.stdout = "/tmp/job_test.log";
+
+	char * res[] = {"testres2:1"};
+	//req.res_count = 1;
+	req.resources = res;
+
+	char logfile[1024];
+
 int i;
 for (i = 0; i < count; i++) {
+	req.stdout = logfile;
+	sprintf(logfile, "/tmp/job_test_%d.log", i);
+
 	jobid_t jobid = jersAddJob(&req);
 	printf("Returned: %d\n", jobid);
 }
@@ -78,6 +88,9 @@ int show(int argc, char * argv[]) {
 
 	printf("STDOUT : %s\n", j.jobs[0].stdout);
 	printf("STDERR : %s\n", j.jobs[0].stderr);
+
+	for (i = 0; i < j.jobs[0].res_count; i++)
+		printf("RES[%d]: %s\n", i, j.jobs[0].resources[i]);
 
 	jersFreeJobInfo(&j);
 
@@ -126,6 +139,18 @@ int show_filter(int argc, char * argv[]) {
 	return 0;
 }
 
+int add_resource(int argc, char * argv[]) {
+
+	int count = argc > 3 ? atoi(argv[3]) : 1;
+
+	if (jersAddResource(argv[2], count)) {
+		fprintf(stderr, "Failed to add resource\n");
+		return 1;
+	}
+
+	return 0;
+}
+
 int main (int argc, char * argv[]) {
 
 	if (argc < 2)
@@ -137,6 +162,8 @@ int main (int argc, char * argv[]) {
 		return show(argc, argv);
 	else if(strcasecmp(argv[1], "SHOW_FILTER") == 0)
 		return show_filter(argc, argv);
+	else if(strcasecmp(argv[1], "ADD_RES") == 0)
+		return add_resource(argc, argv);
 
 	return 0;
 }

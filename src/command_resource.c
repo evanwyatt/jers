@@ -31,35 +31,196 @@
 #include <commands.h>
 #include <fields.h>
 
-void * deserialize_add_resource(msg_t * msg) {
+#include <fnmatch.h>
 
-	return NULL;
+void * deserialize_add_resource(msg_t * msg) {
+	jersResourceAdd * ra = calloc(sizeof(jersResourceAdd), 1);
+
+	msg_item * item = &msg->items[0];
+	int i;
+
+	for (i = 0; i < item->field_count; i++) {
+		switch(item->fields[i].number) {
+			case RESNAME  : ra->name = getStringField(&item->fields[i]); break;
+			case RESCOUNT : ra->count = getNumberField(&item->fields[i]); break;
+
+			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",item->fields[i].name); break;
+		}
+	}
+
+	if (ra->count == 0)
+		ra->count = 1;
+
+	return ra;
 }
 
 void * deserialize_get_resource(msg_t * msg) {
+	jersResourceFilter * rf = calloc(sizeof(jersResourceFilter), 1);
 
-	return NULL;
+	msg_item * item = &msg->items[0];
+	int i;
+
+	for (i = 0; i < item->field_count; i++) {
+		switch(item->fields[i].number) {
+			case RESNAME: rf->filters.name = getStringField(&item->fields[i]); break;
+
+			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", item->fields[i].name); break;
+		}
+	}
+
+	return rf;
 }
 
 void * deserialize_mod_resource(msg_t * msg) {
+	jersResourceMod * rm = calloc(sizeof(jersResourceMod), 1);
+	msg_item * item = &msg->items[0];
+	int i;
 
-	return NULL;
+	for (i = 0; i < item->field_count; i++) {
+		switch(item->fields[i].number) {
+			case RESNAME : rm->name = getStringField(&item->fields[i]); break;
+			case RESCOUNT: rm->count = getNumberField(&item->fields[i]); break;
+
+			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",item->fields[i].name); break; 
+		}
+	}
+
+	return rm;
 }
 
 void * deserialize_del_resource(msg_t * msg) {
+	jersResourceDel * rd = calloc(sizeof(jersResourceDel), 1);
+	msg_item * item = &msg->items[0];
+	int i;
+	
+	for (i = 0; i < item->field_count; i++) {
+		switch(item->fields[i].number) {
+			case RESNAME : rd->name = getStringField(&item->fields[i]); break;
+	
+			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",item->fields[i].name); break;
+		}
+	}
 
-	return NULL;
+	return rd;
 }
 
 int command_add_resource(client *c, void *args) {
-	return 0;
+	jersResourceAdd * ra = args;
+	struct resource * r = NULL;
+
+	if (ra->name == NULL) {
+		appendError(c, "-INVARG Invalid name\n");
+		return 1;
+	}
+	
+	HASH_FIND_STR(server.resTable, ra->name, r);
+
+	if (r != NULL) {
+		appendError(c, "-INVARG Resource already exists \n");
+		return 1;
+	}
+
+	r = malloc(sizeof(struct resource));
+
+	r->name = ra->name;
+	r->count = ra->count;
+
+	addRes(r, 1);
+
+	resp_t * response = respNew();
+
+        respAddSimpleString(response, "0");
+
+        size_t reply_length = 0;
+        char * reply = respFinish(response, &reply_length);
+        appendResponse(c, reply, reply_length);
+        free(reply);
+
+        return 0;
 }
 
 int command_get_resource(client *c, void *args) {
+	jersResourceFilter * rf = args;
+	struct resource * r = NULL;
+	int wildcard = 0;
+	resp_t * response = NULL;
+
+	if (rf->filters.name == NULL) {
+		appendError(c, "-INVARG No name filter provided\n");
+		return 1;
+	}
+
+	response = respNew();
+	respAddArray(response);
+	respAddSimpleString(response, "RESP");
+	respAddInt(response, 1);
+
+	wildcard = ((strchr(rf->filters.name, '*')) || (strchr(rf->filters.name, '?')));
+
+	if (wildcard) {
+		int64_t matched = 0;
+
+		for (r = server.resTable; r != NULL; r = r->hh.next) {
+			if (fnmatch(rf->filters.name, r->name, 0) == 0) {
+				/* Add it */
+				if (matched == 0)
+					respAddArray(response);
+	
+				respAddMap(response);
+				addStringField(response, RESNAME, r->name);
+				addIntField(response, RESCOUNT, r->count);
+				respCloseMap(response);			
+			} 
+		}
+	
+		if (matched)
+			respCloseArray(response);
+	} else {
+		HASH_FIND_STR(server.resTable, rf->filters.name, r);
+
+		if (r) {
+			respAddMap(response);
+			addStringField(response, RESNAME, r->name);
+			addIntField(response, RESCOUNT, r->count);
+			respCloseMap(response);
+		}
+	}
+	
+	respCloseArray(response);
+
+	size_t reply_length = 0;
+	char * reply = respFinish(response, &reply_length);
+	appendResponse(c, reply, reply_length);
+	free(reply);
+
 	return 0;
 }
 
 int command_mod_resource(client *c, void *args) {
+	jersResourceMod * rm = args;
+	struct resource * r = NULL;
+
+	if (rm->name == NULL) {
+		appendError(c, "-INVARG Resource name not provided\n");
+		return 1;
+	}
+
+	HASH_FIND_STR(server.resTable, rm->name , r);
+
+	if (r == NULL) {
+		appendError(c, "-INVARG Resource not found\n");
+		return 1;
+	}
+
+	r->count = rm->count;
+
+	resp_t * response = respNew();
+	respAddSimpleString(response, "0");
+	size_t reply_length = 0;
+	char * reply = respFinish(response, &reply_length);
+	appendResponse(c, reply, reply_length);
+	free(reply);
+
 	return 0;
 }
 
