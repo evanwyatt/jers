@@ -8,13 +8,13 @@
  *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation 
+ *    this list of conditions and the following disclaimer in the documentation
  *    and/or other materials provided with the distribution.
  *
  * 3. Neither the name of the copyright holder nor the names of its contributors may
  *    be used to endorse or promote products derived from this software without
  *    specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -22,7 +22,7 @@
  * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
  * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
@@ -181,7 +181,7 @@ typedef struct jersJobInfo {
 typedef struct jersJobFilter {
 	int64_t filter_fields; // Bitmask of fields populated in filters. 0 == no filters
 	int64_t return_fields; // Bitmask of fields to get returned; 0 == all fields
-	
+
 	jobid_t jobid;
 
 	struct {
@@ -220,15 +220,15 @@ typedef struct jersResourceDel {
 } jersResourceDel;
 
 typedef struct jersResourceFilter {
-	int64_t filter_fields; 
+	int64_t filter_fields;
 
 	struct {
 		char * name;
 		int count;
-	} filters;	
+	} filters;
 } jersResourceFilter;
 
-struct job_stats {
+struct jobStats {
 	int64_t running;
 	int64_t pending;
 	int64_t holding;
@@ -245,7 +245,7 @@ typedef struct jersQueue {
 	int state;
 	int priority;
 
-	struct job_stats stats;
+	struct jobStats stats;
 } jersQueue;
 
 typedef struct jersQueueInfo {
@@ -283,6 +283,10 @@ typedef struct jersQueueDel {
 	char * name;
 } jersQueueDel;
 
+typedef struct jersStats {
+	struct jobStats server_stats;
+} jersStats;
+
 void jersInitJobAdd(jersJobAdd *j);
 void jersInitJobMod(jersJobMod *j);
 
@@ -309,6 +313,8 @@ int jersModResource(char *name, int new_count);
 int jersGetResource(char *name, jersResourceFilter *filter, jersResourceInfo *info);
 int jersDelResource(char *name);
 void jersFreeResourceInfo(jersResourceInfo *info);
+
+int jersGetStats(jersStats * s);
 
 void jersFinish(void);
 

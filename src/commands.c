@@ -8,13 +8,13 @@
  *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation 
+ *    this list of conditions and the following disclaimer in the documentation
  *    and/or other materials provided with the distribution.
  *
  * 3. Neither the name of the copyright holder nor the names of its contributors may
  *    be used to endorse or promote products derived from this software without
  *    specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -22,7 +22,7 @@
  * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
  * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
@@ -41,7 +41,7 @@ void runSimpleCommand(client * c);
 void runComplexCommand(client * c);
 
 command_t commands[] = {
-	{"ADD_JOB",      command_add_job,      deserialize_add_job},	
+	{"ADD_JOB",      command_add_job,      deserialize_add_job},
 	{"GET_JOB",      command_get_job,      deserialize_get_job},
 	{"MOD_JOB",      command_mod_job,      deserialize_mod_job},
 	{"DEL_JOB",      command_del_job,      deserialize_del_job},
@@ -52,7 +52,8 @@ command_t commands[] = {
 	{"ADD_RESOURCE", command_add_resource, deserialize_add_resource},
 	{"GET_RESOURCE", command_get_resource, deserialize_get_resource},
 	{"MOD_RESOURCE", command_mod_resource, deserialize_mod_resource},
-	{"DEL_RESOURCE", command_del_resource, deserialize_del_resource}
+	{"DEL_RESOURCE", command_del_resource, deserialize_del_resource},
+	{"STATS",        command_stats,        NULL},
 };
 
 /* Append to or allocate a new reponse buffer */
@@ -71,18 +72,11 @@ void appendError(client * c, char * msg) {
  * populate a response to send back to the client */
 
 int runCommand(client * c) {
-	uint64_t start, end;
-
-	start = getTimeMS();
-
 	if (c->msg.version == 0) {
 		runSimpleCommand(c);
 	} else {
 		runComplexCommand(c);
 	}
-	end = getTimeMS();
-
-	print_msg(JERS_LOG_DEBUG, "Command took %ldms\n", end - start);
 
 	return 0;
 }
@@ -90,10 +84,7 @@ int runCommand(client * c) {
 void runSimpleCommand(client * c) {
 	resp_t * response = NULL;
 
-	if (strcmp(c->msg.command, "STATS") == 0) {
-		response = respNew();
-		respAddInt(response, 12345);
-	} else if (strcmp(c->msg.command, "PING") == 0) {
+	 if (strcmp(c->msg.command, "PING") == 0) {
 		response = respNew();
 		respAddSimpleString(response, "PONG");
 	} else {
@@ -114,8 +105,9 @@ void runSimpleCommand(client * c) {
 void runComplexCommand(client * c) {
 	static int cmd_count = sizeof(commands) / sizeof(command_t);
 	int i;
+	uint64_t start, end;
 
-printf("Running command %s\n", c->msg.command);
+	start = getTimeMS();
 
 	if (c->msg.command == NULL) {
 		fprintf(stderr, "Bad request from client\n");
@@ -126,14 +118,19 @@ printf("Running command %s\n", c->msg.command);
 	for (i = 0; i < cmd_count; i++) {
 		if (strcmp(c->msg.command, commands[i].name) == 0) {
 
-			void * args = commands[i].deserialize_func(&c->msg);
+			void * args = NULL;
 
-			if (!args) {
-				fprintf(stderr, "Failed to deserialize %s args\n", c->msg.command);
-				return;
+			if (commands[i].deserialize_func) {
+				args = commands[i].deserialize_func(&c->msg);
+
+				if (!args) {
+					fprintf(stderr, "Failed to deserialize %s args\n", c->msg.command);
+					return;
+				}
 			}
 
 			commands[i].cmd_func(c, args);
+
 			if (commands[i].free_func)
 				commands[i].free_func(args);
 
@@ -141,7 +138,36 @@ printf("Running command %s\n", c->msg.command);
 		}
 	}
 
+	end = getTimeMS();
+
+	print_msg(JERS_LOG_DEBUG, "Command '%s' took %ldms\n", c->msg.command, end - start);
+
 	free_message(&c->msg, NULL);
+}
+
+int command_stats(client * c, void * args) {
+	resp_t * r = respNew();
+	respAddArray(r);
+	respAddSimpleString(r, "RESP");
+	respAddInt(r, 1);
+	respAddMap(r);
+
+	addIntField(r, STATSRUNNING, server.stats.running);
+	addIntField(r, STATSPENDING, server.stats.pending);
+	addIntField(r, STATSDEFERRED, server.stats.deferred);
+	addIntField(r, STATSHOLDING, server.stats.holding);
+	addIntField(r, STATSCOMPLETED, server.stats.completed);
+	addIntField(r, STATSEXITED, server.stats.exited);
+
+	respCloseMap(r);
+	respCloseArray(r);
+
+	size_t reply_length = 0;
+	char * reply = respFinish(r, &reply_length);
+	appendResponse(c, reply, reply_length);
+	free(reply);
+
+	return 0;
 }
 
 void command_agent_login(agent * a) {

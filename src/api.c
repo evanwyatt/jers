@@ -8,13 +8,13 @@
  *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation 
+ *    this list of conditions and the following disclaimer in the documentation
  *    and/or other materials provided with the distribution.
  *
  * 3. Neither the name of the copyright holder nor the names of its contributors may
  *    be used to endorse or promote products derived from this software without
  *    specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -22,7 +22,7 @@
  * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
  * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
@@ -43,8 +43,8 @@
 char * socket_path = NULL;
 int fd = -1;
 msg_t msg;
-
 buff_t response = {0};
+int initalised = 0;
 
 int deserialize_jerJob(msg_item * item, struct jersJob * job);
 
@@ -58,7 +58,7 @@ const char * jers_error_str[] = {
 
 };
 
-static int apierror = 0;              /* Last error code set by API function. Reset before every call */
+static int apierror = 0;	      /* Last error code set by API function. Reset before every call */
 static const char * apierrorstring = NULL;  /* Custom error string populated by API functions */
 
 static void setError(int error, const char * errorString) {
@@ -76,7 +76,6 @@ static int defaultInit(void) {
 }
 
 int jersInitAPI(void * arg) {
-	static int initalised = 0;
 	int rc = 0;
 
 	/* We can be reinitalised by providing a config argument */
@@ -102,6 +101,12 @@ int jersInitAPI(void * arg) {
 	initalised = 1;
 
 	return rc;
+}
+
+void jersFinish(void) {
+	close(fd);
+	buffFree(&response);
+	initalised = 0;
 }
 
 /* Establish a connection to the main daemon */
@@ -217,7 +222,7 @@ void jersFreeJobInfo (jersJobInfo * info) {
 		for (j = 0; j < job->res_count; j++)
 			free(job->resources[j]);
 
-		free(job->resources);	
+		free(job->resources);
 	}
 
 	free(info->jobs);
@@ -289,7 +294,7 @@ int jersGetJob(jobid_t jobid, jersJobFilter * filter, jersJobInfo * job_info) {
 
 			if (filter->filter_fields & JERS_FILTER_RESOURCES)
 				addStringField(r, RESOURCES, filter->filters.resource);
-	
+
 			if (filter->filter_fields & JERS_FILTER_UID)
 				addIntField(r, UID, filter->filters.uid);
 		}
@@ -474,10 +479,10 @@ void jersInitQueueAdd(jersQueueAdd *q) {
 
 int jersAddQueue(jersQueueAdd *q) {
 
-        if (jersInitAPI(NULL)) {
-                setError(JERS_ERROR, NULL);
-                return 1;
-        }
+	if (jersInitAPI(NULL)) {
+		setError(JERS_ERROR, NULL);
+		return 1;
+	}
 
 	if (q->name == NULL) {
 		setError(JERS_INVALID, "No queue name provided");
@@ -490,15 +495,15 @@ int jersAddQueue(jersQueueAdd *q) {
 	}
 
 
-        /* Serialise the request */
-        resp_t * r = respNew();
+	/* Serialise the request */
+	resp_t * r = respNew();
 
-        respAddArray(r);
-        respAddSimpleString(r, "ADD_QUEUE");
-        respAddInt(r, 1);
-        respAddMap(r);
+	respAddArray(r);
+	respAddSimpleString(r, "ADD_QUEUE");
+	respAddInt(r, 1);
+	respAddMap(r);
 
-        addStringField(r, QUEUENAME, q->name);
+	addStringField(r, QUEUENAME, q->name);
 	addStringField(r, NODE, q->node);
 
 	if (q->desc)
@@ -514,25 +519,25 @@ int jersAddQueue(jersQueueAdd *q) {
 		addIntField(r, STATE, q->state);
 
 	respCloseMap(r);
-        respCloseArray(r);
+	respCloseArray(r);
 
-        size_t req_len;
-        char * request = respFinish(r, &req_len);
+	size_t req_len;
+	char * request = respFinish(r, &req_len);
 
-        if (sendRequest(request, req_len)) {
-                free(request);
-                return 1;
-        }
+	if (sendRequest(request, req_len)) {
+		free(request);
+		return 1;
+	}
 
-        free(request);
+	free(request);
 
-        if(readResponse())
-                return 1;
+	if(readResponse())
+		return 1;
 
-        if (msg.error) {
-                setError(JERS_INVALID, "Error adding queue");
-                return 1;
-        }
+	if (msg.error) {
+		setError(JERS_INVALID, "Error adding queue");
+		return 1;
+	}
 
 	free_message(&msg, &response);
 
@@ -541,68 +546,68 @@ int jersAddQueue(jersQueueAdd *q) {
 
 int jersModQueue(jersQueueMod *q) {
 
-        if (jersInitAPI(NULL)) {
-                setError(JERS_ERROR, NULL);
-                return 1;
-        }
+	if (jersInitAPI(NULL)) {
+		setError(JERS_ERROR, NULL);
+		return 1;
+	}
 
-        if (q->name == NULL) {
-                setError(JERS_INVALID, "No queue name provided");
-                return 1;
-        }
+	if (q->name == NULL) {
+		setError(JERS_INVALID, "No queue name provided");
+		return 1;
+	}
 
-        if (q->desc == NULL && q->node == NULL && q->job_limit == -1 && q->priority == -1) {
-                setError(JERS_INVALID, "Nothing to update");
-                return 1;
-        }
+	if (q->desc == NULL && q->node == NULL && q->job_limit == -1 && q->priority == -1) {
+		setError(JERS_INVALID, "Nothing to update");
+		return 1;
+	}
 
 
-        /* Serialise the request */
-        resp_t * r = respNew();
+	/* Serialise the request */
+	resp_t * r = respNew();
 
-        respAddArray(r);
-        respAddSimpleString(r, "QUEUE_MODIFY");
-        respAddInt(r, 1);
-        respAddMap(r);
+	respAddArray(r);
+	respAddSimpleString(r, "QUEUE_MODIFY");
+	respAddInt(r, 1);
+	respAddMap(r);
 
 	addStringField(r, QUEUENAME, q->name);
 
 	if (q->node)
 		addStringField(r, NODE, q->node);
 
-        if (q->desc)
-                addStringField(r, DESC, q->desc);
+	if (q->desc)
+		addStringField(r, DESC, q->desc);
 
-        if (q->job_limit != -1)
-                addIntField(r, JOBLIMIT, q->job_limit);
+	if (q->job_limit != -1)
+		addIntField(r, JOBLIMIT, q->job_limit);
 
-        if (q->priority != -1)
-                addIntField(r, PRIORITY, q->priority);
+	if (q->priority != -1)
+		addIntField(r, PRIORITY, q->priority);
 
-        respCloseMap(r);
-        respCloseArray(r);
+	respCloseMap(r);
+	respCloseArray(r);
 
-        size_t req_len;
-        char * request = respFinish(r, &req_len);
+	size_t req_len;
+	char * request = respFinish(r, &req_len);
 
-        if (sendRequest(request, req_len)) {
-                free(request);
-                return 1;
-        }
+	if (sendRequest(request, req_len)) {
+		free(request);
+		return 1;
+	}
 
-        free(request);
+	free(request);
 
-        if(readResponse())
-                return 1;
+	if(readResponse())
+		return 1;
 
-        if (msg.error) {
-                setError(JERS_INVALID, "Error modifying queue");
-                return 1;
-        }
+	if (msg.error) {
+		setError(JERS_INVALID, "Error modifying queue");
+		return 1;
+	}
 
 	free_message(&msg, &response);
 
-        return 0;
+	return 0;
 }
 
 int jersAddResource(char *name, int count) {
@@ -613,7 +618,7 @@ int jersAddResource(char *name, int count) {
 
 	if (name == NULL)
 		return 1;
-	
+
 	resp_t * r = respNew();
 
 	respAddArray(r);
@@ -652,3 +657,59 @@ int jersAddResource(char *name, int count) {
 	return 0;
 }
 
+int jersGetStats(jersStats * s) {
+	int i;
+
+	if (jersInitAPI(NULL)) {
+		setError(JERS_ERROR, NULL);
+		return 1;
+	}
+
+	memset(s, 0, sizeof(jersStats));
+
+	resp_t * r = respNew();
+	respAddArray(r);
+	respAddSimpleString(r, "STATS");
+	respAddInt(r, 1);
+	respAddMap(r);
+	addIntField(r, JOBID, 0); // Dummy field
+	respCloseMap(r);
+	respCloseArray(r);
+
+	size_t req_len;
+	char * request = respFinish(r, &req_len);
+
+	if (sendRequest(request, req_len)) {
+		free(request);
+		return 1;
+	}
+
+	free(request);
+
+	if (readResponse())
+		return 1;
+
+	if (msg.error) {
+		setError(JERS_INVALID, "Error adding resource");
+		return 1;
+	}
+
+	msg_item * item = &msg.items[0];
+
+	for (i = 0; i < item->field_count; i++) {
+		switch(item->fields[i].number) {
+			case STATSRUNNING   : s->server_stats.running = getNumberField(&item->fields[i]); break;
+			case STATSPENDING   : s->server_stats.pending = getNumberField(&item->fields[i]); break;
+			case STATSDEFERRED  : s->server_stats.deferred = getNumberField(&item->fields[i]); break;
+			case STATSHOLDING   : s->server_stats.holding = getNumberField(&item->fields[i]); break;
+			case STATSCOMPLETED : s->server_stats.completed = getNumberField(&item->fields[i]); break;
+			case STATSEXITED    : s->server_stats.exited = getNumberField(&item->fields[i]); break;
+
+			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",item->fields[i].name); break;
+		}
+	}
+
+	free_message(&msg, &response);
+
+	return 0;
+}
