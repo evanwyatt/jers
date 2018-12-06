@@ -46,6 +46,8 @@ typedef uint32_t jobid_t;
 
 #define JERS_JOB_NAME_MAX 64
 #define JERS_JOB_DEFAULT_PRIORITY 100
+#define JERS_JOB_MAX_PRIORITY 255
+#define JERS_JOB_MIN_PRIORITY 0
 
 #define JERS_QUEUE_NAME_MAX 16
 #define JERS_QUEUE_DESC_MAX 128
@@ -119,9 +121,13 @@ typedef struct jersJobAdd {
 } jersJobAdd;
 
 typedef struct jersJobMod {
+	jobid_t jobid;
+	char * job_name;
 	char * queue;
 
 	time_t defer_time;
+
+	int restart;
 
 	int nice;
 	int priority;
@@ -297,7 +303,7 @@ void jersInitResourceAdd(jersResourceAdd *r);
 void jersInitResourceMod(jersResourceMod *r);
 
 jobid_t jersAddJob(jersJobAdd *s);
-int jersModJob(jobid_t id, jersJobMod *j);
+int jersModJob(jersJobMod *j);
 int jersGetJob(jobid_t id, jersJobFilter *filter, jersJobInfo *info);
 int jersDelJob(jobid_t id);
 void jersFreeJobInfo (jersJobInfo *info);

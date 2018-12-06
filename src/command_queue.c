@@ -8,13 +8,13 @@
  *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation 
+ *    this list of conditions and the following disclaimer in the documentation
  *    and/or other materials provided with the distribution.
  *
  * 3. Neither the name of the copyright holder nor the names of its contributors may
  *    be used to endorse or promote products derived from this software without
  *    specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -22,7 +22,7 @@
  * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
  * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
@@ -33,29 +33,29 @@
 
 void * deserialize_add_queue(msg_t * msg) {
 	jersQueueAdd *qa = calloc(sizeof(jersQueueAdd), 1);
-	
-	
+
+
 	return qa;
 }
 
 void * deserialize_get_queue(msg_t * msg) {
 	jersQueueFilter *q = calloc(sizeof(jersQueueFilter), 1);
-	
-	
+
+
 	return q;
 }
 
 void * deserialize_mod_queue(msg_t * msg) {
 	jersQueueMod *q = calloc(sizeof(jersQueueMod), 1);
-	
-	
+
+
 	return q;
 }
 
 void * deserialize_del_queue(msg_t * msg) {
 	jersQueueDel *q = calloc(sizeof(jersQueueDel), 1);
-	
-	
+
+
 	return q;
 }
 
@@ -74,9 +74,9 @@ int command_add_queue(client * c, void * args) {
 	}
 
 	q = malloc(sizeof(struct queue));
-	q->name = strdup(qa->name);
-	q->host = strdup(qa->node);
-	q->desc = qa->desc ? strdup(qa->desc) : NULL;
+	q->name = qa->name;
+	q->host = qa->node;
+	q->desc = qa->desc;
 	q->job_limit = qa->job_limit != -1 ? qa->job_limit : JERS_QUEUE_DEFAULT_LIMIT;
 	q->priority = qa->priority != -1 ? qa->priority : JERS_QUEUE_DEFAULT_PRIORITY;
 	q->state = qa->state != -1 ? qa->state : JERS_QUEUE_DEFAULT_STATE;
@@ -99,7 +99,7 @@ int command_add_queue(client * c, void * args) {
 			if (strcmp(a->host, gethost()) == 0) {
 				q->agent = a;
 				break;
-			}	
+			}
 		}
 	}
 
@@ -114,8 +114,8 @@ int command_add_queue(client * c, void * args) {
 
 int command_get_queue(client *c, void *args) {
 	jersQueueFilter * qf = args;
-	
-	
+
+
 	return 0;
 }
 
@@ -166,8 +166,7 @@ int command_mod_queue(client *c, void * args) {
 
 int command_del_queue(client *c, void *args) {
 	jersQueueDel *qd = args;
-	
-	
+
+
 	return 0;
 }
-

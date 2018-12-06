@@ -50,8 +50,9 @@ typedef struct {
 } field;
 
 typedef struct {
-	int64_t field_count;
-	field * fields;
+	unsigned char bitmap[64];	/* Bitmap of fields that have been set */
+	int64_t field_count;		/* Number of fields set in 'fields' */
+	field * fields;				/* Fields in message */
 } msg_item;
 
 typedef struct {
@@ -92,6 +93,7 @@ enum field_type {
 	EXITCODE,
 	DESC,
 	JOBLIMIT,
+	RESTART,
 
 	RESNAME,
 	RESCOUNT,
@@ -108,6 +110,10 @@ enum field_type {
 
 int load_message(msg_t * msg, buff_t * buff);
 void free_message(msg_t * msg, buff_t * buff);
+int isFieldSet(unsigned char * bitmap, int field_no);
+
+void freeStringArray(int count, char *** array);
+
 void addIntField(resp_t * r, int field_no, int64_t value);
 void addStringField(resp_t * r, int field_no, char * value);
 void addBoolField(resp_t * r, int field_no, char value);

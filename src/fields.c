@@ -62,6 +62,7 @@ field fields[] = {
 	{EXITCODE,   RESP_TYPE_INT,        "EXITCODE"},
 	{DESC,       RESP_TYPE_BLOBSTRING, "DESC"},
 	{JOBLIMIT,   RESP_TYPE_INT,        "JOBLIMIT"},
+	{RESTART,    RESP_TYPE_BOOL,       "RESTART"},
 	{RESNAME,    RESP_TYPE_BLOBSTRING, "RESNAME"},
 	{RESCOUNT,   RESP_TYPE_INT,        "RESCOUNT"},
 
@@ -72,6 +73,25 @@ field fields[] = {
 	{STATSCOMPLETED, RESP_TYPE_INT, "STATSCOMPLETED"},
 	{STATSEXITED,    RESP_TYPE_INT, "STATSEXITED"},
 };
+
+static inline void setField(unsigned char * bitmap, int field_no) {
+	bitmap[(field_no / 8)] |= 1 << (field_no % 8);
+}
+
+int isFieldSet(unsigned char * bitmap, int field_no) {
+	return (bitmap[(field_no / 8)] >> (field_no % 8)) & 1U;
+}
+
+void freeStringArray(int count, char *** array) {
+	int i;
+	for (i = 0; i < count; i++)
+		free((*array)[i]);
+
+	free(*array);
+	*array = NULL;
+
+	return;
+}
 
 char * getStringField(field *f) {
 	char * ret = strdup(f->value.string);
@@ -142,6 +162,7 @@ int load_fields(msg_t * msg) {
 
 		msg->items[item].field_count = map_count;
 		msg->items[item].fields = malloc(sizeof(field) * msg->items[item].field_count);
+		memset(msg->items[item].bitmap, 0, sizeof(msg->items[item].bitmap));
 
 		/* Load each key value pair
 		 * Keys are always simple strings, we look these up
@@ -157,6 +178,8 @@ int load_fields(msg_t * msg) {
 
 			if (msg->items[item].fields[i].number < 0)
 				return -1;
+
+			setField(msg->items[item].bitmap, msg->items[item].fields[i].number);
 
 			msg->items[item].fields[i].type = fields[msg->items[item].fields[i].number].type;
 

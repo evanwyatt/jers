@@ -459,6 +459,91 @@ jobid_t jersAddJob(jersJobAdd * j) {
 	return new_jobid;
 }
 
+void jersInitJobMod(jersJobMod *j) {
+	memset(j, 0, sizeof(jersJobMod));
+	j->nice = -1;
+	j->hold = -1;
+	j->priority = -1;
+	j->defer_time = -1;
+}
+
+int jersModJob(jersJobMod *j) {
+	if (jersInitAPI(NULL)) {
+		setError(JERS_ERROR, NULL);
+		return 1;
+	}
+
+	if (j->jobid == 0 ) {
+		setError(JERS_INVALID, "No jobid provided");
+		return 1;
+	}
+
+	/* Serialise the request */
+	resp_t * r = respNew();
+
+	respAddArray(r);
+	respAddSimpleString(r, "MOD_JOB");
+	respAddInt(r, 1);
+	respAddMap(r);
+
+	addIntField(r, JOBID, j->jobid);
+
+	if (j->job_name)
+		addStringField(r, JOBNAME, j->job_name);
+
+	if (j->queue)
+		addStringField(r, QUEUENAME, j->job_name);
+
+	if (j->defer_time != -1)
+		addIntField(r, DEFERTIME, j->defer_time);
+
+	if (j->restart)
+		addBoolField(r, RESTART, 1);
+
+	if (j->nice != -1)
+		addIntField(r, NICE, j->nice);
+
+	if (j->priority != -1)
+		addIntField(r, PRIORITY, j->priority);
+
+	if (j->hold != -1)
+		addBoolField(r, HOLD, j->hold);
+
+	if (j->env_count)
+		addStringArrayField(r, ENVS, j->env_count, j->envs);
+
+	if (j->tag_count)
+		addStringArrayField(r, TAGS, j->tag_count, j->tags);
+
+	if (j->res_count)
+		addStringArrayField(r, RESOURCES, j->res_count, j->resources);
+
+	respCloseMap(r);
+	respCloseArray(r);
+
+	size_t req_len;
+	char * request = respFinish(r, &req_len);
+
+	if (sendRequest(request, req_len)) {
+		free(request);
+		return 1;
+	}
+
+	free(request);
+
+	if(readResponse())
+		return 1;
+
+	if (msg.error) {
+		setError(JERS_INVALID, "Error modifying job");
+		return 1;
+	}
+
+	free_message(&msg, &response);
+	return 0;
+
+}
+
 void jersInitQueueMod(jersQueueMod *q) {
 	q->name = NULL;
 	q->desc = NULL;
@@ -545,7 +630,6 @@ int jersAddQueue(jersQueueAdd *q) {
 }
 
 int jersModQueue(jersQueueMod *q) {
-
 	if (jersInitAPI(NULL)) {
 		setError(JERS_ERROR, NULL);
 		return 1;
