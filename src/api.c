@@ -290,10 +290,10 @@ int jersGetJob(jobid_t jobid, jersJobFilter * filter, jersJobInfo * job_info) {
 				addIntField(r, STATE, filter->filters.state);
 
 			if (filter->filter_fields & JERS_FILTER_TAGS)
-				addStringField(r, TAGS, filter->filters.tag);
+				addStringArrayField(r, TAGS, filter->filters.tag_count, filter->filters.tags);
 
 			if (filter->filter_fields & JERS_FILTER_RESOURCES)
-				addStringField(r, RESOURCES, filter->filters.resource);
+				addStringArrayField(r, RESOURCES, filter->filters.res_count, filter->filters.resources);
 
 			if (filter->filter_fields & JERS_FILTER_UID)
 				addIntField(r, UID, filter->filters.uid);

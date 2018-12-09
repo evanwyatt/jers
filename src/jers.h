@@ -194,8 +194,11 @@ typedef struct jersJobFilter {
 		char * job_name;
 		char * queue_name;
 		int state;
-		char * tag;
-		char * resource;
+		int64_t tag_count;
+		char ** tags;
+
+		int64_t res_count;
+		char ** resources;
 		uid_t uid;
 	} filters;
 } jersJobFilter;

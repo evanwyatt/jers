@@ -253,6 +253,11 @@ void command_agent_jobcompleted(agent * a) {
 		return;
 	}
 
+	if (j->res_count) {
+		for (i = 0; i < j->res_count; i++)
+			j->req_resources[i].res->in_use -= j->req_resources[i].needed;
+	}
+
 	if (WIFEXITED(exitcode)) {
 		j->exitcode = WEXITSTATUS(exitcode);
 	} else if (WIFSIGNALED(exitcode)) {

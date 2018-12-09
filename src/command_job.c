@@ -33,6 +33,7 @@
 
 #include <time.h>
 #include <pwd.h>
+#include <fnmatch.h>
 
 struct jobResource * convertResourceStrings(int res_count, char ** res_strings) {
 	struct jobResource * resources = malloc(sizeof(struct jobResource) * res_count);
@@ -61,6 +62,21 @@ struct jobResource * convertResourceStrings(int res_count, char ** res_strings) 
 	}
 
 	return resources;
+}
+
+char ** convertResourceToStrings(int res_count, struct jobResource * res) {
+	char ** res_strings = NULL;
+	int i;
+
+	res_strings = malloc(sizeof(char *) * res_count);
+
+
+	for (i = 0; i < res_count; i++) {
+		res_strings[i] = malloc(strlen(res[i].res->name) + 16);
+		sprintf(res_strings[i], "%s:%d", res[i].res->name, res[i].needed);
+	}
+
+	return res_strings; 
 }
 
 void * deserialize_add_job(msg_t * t) {
@@ -107,8 +123,8 @@ void * deserialize_get_job(msg_t * t) {
 			case JOBNAME  : s->filters.job_name = getStringField(&item->fields[i]); s->filter_fields |= JERS_FILTER_JOBNAME ; break;
 			case QUEUENAME: s->filters.queue_name = getStringField(&item->fields[i]); s->filter_fields |= JERS_FILTER_QUEUE ; break;
 			case STATE    : s->filters.state = getNumberField(&item->fields[i]); s->filter_fields |= JERS_FILTER_STATE ; break;
-			case TAGS     : s->filters.tag = getStringField(&item->fields[i]); s->filter_fields |= JERS_FILTER_TAGS ; break;
-			case RESOURCES: s->filters.resource = getStringField(&item->fields[i]); s->filter_fields |= JERS_FILTER_RESOURCES ; break;
+			case TAGS     : s->filters.tag_count = getStringArrayField(&item->fields[i], &s->filters.tags); s->filter_fields |= JERS_FILTER_TAGS ; break;
+			case RESOURCES: s->filters.res_count = getStringArrayField(&item->fields[i], &s->filters.resources); s->filter_fields |= JERS_FILTER_RESOURCES ; break;
 			case UID      : s->filters.uid = getNumberField(&item->fields[i]); s->filter_fields |= JERS_FILTER_UID ; break;
 
 			case RETFIELDS: s->return_fields = getNumberField(&item->fields[i]); break;
@@ -210,8 +226,15 @@ void serialize_jersJob(resp_t * r, struct job * j, int fields) {
 			addStringArrayField(r, TAGS, j->tag_count, j->tags);
 
 		if (j->res_count) {
-			/* Build up the resource strings and add them */
-			//TODO:
+			int i;
+			char ** res_strings = convertResourceToStrings(j->res_count, j->req_resources);
+			addStringArrayField(r, RESOURCES, j->res_count, res_strings);
+
+			for (i = 0; i < j->res_count; i++) {
+				free(res_strings[i]);
+			}
+
+			free(res_strings[i]);
 		}
 	}
 
@@ -318,6 +341,17 @@ int command_add_job(client * c, void * args) {
 	return 0;
 }
 
+int matches(const char * pattern, const char * string) {
+	if (strchr(pattern, '*') || strchr(pattern, '?')) {
+		if (fnmatch(pattern, string, 0) == 0)
+			return 0;
+		else 
+			return 1;
+	} else {
+		return strcmp(string, pattern);
+	}
+}
+
 int command_get_job(client *c, void * args) {
 	jersJobFilter * s = args;
 	struct queue * q = NULL;
@@ -389,6 +423,27 @@ int command_get_job(client *c, void * args) {
 
 			if (s->filter_fields & JERS_FILTER_JOBNAME) {
 				if (strcmp(j->jobname, s->filters.job_name) != 0)
+					continue;
+			}
+
+			/* Check that all the tag filters provided match the job */
+			if (s->filter_fields & JERS_FILTER_TAGS) {
+				int i;
+				int match = 1;
+				for (i = 0; i < s->filters.tag_count; i++) {
+					int k;
+					for (k = 0; k < j->tag_count; k++) {
+						if (matches(s->filters.tags[i], j->tags[k]) == 0)
+							break;
+					}
+
+					if (k == j->tag_count) {
+						match = 0;
+						break;
+					}
+				}
+
+				if (!match)
 					continue;
 			}
 

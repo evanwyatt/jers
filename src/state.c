@@ -259,12 +259,17 @@ int stateSaveJob(struct job * j) {
 		fprintf(f, "STDERR %s\n", escapeString(j->stderr));
 
 	if (j->env_count) {
-
-		fprintf(f, "ENVC %d\n", j->env_count);
+		fprintf(f, "ENV_COUNT %d\n", j->env_count);
 
 		for (i = 0; i < j->env_count; i++)
 			fprintf(f, "ENV[%d] %s\n", i, j->envs[i]);
+	}
 
+	if (j->tag_count) {
+		fprintf(f, "TAG_COUNT %d\n", j->tag_count);
+
+		for (i = 0; i < j->env_count; i++)
+			fprintf(f, "TAG[%d] %s\n", i, j->tags[i]);
 	}
 
 	if (j->uid)
@@ -711,12 +716,17 @@ int stateLoadJob(char * fileName) {
 			j->argv = malloc(sizeof(char *) * j->argc);
 		} else if (strcmp(key, "ARGV") == 0) {
 			j->argv[index] = strdup(value);
-		} else if (strcmp(key, "ENVC") == 0) {
+		} else if (strcmp(key, "ENV_COUNT") == 0) {
 			j->env_count = atoi(value);
 			j->envs = malloc (sizeof(char *) * j->env_count);
 		} else if (strcmp(key, "ENV") == 0) {
 			j->envs[index] = strdup(value);
-		} else if (strcmp(key, "UID") == 0) {
+		}else if (strcmp(key, "TAG_COUNT") == 0) {
+			j->tag_count = atoi(value);
+			j->tags = malloc (sizeof(char *) * j->tag_count);
+		} else if (strcmp(key, "TAG") == 0) {
+			j->tags[index] = strdup(value);
+		}else if (strcmp(key, "UID") == 0) {
 			j->uid = atoi(value);
 		} else if (strcmp(key, "NICE") == 0) {
 			j->nice = atoi(value);
