@@ -35,7 +35,7 @@
 typedef struct {
 	int number;
 	int type;
-	char * name;
+	const char * name;
 
 	union {
 		char * string;
@@ -62,6 +62,10 @@ typedef struct {
 	int64_t version;
 	int64_t item_count;
 	msg_item * items;
+
+	/* Currently only used by 'ADD_JOB' command to save the jobid */
+	int64_t out_field_count;
+	field out_fields[1];
 } msg_t;
 
 enum field_type {
@@ -105,12 +109,14 @@ enum field_type {
 	STATSCOMPLETED,
 	STATSEXITED,
 
-	END_OF_FIELDS
+	ENDOFFIELDS
 };
 
 int load_message(msg_t * msg, buff_t * buff);
 void free_message(msg_t * msg, buff_t * buff);
 int isFieldSet(unsigned char * bitmap, int field_no);
+
+int setIntField(field * f, int field_no, int64_t value);
 
 void freeStringArray(int count, char *** array);
 

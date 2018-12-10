@@ -342,7 +342,7 @@ int respAddNull(resp_t * r) {
 	return 0;
 }
 
-int respAddBlobString(resp_t * r, char * string, uint64_t len) {
+int respAddBlobString(resp_t * r, const char * string, uint64_t len) {
 	struct buffer * b = &r->items[r->depth];
 	_resize(b, len + 32);
 
@@ -358,7 +358,7 @@ int respAddBlobString(resp_t * r, char * string, uint64_t len) {
 	return 0;
 }
 
-int respAddString(resp_t * r, char * string) {
+int respAddString(resp_t * r, const char * string) {
 	if (string && *string != '\0')
 		return respAddBlobString(r, string, strlen(string));
 	else
@@ -380,7 +380,7 @@ int respAddStringArray(resp_t * r, int count, char ** strings) {
 	return 0;
 }
 
-int respAddSimpleString(resp_t * r, char * string) {
+int respAddSimpleString(resp_t * r, const char * string) {
 	struct buffer * b = &r->items[r->depth];
 	_resize(b, strlen(string) + 8);
 
@@ -392,7 +392,7 @@ int respAddSimpleString(resp_t * r, char * string) {
 	return 0;
 }
 
-int respAddSimpleError(resp_t * r, char * error) {
+int respAddSimpleError(resp_t * r, const char * error) {
 	struct buffer * b = &r->items[r->depth];
 	_resize(b, strlen(error) + 8);
 

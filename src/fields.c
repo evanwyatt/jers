@@ -72,6 +72,8 @@ field fields[] = {
 	{STATSHOLDING,   RESP_TYPE_INT, "STATSHOLDING"},
 	{STATSCOMPLETED, RESP_TYPE_INT, "STATSCOMPLETED"},
 	{STATSEXITED,    RESP_TYPE_INT, "STATSEXITED"},
+
+	{ENDOFFIELDS, RESP_TYPE_INT, "ENDOFFIELDS"}
 };
 
 static inline void setField(unsigned char * bitmap, int field_no) {
@@ -95,7 +97,6 @@ void freeStringArray(int count, char *** array) {
 
 char * getStringField(field *f) {
 	char * ret = strdup(f->value.string);
-	f->value.string = NULL;
 	return ret;
 }
 
@@ -110,12 +111,10 @@ char getBoolField(field *f) {
 int64_t getStringArrayField(field *f, char *** array) {
 	int64_t i;
 
-	*array = f->value.string_array.strings;
+	*array = malloc(sizeof(char *) * f->value.string_array.count);
 
 	for (i = 0; i < f->value.string_array.count; i++)
 		(*array)[i] = strdup(f->value.string_array.strings[i]);
-
-	f->value.string_array.strings = NULL;
 
 	return f->value.string_array.count;
 }
@@ -131,7 +130,30 @@ static int fieldtonum(const char * in) {
 	return -1;
 }
 
-int load_fields(msg_t * msg) {
+int setIntField(field * f, int field_no, int64_t value) {
+	if (field_no >= ENDOFFIELDS)
+		return -1;
+
+	f->number = field_no;
+	f->name = fields[field_no].name;
+	f->type = fields[field_no].type;
+
+	if (f->type != RESP_TYPE_INT)
+		return -1;
+
+	f->value.number = value;
+
+	return 1;
+}
+
+const char * getFieldName(int field_no) {
+	if (field_no >= ENDOFFIELDS)
+		return NULL;
+
+	return fields[field_no].name;
+}
+
+static int load_fields(msg_t * msg) {
 	int64_t item_count = 0, map_count = 0;
 	int64_t i, item;
 	int rc = 0;
@@ -182,6 +204,7 @@ int load_fields(msg_t * msg) {
 			setField(msg->items[item].bitmap, msg->items[item].fields[i].number);
 
 			msg->items[item].fields[i].type = fields[msg->items[item].fields[i].number].type;
+			msg->items[item].fields[i].name = fields[msg->items[item].fields[i].number].name;
 
 			/* Load the value */
 			switch (fields[msg->items[item].fields[i].number].type) {

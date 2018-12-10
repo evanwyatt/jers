@@ -31,8 +31,14 @@
 void appendResponse(client * c, char * buffer, size_t length);
 void appendError(client * c, char * msg);
 
+enum command_type{
+	CMD_READ = 0,
+	CMD_WRITE
+};
+
 typedef struct command {
 	char * name;
+	enum command_type type;
 	int (*cmd_func)(client * c, void *);
 	void * (*deserialize_func)(msg_t *);
 	void * (*free_func)(void *);

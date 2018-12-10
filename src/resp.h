@@ -106,11 +106,11 @@ int respAddMap(resp_t * r);
 int respCloseMap(resp_t *r);
 
 int respAddBool(resp_t * r, int boolean);
-int respAddSimpleError(resp_t * r, char * error);
-int respAddSimpleString(resp_t * r, char * string);
+int respAddSimpleError(resp_t * r, const char * error);
+int respAddSimpleString(resp_t * r, const char * string);
 int respAddStringArray(resp_t * r, int count, char ** strings);
-int respAddString(resp_t * r, char * string);
-int respAddBlobString(resp_t * r, char * string, uint64_t len);
+int respAddString(resp_t * r, const char * string);
+int respAddBlobString(resp_t * r, const char * string, uint64_t len);
 int respAddNull(resp_t * r);
 int respAddInt(resp_t * r, int64_t value);
 

@@ -27,9 +27,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <jers.h>
-#include <server.h>
-
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
@@ -41,13 +38,17 @@
 #include <time.h>
 #include <glob.h>
 
+#include "jers.h"
+#include "server.h"
+#include "common.h"
+
 #define STATE_DIV_FACTOR 10000
 
-/* Escape / unescape newlines and backslash characters
+/* Escape / unescape newlines, tabs and backslash characters
  *  - A static buffer is used to hold the escaped string,
  *    so needs to copied to if required */
 
-char * escapeString(const char * string) {
+char * escapeString(const char * string, size_t * length) {
 	static char * escaped = NULL;
 	static size_t escaped_size = 0;
 	size_t string_length = strlen(string);
@@ -69,6 +70,9 @@ char * escapeString(const char * string) {
 		} else if (*temp == '\n') {
 			*dest++ = '\\';
 			*dest++ = 'n';
+		} else if (*temp == '\t') {
+			*dest++ = '\\';
+			*dest++ = 't';
 		} else {
 			*dest++ = *temp;
 		}
@@ -77,6 +81,9 @@ char * escapeString(const char * string) {
 	}
 
 	*dest = '\0';
+
+	if (length)
+		*length = dest - escaped;
 
 	return escaped;
 }
@@ -90,11 +97,12 @@ void unescapeString(char * string) {
 			continue;
 		}
 
-		if (*(temp + 1) == 'n') {
+		if (*(temp + 1) == 'n')
 			*temp = '\n';
-		} else if (*(temp + 1) == '\\') {
+		else if (*(temp + 1) == '\\')
 			*temp = '\\';
-		}
+		else if (*(temp + 1) == 't')
+			*temp = '\t';
 
 		memmove(temp + 1, temp + 2, strlen(temp + 2) + 1);
 		temp+=2;
@@ -124,53 +132,134 @@ int openStateFile(void) {
 	return fd;
 }
 
-/* Lightweight function to save the current command to disk (& flush it, if in sync mode)*/
+static inline ssize_t _writev_state(const struct iovec * iov, int iovcnt) {
+	ssize_t bytes;
 
-int stateSaveCmd(char * cmd, int cmd_len) {
-	ssize_t bytes_written = 0;
+	do {
+		bytes = writev(server.state_fd, iov, iovcnt);
+	} while (bytes < 0 && errno == EINTR);
+
+	if (bytes < 0)
+		error_die("Failed to write to state journal: %s", strerror(errno));
+
+	return bytes;
+}
+
+static inline int int64tostr(char * dest, int64_t num) {
+	return sprintf(dest, "%ld", num);
+}
+
+static inline void _write_field(const char * name, field * f, int array_index) {
+	struct iovec iov[4];
+	char temp_int[32];
+	char * temp;
+
+	if (name == NULL)
+		name = f->name;
+
+	iov[0].iov_base = "\t";
+	iov[0].iov_len = 1;
+
+	iov[1].iov_base = (void *)name;
+	iov[1].iov_len = strlen(name);
+
+	iov[2].iov_base = "=";
+	iov[2].iov_len = 1;
+
+	switch (f->type) {
+		case RESP_TYPE_BLOBSTRING:
+		case RESP_TYPE_SIMPLESTRING:
+		case RESP_TYPE_SIMPLEERROR:
+		case RESP_TYPE_ARRAY:
+
+			if (f->type == RESP_TYPE_ARRAY)
+				temp = f->value.string_array.strings[array_index];
+			else
+				temp = f->value.string;
+
+			temp = escapeString(temp, &iov[3].iov_len);
+			iov[3].iov_base = temp;
+			break;
+
+		case RESP_TYPE_INT:
+			iov[3].iov_base = temp_int;
+			iov[3].iov_len = int64tostr(temp_int, f->value.number);
+			break;
+
+		case RESP_TYPE_BOOL:
+			iov[3].iov_base = f->value.boolean ? "t":"f";
+			iov[3].iov_len = 1;
+			break;
+		default:
+			error_die("stateSaveCmd - unknown field type being written for field : %d (%s) type:%d", f->number, name, f->type);
+	}
+
+	_writev_state(iov, 4);
+}
+
+/* Function to save the current command to disk (& flush it, if in sync mode)
+ * Only 'update' command are written, ie command that modify jobs/queues or resources.
+ * 
+ * Records are formatted as tab seperated fields. newline, tabs and
+ * backslashes are escaped before being written to disk.
+ * 
+ *  TIME\tUID\tCMDt\tFIELDS...
+ *
+ * For example:
+ *  1544430918.333\t1001\tADD_JOB\tJOBID=12345\tNAME=JOB_1\tARGS[0]=Argument\\twith\\ttabs\n
+ *
+ * Note: There is a space at the start of line, this space will have a '*' character written
+ *       to this position when these transaction have been commited to disk as the job/queue/resource state files */
+
+int stateSaveCmd(uid_t uid, char * cmd, int64_t field_count, field fields[], int64_t extra_field_count, field extra_fields[]) {
 	off_t start_offset;
-	//struct timespec tp = {0};
-	//time_t t;
-	//static int current_day = -1;
+	struct timespec now;
+	int64_t i;
+	char name[64];
 
-	//clock_gettime(CLOCK_REALTIME_COARSE, &tp);
-
-	//t = tp.tv_sec;
-	//struct tm * tm = localtime(&t);
-
-	//if (tm->tm_mday)
-
-	if (server.state_fd < 0) {
+	clock_gettime(CLOCK_REALTIME_COARSE, &now);
+	
+	if (server.state_fd == -1) {
 		server.state_fd = openStateFile();
 	}
 
-	struct iovec iov[3];
-	iov[0].iov_base = " ";
-	iov[0].iov_len	= 1;
-	iov[1].iov_base = cmd;
-	iov[1].iov_len	= cmd_len;
-	iov[2].iov_base = "\n";
-	iov[2].iov_len	= 1;
-
+	/* Save the offset of this new record, so we can write the '*' later if needed */
 	start_offset = lseek(server.state_fd, 0, SEEK_CUR);
 
-	do {
-		bytes_written = writev(server.state_fd, iov, 3);
-	} while (bytes_written < 0 && errno == EINTR);
+	dprintf(server.state_fd, " %ld.%d\t%d\t%s", now.tv_sec, (int)(now.tv_nsec / 1000000), uid, cmd);
 
-	if (bytes_written < 0) {
-		error_die("Failed to write to state journal: %s", strerror(errno));
+	for (i = 0; i < field_count; i++) {
+		if (fields[i].type == RESP_TYPE_ARRAY) {
+			int64_t j;
+			for (j = 0; j < fields[i].value.string_array.count; j++) {
+				sprintf(name, "%s[%ld]", fields[i].name, j);
+				_write_field(name, &fields[i], j);
+			}
+		} else {
+			_write_field(NULL, &fields[i], 0);
+		}
 	}
 
-	if (server.flush.defer == 0) {
+	for (i = 0; i < extra_field_count; i++) {
+		if (extra_fields[i].type == RESP_TYPE_ARRAY) {
+			int64_t j;
+			for (j = 0; j < extra_fields[i].value.string_array.count; j++) {
+				sprintf(name, "%s[%ld]", extra_fields[i].name, j);
+				_write_field(name, &extra_fields[i], j);
+			}
+		} else {
+			_write_field(NULL, &extra_fields[i], 0);
+		}
+	}
+
+	write(server.state_fd, "\n", 1);
+
+	if (server.flush.defer == 0)
 		fdatasync(server.state_fd);
-	}
-
-	/* Save the offset of the /start/ of the write we just did.
-	 * We will use that later when the changes are persisted to disk */
+	else
+		server.flush.dirty++;
 
 	server.journal.last_commit = start_offset;
-	server.flush.dirty = 1;
 	return 0;
 }
 
@@ -233,30 +322,30 @@ int stateSaveJob(struct job * j) {
 		return 1;
 	}
 
-	fprintf(f, "JOBNAME %s\n", escapeString(j->jobname));
-	fprintf(f, "QUEUENAME %s\n", escapeString(j->queue->name));
+	fprintf(f, "JOBNAME %s\n", escapeString(j->jobname, NULL));
+	fprintf(f, "QUEUENAME %s\n", escapeString(j->queue->name, NULL));
 	fprintf(f, "SUBMITTIME %ld\n", j->submit_time);
 
 	fprintf(f, "ARGC %d\n", j->argc);
 
 	for (i = 0; i < j->argc; i++) {
-		fprintf(f, "ARGV[%d] %s\n", i, escapeString(j->argv[i]));
+		fprintf(f, "ARGV[%d] %s\n", i, escapeString(j->argv[i], NULL));
 	}
 
 	if (j->shell)
-		fprintf(f, "SHELL %s\n", escapeString(j->shell));
+		fprintf(f, "SHELL %s\n", escapeString(j->shell, NULL));
 
 	if (j->pre_cmd)
-		fprintf(f, "PRECMD %s\n", escapeString(j->pre_cmd));
+		fprintf(f, "PRECMD %s\n", escapeString(j->pre_cmd, NULL));
 
 	if (j->post_cmd)
-		fprintf(f, "POSTCMD %s\n", escapeString(j->post_cmd));
+		fprintf(f, "POSTCMD %s\n", escapeString(j->post_cmd, NULL));
 
 	if (j->stdout)
-		fprintf(f, "STDOUT %s\n", escapeString(j->stdout));
+		fprintf(f, "STDOUT %s\n", escapeString(j->stdout, NULL));
 
 	if (j->stderr)
-		fprintf(f, "STDERR %s\n", escapeString(j->stderr));
+		fprintf(f, "STDERR %s\n", escapeString(j->stderr, NULL));
 
 	if (j->env_count) {
 		fprintf(f, "ENV_COUNT %d\n", j->env_count);

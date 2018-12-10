@@ -41,19 +41,19 @@ void runSimpleCommand(client * c);
 void runComplexCommand(client * c);
 
 command_t commands[] = {
-	{"ADD_JOB",      command_add_job,      deserialize_add_job},
-	{"GET_JOB",      command_get_job,      deserialize_get_job},
-	{"MOD_JOB",      command_mod_job,      deserialize_mod_job},
-	{"DEL_JOB",      command_del_job,      deserialize_del_job},
-	{"ADD_QUEUE",    command_add_queue,    deserialize_add_queue},
-	{"GET_QUEUE",    command_get_queue,    deserialize_get_queue},
-	{"MOD_QUEUE",    command_mod_queue,    deserialize_mod_queue},
-	{"DEL_QUEUE",    command_del_queue,    deserialize_del_queue},
-	{"ADD_RESOURCE", command_add_resource, deserialize_add_resource},
-	{"GET_RESOURCE", command_get_resource, deserialize_get_resource},
-	{"MOD_RESOURCE", command_mod_resource, deserialize_mod_resource},
-	{"DEL_RESOURCE", command_del_resource, deserialize_del_resource},
-	{"STATS",        command_stats,        NULL},
+	{"ADD_JOB",      CMD_WRITE, command_add_job,      deserialize_add_job},
+	{"GET_JOB",      CMD_READ,  command_get_job,      deserialize_get_job},
+	{"MOD_JOB",      CMD_WRITE, command_mod_job,      deserialize_mod_job},
+	{"DEL_JOB",      CMD_WRITE, command_del_job,      deserialize_del_job},
+	{"ADD_QUEUE",    CMD_WRITE, command_add_queue,    deserialize_add_queue},
+	{"GET_QUEUE",    CMD_READ,  command_get_queue,    deserialize_get_queue},
+	{"MOD_QUEUE",    CMD_WRITE, command_mod_queue,    deserialize_mod_queue},
+	{"DEL_QUEUE",    CMD_WRITE, command_del_queue,    deserialize_del_queue},
+	{"ADD_RESOURCE", CMD_WRITE, command_add_resource, deserialize_add_resource},
+	{"GET_RESOURCE", CMD_READ,  command_get_resource, deserialize_get_resource},
+	{"MOD_RESOURCE", CMD_WRITE, command_mod_resource, deserialize_mod_resource},
+	{"DEL_RESOURCE", CMD_WRITE, command_del_resource, deserialize_del_resource},
+	{"STATS",        CMD_READ,  command_stats,        NULL},
 };
 
 /* Append to or allocate a new reponse buffer */
@@ -105,6 +105,7 @@ void runSimpleCommand(client * c) {
 void runComplexCommand(client * c) {
 	static int cmd_count = sizeof(commands) / sizeof(command_t);
 	int i;
+	int status;
 	uint64_t start, end;
 
 	start = getTimeMS();
@@ -117,7 +118,6 @@ void runComplexCommand(client * c) {
 	/* Match the command name */
 	for (i = 0; i < cmd_count; i++) {
 		if (strcmp(c->msg.command, commands[i].name) == 0) {
-
 			void * args = NULL;
 
 			if (commands[i].deserialize_func) {
@@ -129,7 +129,11 @@ void runComplexCommand(client * c) {
 				}
 			}
 
-			commands[i].cmd_func(c, args);
+			status = commands[i].cmd_func(c, args);
+
+			/* Write to the journal if the transaction was an update and successful */
+			if (commands[i].type == CMD_WRITE && status == 0)
+				stateSaveCmd(c->uid, c->msg.command, c->msg.items[0].field_count, c->msg.items[0].fields, c->msg.out_field_count, c->msg.out_fields);
 
 			if (commands[i].free_func)
 				commands[i].free_func(args);
@@ -226,6 +230,8 @@ void command_agent_jobstart(agent * a) {
 	j->internal_state &= ~JERS_JOB_FLAG_STARTED;
 	j->pid = pid;
 
+	stateSaveCmd(0, a->msg.command, a->msg.items[0].field_count, a->msg.items[0].fields, 0, NULL);
+
 	print_msg(JERS_LOG_DEBUG, "JobID: %d started PID:%d", jobid, pid);
 
 	return;
@@ -268,6 +274,8 @@ void command_agent_jobcompleted(agent * a) {
 	j->pid = -1;
 
 	changeJobState(j, j->exitcode ? JERS_JOB_EXITED : JERS_JOB_COMPLETED, 1);
+
+	stateSaveCmd(0, a->msg.command, a->msg.items[0].field_count, a->msg.items[0].fields, 0, NULL);
 
 	print_msg(JERS_LOG_DEBUG, "JobID: %d %s exitcode:%d", jobid, exitcode ? "EXITED" : "COMPLETED", j->exitcode);
 

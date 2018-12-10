@@ -336,6 +336,10 @@ int command_add_job(client * c, void * args) {
 	appendResponse(c, buff, buff_length);
 	free(buff);
 
+	/* Populate the out jobid field */
+	c->msg.out_field_count = 1;
+	setIntField(&c->msg.out_fields[0], JOBID, j->jobid);
+
 	print_msg(JERS_LOG_DEBUG, "SUBMIT - JOBID %d created", j->jobid);
 
 	return 0;

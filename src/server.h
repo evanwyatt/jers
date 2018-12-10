@@ -307,7 +307,7 @@ void error_die(char * msg, ...);
 char * get_pend_reason(int reason);
 
 //state.c
-int stateSaveCmd(char * cmd, int cmd_len);
+int stateSaveCmd(uid_t uid, char * cmd, int64_t field_count, field fields[], int64_t extra_field_count, field extra_fields[]);
 void stateInit(void);
 int stateLoadJobs(void);
 int stateLoadQueues(void);
