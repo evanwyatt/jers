@@ -63,7 +63,7 @@ void appendResponse(client * c, char * buffer, size_t length) {
 	setWritable(&c->connection);
 }
 
-//TODO: Update this function to accept a error type + string
+//TODO: Update this function to accept a error type + string and ensure it has a newline.
 void appendError(client * c, char * msg) {
 	appendResponse(c, msg, strlen(msg));
 }
@@ -156,12 +156,17 @@ int command_stats(client * c, void * args) {
 	respAddInt(r, 1);
 	respAddMap(r);
 
-	addIntField(r, STATSRUNNING, server.stats.running);
-	addIntField(r, STATSPENDING, server.stats.pending);
-	addIntField(r, STATSDEFERRED, server.stats.deferred);
-	addIntField(r, STATSHOLDING, server.stats.holding);
-	addIntField(r, STATSCOMPLETED, server.stats.completed);
-	addIntField(r, STATSEXITED, server.stats.exited);
+	addIntField(r, STATSRUNNING, server.stats.jobs.running);
+	addIntField(r, STATSPENDING, server.stats.jobs.pending);
+	addIntField(r, STATSDEFERRED, server.stats.jobs.deferred);
+	addIntField(r, STATSHOLDING, server.stats.jobs.holding);
+	addIntField(r, STATSCOMPLETED, server.stats.jobs.completed);
+	addIntField(r, STATSEXITED, server.stats.jobs.exited);
+
+	addIntField(r, STATSTOTALSUBMITTED, server.stats.total.submitted);
+	addIntField(r, STATSTOTALSTARTED, server.stats.total.started);
+	addIntField(r, STATSTOTALCOMPLETED, server.stats.total.completed);
+	addIntField(r, STATSTOTALEXITED, server.stats.total.exited);
 
 	respCloseMap(r);
 	respCloseArray(r);
@@ -196,11 +201,12 @@ void command_agent_login(agent * a) {
 			q->agent = a;
 		}
 
-		if (q->agent)
+		if (q->agent) {
 			print_msg(JERS_LOG_DEBUG, "Enabling queue %s\n", q->name);
 
-		//HACK:
-		q->state |= JERS_QUEUE_FLAG_STARTED;
+			//HACK:
+			q->state |= JERS_QUEUE_FLAG_STARTED; 
+		}
 	}
 }
 
@@ -208,11 +214,13 @@ void command_agent_jobstart(agent * a) {
 	int64_t i;
 	jobid_t jobid = 0;
 	pid_t pid = -1;
+	time_t start_time = 0;
 	struct job * j = NULL;
 
 	for (i = 0; i < a->msg.items[0].field_count; i++) {
 		switch(a->msg.items[0].fields[i].number) {
 			case JOBID : jobid = getNumberField(&a->msg.items[0].fields[i]); break;
+			case STARTTIME: start_time = getNumberField(&a->msg.items[0].fields[i]); break;
 			case JOBPID: pid = getNumberField(&a->msg.items[0].fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",a->msg.items[0].fields[i].name); break;
@@ -226,12 +234,15 @@ void command_agent_jobstart(agent * a) {
 		return;
 	}
 
-	j->state = JERS_JOB_RUNNING;
+	changeJobState(j, JERS_JOB_RUNNING, 0);
+
 	j->internal_state &= ~JERS_JOB_FLAG_STARTED;
 	j->pid = pid;
+	j->start_time = start_time;
 
 	stateSaveCmd(0, a->msg.command, a->msg.items[0].field_count, a->msg.items[0].fields, 0, NULL);
 
+	server.stats.total.started++;
 	print_msg(JERS_LOG_DEBUG, "JobID: %d started PID:%d", jobid, pid);
 
 	return;
@@ -240,12 +251,14 @@ void command_agent_jobstart(agent * a) {
 void command_agent_jobcompleted(agent * a) {
 	jobid_t jobid = 0;
 	int exitcode = 0;
+	time_t finish_time = 0;
 	int i;
 	struct job * j = NULL;
 
 	for (i = 0; i < a->msg.items[0].field_count; i++) {
 		switch(a->msg.items[0].fields[i].number) {
 			case JOBID : jobid = getNumberField(&a->msg.items[0].fields[i]); break;
+			case FINISHTIME: finish_time = getNumberField(&a->msg.items[0].fields[i]); break;
 			case EXITCODE: exitcode = getNumberField(&a->msg.items[0].fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",a->msg.items[0].fields[i].name); break;
@@ -272,12 +285,18 @@ void command_agent_jobcompleted(agent * a) {
 	}
 
 	j->pid = -1;
+	j->finish_time = finish_time;
 
 	changeJobState(j, j->exitcode ? JERS_JOB_EXITED : JERS_JOB_COMPLETED, 1);
 
 	stateSaveCmd(0, a->msg.command, a->msg.items[0].field_count, a->msg.items[0].fields, 0, NULL);
 
-	print_msg(JERS_LOG_DEBUG, "JobID: %d %s exitcode:%d", jobid, exitcode ? "EXITED" : "COMPLETED", j->exitcode);
+	if (exitcode)
+		server.stats.total.exited++;
+	else
+		server.stats.total.completed++;
+
+	print_msg(JERS_LOG_DEBUG, "JobID: %d %s exitcode:%d finish_time:%d", jobid, exitcode ? "EXITED" : "COMPLETED", j->exitcode, j->finish_time);
 
 	return;
 }

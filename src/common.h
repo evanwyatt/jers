@@ -26,17 +26,54 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifndef __JERS_COMMON_H
+#define __JERS_COMMON_H
+
+#include <uthash.h>
+
 /* Used for loggingMode */
 #define JERS_LOG_DEBUG    0
 #define JERS_LOG_INFO     1
 #define JERS_LOG_WARNING  2
 #define JERS_LOG_CRITICAL 3
 
+struct user {
+	uid_t uid;
+	gid_t gid;
+
+	char * username;
+	char * shell;
+	char * home_dir;
+
+	int group_count;
+	gid_t * group_list;
+
+	int env_count;				// Number of variables being used in users_env
+	int env_size;  				// Number of variables that can be stored in user_env
+	char ** users_env;			// Variables - NULL terminated
+	char * users_env_buffer;	// Buffer storing the cached variables for the user
+
+	time_t expiry;
+
+	UT_hash_handle hh;
+};
+
+#define CACHE_EXPIRY 900 // 15 minutes
+
+int64_t getTimeMS(void);
+
 char * removeWhitespace(char * str);
 void uppercasestring(char * str);
 void lowercasestring(char * str);
+int int64tostr(char * dest, int64_t num);
 void _logMessage(const char * whom, int level, const char * message);
 char * gethost(void);
 
+int matches(const char * pattern, const char * string);
+
 char * print_time(struct timespec * time, int elapsed);
 void timespec_diff(const struct timespec *start, const struct timespec *end, struct timespec *diff);
+
+struct user * lookup_user(uid_t uid, int load_env);
+
+#endif

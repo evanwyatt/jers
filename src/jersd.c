@@ -38,9 +38,7 @@
 #include <server.h>
 #include <jers.h>
 
-
 struct jersServer server;
-
 
 int parseOpts(int argc, char * argv[]) {
 
@@ -173,13 +171,11 @@ int main (int argc, char * argv[]) {
 			struct epoll_event * e = &events[i];
 
 			/* The socket is readable */
-			if (e->events &EPOLLIN) {
+			if (e->events &EPOLLIN)
 				handleReadable(e);
-			} else if (e->events &EPOLLOUT) {
+
+			if (e->events &EPOLLOUT)
 				handleWriteable(e);
-			} else {
-				error_die("Unknown event during epoll");
-			}
 		}
 
 		checkEvents();

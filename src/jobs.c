@@ -27,6 +27,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <server.h>
+#include <limits.h>
 
 /* Return the next free jobid.
  *  * 0 is returned if no ids are avaiable */
@@ -102,8 +103,8 @@ int cleanupJobs(int max_clean) {
 			continue;
 
 		/* Got a job to remove */
-
-
+		stateDelJob(j);
+		HASH_DEL(server.jobTable, j);
 
 		if (++cleaned_up >= max_clean)
 			break;

@@ -26,6 +26,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -33,13 +35,26 @@
 #include <unistd.h>
 #include <time.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <sys/wait.h>
+#include <pwd.h>
+#include <grp.h>
+#include <errno.h>
+#include <fnmatch.h>
+
+#include <uthash.h>
+
+#include "common.h"
+
+struct user * user_cache = NULL;
 
 /* Return the time, in milliseconds
  * Note: This is not the real time, and is mainly used
  *       for timed events, where only the duration between
  *       calls is important.  */
 
-long getTimeMS(void) {
+int64_t getTimeMS(void) {
 	struct timespec tp;
 	clock_gettime(CLOCK_MONOTONIC_COARSE, &tp);
 	return (tp.tv_sec * 1000) + (tp.tv_nsec / 1000000);
@@ -155,4 +170,221 @@ void lowercasestring(char * str) {
 		*ptr = tolower(*ptr);
 		ptr++;
 	}
+}
+
+/* Add the string representation of the supplied int64_t to the buffer provided.
+ * Returns the len added to the buffer, excluding the null terminator.
+ * Caution - No overflow checking is performed */
+
+static inline char * _int64tostr(char * dest, int64_t num) {
+        if (num <= -10)
+                dest = _int64tostr(dest, num / 10);
+
+        *dest++ = '0' - (num % 10);
+        return dest;
+}
+
+int int64tostr(char * dest, int64_t num) {
+        char *p = dest;
+
+        if (num < 0)
+            *p++ = '-';
+        else
+            num = -num;
+
+        p = _int64tostr(p, num);
+        *p = '\0';
+
+        return p - dest;
+}
+
+int matches(const char * pattern, const char * string) {
+	if (strchr(pattern, '*') || strchr(pattern, '?')) {
+		if (fnmatch(pattern, string, 0) == 0)
+			return 0;
+		else 
+			return 1;
+	} else {
+		return strcmp(string, pattern);
+	}
+}
+
+static int load_users_env(char * username, struct user * u) {
+	int pipefd[2];
+	int status;
+	size_t e_size = 0x2000; //Guess.
+	ssize_t bytes = 0, len = 0;
+	char * e = NULL;
+
+	if (pipe(pipefd) == -1) {
+		fprintf(stderr, "Failed to invoke pipe()\n");
+		return 1;
+	}
+
+	pid_t pid = fork();
+
+	if (pid == -1) {
+		perror("fork failed in load_users_env");
+		return 1;
+	}
+
+	if (pid == 0) {
+		char *cmd = NULL;
+
+		asprintf(&cmd, "%s %d", "/usr/local/bin/jers_dump_env", pipefd[1]);
+
+		char * args[] = {"/usr/bin/su", "--login", username, "-c", cmd, NULL};
+		int nullfd = open("/dev/null", O_WRONLY);
+
+		if (nullfd < 0) {
+			_exit(1);
+		}
+
+		close(pipefd[0]);
+
+		dup2(nullfd, STDOUT_FILENO);
+		dup2(nullfd, STDERR_FILENO);
+
+		execv(args[0], args);
+
+		_exit(1);
+	}
+
+	/* Parent */
+	close(pipefd[1]);
+
+	e = malloc(e_size);
+
+	while ((len = read(pipefd[0], e + bytes, e_size - bytes)) > 0) {
+		bytes += len;
+
+		if (bytes == e_size) {
+			e_size *= 2;
+			e = realloc(e, e_size);
+		}
+	}
+
+	waitpid(pid, &status, 0);
+
+	if ((WIFEXITED(status) && WEXITSTATUS(status)) || WIFSIGNALED(status)) {
+		fprintf(stderr, "Failed to get user environment: %s\n", username);
+		return 1;
+	}
+
+	close(pipefd[0]);
+
+	/* Split the buffer into null terminated strings */
+	int i = 0;
+	char * ptr, * end;
+
+	if (u->env_size == 0)
+		u->env_size = 256;
+
+	u->users_env = malloc(sizeof(char *) * u->env_size);
+
+	ptr = e;
+	end = e + bytes;
+
+	while (ptr < end) {
+		u->users_env[i++] = ptr++;
+
+		if (i == u->env_size) {
+			u->env_size *= 2;
+			u->users_env = realloc(u->users_env, sizeof(char *) * u->env_size);
+		}
+
+		ptr += strlen(ptr) + 1;
+	}
+
+	u->users_env[i] = NULL;
+
+	u->env_count = i;
+	u->users_env_buffer = e;
+	
+	return 0;
+}
+
+/* Lookup / populate a users details, caching the results */
+
+struct user * lookup_user(uid_t uid, int load_env) {
+	struct user * u = NULL;
+	time_t now = time(NULL);
+	struct passwd * pw = NULL;
+	int update = 0;
+
+	if (user_cache) {
+		HASH_FIND_INT(user_cache, &uid, u);
+
+		if (u && now < u->expiry) {
+			if (!load_env || (load_env && u->users_env != NULL))
+				return u;
+		}
+
+		if (u)
+			update = 1;
+	}
+
+	if (u) {
+		free(u->username);
+		free(u->shell);
+		free(u->home_dir);
+		free(u->group_list);
+		free(u->users_env);
+		free(u->users_env_buffer);
+	}
+	else {
+		u = calloc(1, sizeof(struct user));
+	}
+
+	pw = getpwuid(uid);
+
+	if (!pw) {
+		if (update)
+			HASH_DEL(user_cache, u);
+
+		free(u);
+		return NULL;
+	}
+
+	/* Get the users groups */
+	u->group_count = 256; // Guess.
+	u->group_list = malloc(sizeof(gid_t) * u->group_count);
+
+	if (getgrouplist(pw->pw_name, pw->pw_gid, u->group_list, &u->group_count) < 0) {
+		u->group_list = realloc(u->group_list, sizeof(gid_t) * u->group_count);
+		
+		if (getgrouplist(pw->pw_name, pw->pw_gid, u->group_list, &u->group_count) < 0) {
+			fprintf(stderr, "Failed to get group list for %d (%s): %s\n", uid, pw->pw_name, strerror(errno));
+
+			if (update)
+				HASH_DEL(user_cache, u);
+
+			free(u->group_list);
+			free(u);
+			return NULL;
+		}
+	}
+
+	if (load_env && load_users_env(pw->pw_name, u) !=  0) {
+		fprintf(stderr, "Failed to load users environment: %s\n", pw->pw_name);
+
+		if (update)
+			HASH_DEL(user_cache, u);
+
+		free(u->group_list);
+		free(u);
+		return NULL;
+	}
+
+	u->uid = uid;
+	u->gid = pw->pw_gid;
+	u->expiry = now + CACHE_EXPIRY;
+	u->username = strdup(pw->pw_name);
+	u->shell = strdup(pw->pw_shell);
+	u->home_dir = strdup(pw->pw_dir);
+
+	if (!update)
+		HASH_ADD_INT(user_cache, uid, u);
+
+	return u;
 }

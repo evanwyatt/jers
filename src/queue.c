@@ -45,12 +45,6 @@ int validateQueueName(char * name) {
 
 	len = strlen(name);
 
-	/* Length */
-	if (len > JERS_QUEUE_NAME_MAX) {
-		fprintf(stderr, "QueueName: %s execeeds maximum length allowed(%d)", name, JERS_QUEUE_NAME_MAX);
-		return 1;
-	}
-
 	/* All characters must be printable */
 	for (i = 0; i < len; i++) {
 		if (!isprint(name[i])) {
@@ -72,6 +66,7 @@ int validateQueueName(char * name) {
 
 int validateQueuePriority (int priority) {
 	if (priority < 0 || priority > JERS_QUEUE_MAX_PRIORITY) {
+		fprintf(stderr, "Queue priority bad: %d\n", priority);
 		return 1;
 	}
 
@@ -124,6 +119,7 @@ int addQueue(struct queue * q, int def, int dirty) {
 	HASH_FIND_STR(server.queueTable, q->name, check);
 
 	if (check != NULL) {
+		print_msg(JERS_LOG_CRITICAL, "Queue %s already exists\n", q->name);
 		/* Already exists */
 		return 2;
 	}

@@ -161,12 +161,19 @@ int stats(void) {
 
 	printf("Current server stats:\n");
 	printf("=========================\n");
-	printf("Running  : %ld\n", stats.server_stats.running);
-	printf("Pending  : %ld\n", stats.server_stats.pending);
-	printf("Deferred : %ld\n", stats.server_stats.deferred);
-	printf("Holding  : %ld\n", stats.server_stats.holding);
-	printf("Completed: %ld\n", stats.server_stats.completed);
-	printf("Exited   : %ld\n", stats.server_stats.exited);
+	printf("Running  : %ld\n", stats.current.running);
+	printf("Pending  : %ld\n", stats.current.pending);
+	printf("Deferred : %ld\n", stats.current.deferred);
+	printf("Holding  : %ld\n", stats.current.holding);
+	printf("Completed: %ld\n", stats.current.completed);
+	printf("Exited   : %ld\n", stats.current.exited);
+
+	printf("Totals:\n");
+	printf("=========================\n");
+	printf("Submitted : %ld\n", stats.total.submitted);
+	printf("Started   : %ld\n", stats.total.started);
+	printf("Completed : %ld\n", stats.total.completed);
+	printf("Exited    : %ld\n", stats.total.exited);
 
 	jersFinish();
 

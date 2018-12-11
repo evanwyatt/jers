@@ -26,35 +26,90 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
 #include <server.h>
 #include <jers.h>
 #include <commands.h>
 #include <fields.h>
 
 void * deserialize_add_queue(msg_t * msg) {
-	jersQueueAdd *qa = calloc(sizeof(jersQueueAdd), 1);
+	jersQueueAdd *q = calloc(sizeof(jersQueueAdd), 1);
+	msg_item * item = &msg->items[0];
+	int i;
 
+	q->priority = JERS_QUEUE_DEFAULT_PRIORITY;
+	q->state = 0;
+	q->job_limit = 1;
 
-	return qa;
-}
+	for (i = 0; i < item->field_count; i++) {
+		switch(item->fields[i].number) {
+			case QUEUENAME: q->name = getStringField(&item->fields[i]); break;
+			case DESC: q->desc = getStringField(&item->fields[i]); break;
+			case NODE: q->node = getStringField(&item->fields[i]); break;
+			case PRIORITY: q->priority = getNumberField(&item->fields[i]); break;
+			case JOBLIMIT: q->job_limit = getNumberField(&item->fields[i]); break;
+			case STATE: q->state = getNumberField(&item->fields[i]); break;
 
-void * deserialize_get_queue(msg_t * msg) {
-	jersQueueFilter *q = calloc(sizeof(jersQueueFilter), 1);
-
+			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",msg->items[0].fields[i].name); break;
+		}
+	}
 
 	return q;
 }
 
+void * deserialize_get_queue(msg_t * msg) {
+	jersQueueFilter *qf = calloc(sizeof(jersQueueFilter), 1);
+	msg_item * item = &msg->items[0];
+	int i;
+
+	for (i = 0; i < item->field_count; i++) {
+		switch(item->fields[i].number) {
+			case QUEUENAME: qf->filters.name = getStringField(&item->fields[i]); break;
+
+			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",msg->items[0].fields[i].name); break;
+		}
+	}
+
+	return qf;
+}
+
 void * deserialize_mod_queue(msg_t * msg) {
 	jersQueueMod *q = calloc(sizeof(jersQueueMod), 1);
+	msg_item * item = &msg->items[0];
+	int i;
 
+	q->priority = -1;
+	q->state = -1;
+	q->job_limit = -1;
+
+	for (i = 0; i < item->field_count; i++) {
+		switch(item->fields[i].number) {
+			case QUEUENAME: q->name = getStringField(&item->fields[i]); break;
+			case DESC: q->desc = getStringField(&item->fields[i]); break;
+			case NODE: q->node = getStringField(&item->fields[i]); break;
+			case PRIORITY: q->priority = getNumberField(&item->fields[i]); break;
+			case JOBLIMIT: q->job_limit = getNumberField(&item->fields[i]); break;
+			case STATE: q->state = getNumberField(&item->fields[i]); break;
+
+			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",msg->items[0].fields[i].name); break;
+		}
+	}
 
 	return q;
 }
 
 void * deserialize_del_queue(msg_t * msg) {
 	jersQueueDel *q = calloc(sizeof(jersQueueDel), 1);
+	msg_item * item = &msg->items[0];
+	int i;
 
+	for (i = 0; i < item->field_count; i++) {
+		switch(item->fields[i].number) {
+			case QUEUENAME: q->name = getStringField(&item->fields[i]); break;
+
+			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",msg->items[0].fields[i].name); break;
+		}
+	}
 
 	return q;
 }
@@ -73,7 +128,7 @@ int command_add_queue(client * c, void * args) {
 		return 1;
 	}
 
-	q = malloc(sizeof(struct queue));
+	q = calloc(sizeof(struct queue), 1);
 	q->name = qa->name;
 	q->host = qa->node;
 	q->desc = qa->desc;
@@ -82,6 +137,7 @@ int command_add_queue(client * c, void * args) {
 	q->state = qa->state != -1 ? qa->state : JERS_QUEUE_DEFAULT_STATE;
 	q->agent = NULL;
 	q->dirty = 1;
+	server.dirty_queues = 1;
 
 	HASH_ADD_STR(server.queueTable, name, q);
 
@@ -112,9 +168,60 @@ int command_add_queue(client * c, void * args) {
 	return 0;
 }
 
+void serialize_jersQueue(resp_t * r, struct queue * q) {
+	respAddMap(r);
+
+	addStringField(r, QUEUENAME, q->name);
+	addStringField(r, DESC, q->desc);
+	addStringField(r, NODE, q->host);
+	addIntField(r, JOBLIMIT, q->job_limit);
+	addIntField(r, STATE, q->state);
+	addIntField(r, PRIORITY, q->priority);
+
+	addIntField(r, STATSRUNNING, q->stats.running);
+	addIntField(r, STATSPENDING, q->stats.pending);
+	addIntField(r, STATSHOLDING, q->stats.holding);
+	addIntField(r, STATSDEFERRED, q->stats.deferred);
+	addIntField(r, STATSCOMPLETED, q->stats.completed);
+	addIntField(r, STATSEXITED, q->stats.exited);
+
+	respCloseMap(r);
+}
+
 int command_get_queue(client *c, void *args) {
 	jersQueueFilter * qf = args;
+	struct queue * q = NULL;
+	int all = 0;
+	int64_t count = 0;
 
+	resp_t * r = NULL;
+
+	r = respNew();
+	respAddArray(r);
+	respAddSimpleString(r, "RESP");
+	respAddInt(r, 1);
+
+	respAddArray(r);
+
+	if (qf->filters.name == NULL || strcmp(qf->filters.name, "*") == 0)
+		all = 1;
+
+	for (q = server.queueTable; q != NULL; q = q->hh.next) {
+		if (!all && matches(qf->filters.name, q->name) != 0)
+			continue;
+
+		/* Made it here, add it to our response */
+		serialize_jersQueue(r, q);
+		count++;
+	}
+
+	respCloseArray(r);
+	respCloseArray(r);
+
+	size_t reply_length = 0;
+	char * reply = respFinish(r, &reply_length);
+	appendResponse(c, reply, reply_length);
+	free(reply);
 
 	return 0;
 }
@@ -126,11 +233,15 @@ int command_mod_queue(client *c, void * args) {
 	char * buff = NULL;
 	size_t buff_length = 0;
 
+	if (qm->name == NULL) {
+		appendError(c, "-NOQUEUE Queue does not exists");
+		return 1;
+	}
+
 	HASH_FIND_STR(server.queueTable, qm->name, q);
 
 	if (q == NULL) {
-		fprintf(stderr, "Didn't find queue %s\n", qm->name);
-		appendResponse(c, "-NOQUEUE Queue does not exists\n", 31);
+		appendError(c, "-NOQUEUE Queue does not exists");
 		return 1;
 	}
 
@@ -155,6 +266,8 @@ int command_mod_queue(client *c, void * args) {
 		q->dirty = 1;
 	}
 
+	server.dirty_queues = 1;
+
 	response = respNew();
 	respAddSimpleString(response, "0");
 	buff = respFinish(response, &buff_length);
@@ -166,6 +279,37 @@ int command_mod_queue(client *c, void * args) {
 
 int command_del_queue(client *c, void *args) {
 	jersQueueDel *qd = args;
+	struct queue *q = NULL;
+	struct job *j = NULL;
+
+	if (qd->name == NULL) {
+		appendError(c, "-NOQUEUE No queue specified");
+		return 1;
+	}
+
+	HASH_FIND_STR(server.queueTable, qd->name, q);
+
+	if (q == NULL) {
+		appendError(c, "-NOQUEUE Queue does not exists");
+		return 1;
+	}
+
+	/* We can only delete a queue if there are no active jobs on it
+	 * - Deleted jobs are ok, we can remove those before we remove the queue */
+
+	for (j = server.jobTable; j != NULL; j = j->hh.next) {
+		if (j->queue == q && !(j->internal_state &JERS_JOB_FLAG_DELETED))
+			break;
+	}
+
+	if (j != NULL) {
+		appendError(c, "-NOTEMPTY Queue has active jobs on it");
+		return 1;
+	}
+
+	/* We can delete it. */
+
+	//TODO: Delete the queue
 
 
 	return 0;

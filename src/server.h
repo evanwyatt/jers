@@ -45,8 +45,8 @@
 #define DEFAULT_CONFIG_STATEDIR "/var/spool/jers/state"
 #define DEFAULT_CONFIG_BACKGROUNDSAVEMS 30000
 #define DEFAULT_CONFIG_LOGGINGMODE JERS_LOG_INFO
-#define DEFAULT_CONFIG_EVENTFREQ 100
-#define DEFAULT_CONFIG_SCHEDFREQ 500
+#define DEFAULT_CONFIG_EVENTFREQ 10
+#define DEFAULT_CONFIG_SCHEDFREQ 25
 #define DEFAULT_CONFIG_SCHEDMAX 250
 #define DEFAULT_CONFIG_MAXJOBS  0
 #define DEFAULT_CONFIG_MAXCLEAN 50
@@ -56,14 +56,13 @@
 #define DEFAULT_CONFIG_FLUSHDEFER 1
 #define DEFAULT_CONFIG_FLUSHDEFERMS 1000
 
-
 enum job_pending_reasons {
 		PEND_REASON_QUEUESTOPPED = 1,
 		PEND_REASON_QUEUEFULL,
 		PEND_REASON_SYSTEMFULL,
 		PEND_REASON_WAITINGSTART,
 		PEND_REASON_WAITINGRES,
-
+		PEND_REASON_NOAGENT,
 };
 
 typedef struct client {
@@ -138,11 +137,14 @@ struct job {
 	struct queue * queue;
 
 	char * shell;
+	char * wrapper;
 	char * pre_cmd;
 	char * post_cmd;
 
 	char * stdout;
 	char * stderr;
+
+	char * comment;
 
 	/* Command to run */
 	int argc;
@@ -225,7 +227,15 @@ struct jersServer {
 	struct queue * queueTable;
 	struct resource * resTable;
 
-	struct jobStats stats;
+	struct {
+		struct jobStats jobs;
+		struct {
+				int64_t submitted;
+				int64_t started;
+				int64_t completed;
+				int64_t exited;
+		} total;
+	} stats;
 
 	int candidate_recalc;
 
@@ -233,11 +243,11 @@ struct jersServer {
 	int64_t candidate_pool_jobs;
 	struct job ** candidate_pool;
 
-	char slow_logging;    // Write slow commands to a slow log
-	int slow_threshold_ms; // milliseconds before a cmd is considered slow.
+	char slow_logging;		// Write slow commands to a slow log
+	int slow_threshold_ms;	// milliseconds before a cmd is considered slow.
 
-	jobid_t highest_jobid; // Highest possible jobID possible
-//
+	jobid_t highest_jobid;	// Highest possible jobID
+
 	int event_fd;
 
 	char * socket_path;
@@ -250,8 +260,8 @@ struct jersServer {
 
 	struct flush {
 		pid_t pid;
-		char defer;    // 0 == flush after every write. 1 == flush every flushWrite milliseconds
-		int defer_ms;     // milliseconds between state file flushes
+		char defer;		// 0 == flush after every write. 1 == flush every defer_ms milliseconds
+		int defer_ms;	// milliseconds between state file flushes
 		int dirty;
 	} flush;
 
@@ -266,6 +276,7 @@ struct jersServer {
 #define JERS_JOB_FLAG_DELETED  0x0001  // Job has been deleted and will be cleaned up
 #define JERS_JOB_FLAG_FLUSHING 0x0002  // Job state is being flushed to disk
 #define JERS_JOB_FLAG_STARTED  0x0004  // Job start message has been sent
+#define JERS_JOB_FLAG_UNKNOWN  0x0008  // Job was running/start sent to agent, agent has since disconnected.
 
 #define INITIAL_RESPONSE_SIZE 0x1000
 
@@ -292,13 +303,6 @@ void removeAgent(agent * a);
 void print_msg(int level, const char * format, ...);
 
 
-//common.c
-
-long getTimeMS(void);
-
-char * print_time(struct timespec * time, int elapsed);
-void timespec_diff(const struct timespec *start, const struct timespec *end, struct timespec *diff);
-
 //config.c
 void loadConfig(char * config);
 
@@ -317,6 +321,8 @@ void stateSaveToDisk(void);
 
 void checkJobs(void);
 void releaseDeferred(void);
+
+int stateDelJob(struct job * j);
 
 void changeJobState(struct job * j, int new_state, int dirty);
 

@@ -36,13 +36,11 @@ int __comp(const void * a_, const void * b_) {
 	const struct job * a = *((struct job **) a_);
 	const struct job * b = *((struct job **) b_);
 
-	if (a->queue->priority > b->queue->priority) {
+	if (a->queue->priority > b->queue->priority)
 		return 1;
-	}
 
-	if (a->priority > b->priority) {
+	if (a->priority > b->priority)
 		return 1;
-	}
 
 	return (a->jobid - b->jobid);
 }
@@ -72,12 +70,15 @@ void sendStartCmd(struct job * j) {
 	if (j->shell)
 		addStringField(r, SHELL, j->shell);
 
-	if (j->pre_cmd)
-		addStringField(r, PRECMD, j->pre_cmd);
+	if (j->wrapper) {
+		addStringField(r, WRAPPER, j->wrapper);
+	} else {
+		if (j->pre_cmd)
+			addStringField(r, PRECMD, j->pre_cmd);
 
-	if (j->post_cmd)
-		addStringField(r, POSTCMD, j->post_cmd);
-
+		if (j->post_cmd)
+			addStringField(r, POSTCMD, j->post_cmd);
+	}
 
 	addStringArrayField(r, ARGS, j->argc, j->argv);
 
@@ -108,12 +109,13 @@ void releaseDeferred(void) {
 	struct job * j = server.jobTable;
 	time_t now = time(NULL);
 
+	if (server.stats.jobs.deferred == 0)
+		return;
+
 	while (j) {
 		if (j->state == JERS_JOB_DEFERRED && now >= j->defer_time) {
-			j->state = JERS_JOB_PENDING;
+			changeJobState(j, JERS_JOB_PENDING, 0);
 			j->defer_time = 0;
-			server.stats.pending++;
-			server.stats.deferred--;
 			released++;
 		}
 
@@ -127,12 +129,18 @@ void releaseDeferred(void) {
 /* Generate a sorted array of jobs that can be started. */
 
 int64_t generateCandidatePool(void) {
-	int64_t total_job_count = server.stats.pending + server.stats.deferred + server.stats.holding;
+	int64_t total_job_count = server.stats.jobs.pending + server.stats.jobs.deferred + server.stats.jobs.holding;
 	int64_t candidate_count = 0;
 	struct job * j;
+	int64_t start, end;
+
+	start = getTimeMS();
+
+	print_msg(JERS_LOG_DEBUG, "Regenerating job candidate pool");
 
 	if (total_job_count == 0) {
 		server.candidate_pool_jobs = 0;
+		server.candidate_recalc = 0;
 		return server.candidate_pool_jobs;
 	}
 
@@ -150,8 +158,7 @@ int64_t generateCandidatePool(void) {
 		if (j->internal_state &JERS_JOB_FLAG_DELETED)
 			continue;
 
-		/* Don't include a job that isn't pending, or has already been started */
-		if (j->state != JERS_JOB_PENDING || j->internal_state &JERS_JOB_FLAG_STARTED)
+		if (j->state != JERS_JOB_PENDING)
 			continue;
 
 		server.candidate_pool[candidate_count++] = j;
@@ -160,7 +167,8 @@ int64_t generateCandidatePool(void) {
 	qsort(server.candidate_pool, candidate_count, sizeof(struct job *), __comp);
 	server.candidate_pool_jobs = candidate_count;
 	server.candidate_recalc = 0;
-
+	end = getTimeMS();
+	print_msg(JERS_LOG_DEBUG, "Regenerated job candidate pool. Took %ldms", end - start);
 	return server.candidate_pool_jobs;
 }
 
@@ -177,25 +185,20 @@ void checkJobs(void) {
 	struct job * j;
 
 	/* Don't need to do anything if we are at maximum capacity */
-	if (server.stats.running >= server.max_run_jobs)
+	if (server.stats.jobs.running >= server.max_run_jobs)
 		return;
 
 	if (server.candidate_recalc)
 		generateCandidatePool();
 
-	if (jobs_to_start > server.candidate_pool_jobs)
-		jobs_to_start = server.candidate_pool_jobs;
+	jobs_to_start = server.candidate_pool_jobs;
 
-	if (jobs_to_start > server.max_run_jobs - server.stats.running)
-		jobs_to_start = server.max_run_jobs - server.stats.running;
+	if (jobs_to_start > server.max_run_jobs - server.stats.jobs.running)
+		jobs_to_start = server.max_run_jobs - server.stats.jobs.running;
 
 	for (i = 0; i < server.candidate_pool_jobs; i++) {
 		checked++;
 		j = server.candidate_pool[i];
-
-		/* Started enough jobs for this iteration */
-		if (started >= jobs_to_start)
-			break;
 
 		/* We can have gaps in the pool if we've removed a job */
 		if (j == NULL)
@@ -206,19 +209,13 @@ void checkJobs(void) {
 
 		j->pend_reason = 0;
 
-		if (server.stats.running > server.max_run_jobs) {
+		if (server.stats.jobs.running + server.stats.jobs.start_pending > server.max_run_jobs) {
 			j->pend_reason = PEND_REASON_SYSTEMFULL;
 			continue;
 		}
 
-		/* Queue stopped? */
-		if (!(j->queue->state &JERS_QUEUE_FLAG_STARTED)) {
-			j->pend_reason = PEND_REASON_QUEUESTOPPED;
-			continue;
-		}
-
 		/* Check the queue limit */
-		if (j->queue->stats.running >= j->queue->job_limit) {
+		if (j->queue->stats.running + j->queue->stats.start_pending >= j->queue->job_limit) {
 			j->pend_reason = PEND_REASON_QUEUEFULL;
 			continue;
 		}
@@ -229,7 +226,6 @@ void checkJobs(void) {
 			for (res_idx = 0; res_idx < j->res_count; res_idx++) {
 				if (j->req_resources[res_idx].needed > j->req_resources[res_idx].res->count - j->req_resources[res_idx].res->in_use) {
 					j->pend_reason = PEND_REASON_WAITINGRES;
-					print_msg(JERS_LOG_DEBUG, "Not enough resources to start job %d\n", j->jobid);
 					break;
 				}
 			}
@@ -238,6 +234,20 @@ void checkJobs(void) {
 			if (j->pend_reason)
 				continue;
 		}
+
+		/* Queue stopped? */
+		if (!(j->queue->state &JERS_QUEUE_FLAG_STARTED)) {
+			j->pend_reason = PEND_REASON_QUEUESTOPPED;
+			continue;
+		}
+
+		/* Agent not connected? */
+		if (j->queue->agent == NULL) {
+			j->pend_reason = PEND_REASON_NOAGENT;
+			continue;
+		}
+
+		/* We can start this job! */
 
 		/* Increase all the needed resources */
 		if (j->res_count) {
@@ -250,13 +260,13 @@ void checkJobs(void) {
 		sendStartCmd(j);
 		j->internal_state |= JERS_JOB_FLAG_STARTED;
 
-		j->queue->stats.running++;
-		j->queue->stats.pending--;
+		/* Keep track of the jobs we have attempted to start */
+		j->queue->stats.start_pending++;
+		server.stats.jobs.start_pending++;
 
-		server.stats.running++;
-		server.stats.pending--;
-
-		started++;
+		/* Started enough jobs for this iteration? */
+		if (++started >= jobs_to_start)
+			break;
 	}
 
 	return;

@@ -35,8 +35,6 @@
 #include <string.h>
 #include <stdint.h>
 
-#include "jers_error.h"
-
 typedef uint32_t jobid_t;
 
 #define JERS_VERSION "0.01"
@@ -51,7 +49,9 @@ typedef uint32_t jobid_t;
 
 #define JERS_QUEUE_NAME_MAX 16
 #define JERS_QUEUE_DESC_MAX 128
-#define JERS_QUEUE_MAX_PRIORITY 128
+#define JERS_QUEUE_MIN_PRIORITY 0
+#define JERS_QUEUE_MAX_PRIORITY 255
+#define JERS_QUEUE_DEFAULT_PRIORITY 100
 #define JERS_QUEUE_MAX_LIMIT 1024
 #define JERS_QUEUE_INVALID_CHARS "/\\ $"
 
@@ -59,7 +59,6 @@ typedef uint32_t jobid_t;
 #define JERS_QUEUE_FLAG_STARTED 0x0001  // Jobs can run
 #define JERS_QUEUE_FLAG_OPEN    0x0002  // Jobs can be submitted to this queue
 
-#define JERS_QUEUE_DEFAULT_PRIORITY 100
 #define JERS_QUEUE_DEFAULT_LIMIT 1
 #define JERS_QUEUE_DEFAULT_STATE JERS_QUEUE_FLAG_OPEN // Open only
 
@@ -79,13 +78,44 @@ typedef uint32_t jobid_t;
 #define JERS_FILTER_TAGS      0x08
 #define JERS_FILTER_RESOURCES 0x10
 #define JERS_FILTER_UID       0x20
+#define JERS_FILTER_RESNAME   0x40
+#define JERS_FILTER_COMMENT   0x80
 
-#define JERS_RET_JOBID   0x01
-#define JERS_RET_QUEUE   0x02
-#define JERS_RET_NAME    0x04
-#define JERS_RET_STATE   0x08
+#define JERS_RET_JOBID      0x01
+#define JERS_RET_QUEUE      0x02
+#define JERS_RET_NAME       0x04
+#define JERS_RET_STATE      0x08
+#define JERS_RET_COMMENT    0x10
+#define JERS_RET_UID        0x20
+#define JERS_RET_STDOUT     0x40
+#define JERS_RET_STDERR     0x80
+#define JERS_RET_TAGS       0x0100
+#define JERS_RET_RESOURCES  0x0200
+#define JERS_RET_PRIORITY   0x0400
+#define JERS_RET_SUBMITTIME 0x0800
+#define JERS_RET_DEFERTIME  0x1000
+#define JERS_RET_STARTTIME  0x2000
+#define JERS_RET_FINISHTIME 0x4000
+#define JERS_RET_NICE       0x008000
+#define JERS_RET_PRECMD     0x010000
+#define JERS_RET_POSTCMD    0x020000
+#define JERS_RET_ARGS       0x040000
+#define JERS_RET_SHELL      0x080000
 
 #define JERS_QUEUE_
+
+enum jers_error_codes {
+        JERS_OK = 0,
+        JERS_ERROR,
+        JERS_INVALID
+
+};
+
+
+//TODO: Add compiler asserts to ensure code + string match lengths
+
+void error_die(char * msg, ...);
+
 
 typedef struct jersJobAdd {
 	char * name;
@@ -94,12 +124,14 @@ typedef struct jersJobAdd {
 	uid_t uid;
 
 	char * shell;
-
+	char * wrapper;
 	char * pre_cmd;
 	char * post_cmd;
 
 	char * stdout;
 	char * stderr;
+
+	char * comment;
 
 	time_t defer_time;
 
@@ -122,7 +154,7 @@ typedef struct jersJobAdd {
 
 typedef struct jersJobMod {
 	jobid_t jobid;
-	char * job_name;
+	char * name;
 	char * queue;
 
 	time_t defer_time;
@@ -132,6 +164,8 @@ typedef struct jersJobMod {
 	int nice;
 	int priority;
 	char hold;
+
+	char * comment;
 
 	int64_t env_count;
 	char ** envs;
@@ -156,9 +190,15 @@ typedef struct jersJob {
 	int nice;
 	uid_t uid;
 
+	int hold;
+	int exit_code;
+	int signal;
+
 	char * shell;
 	char * pre_command;
 	char * post_command;
+
+	char * comment;
 
 	char * stdout;
 	char * stderr;
@@ -193,6 +233,8 @@ typedef struct jersJobFilter {
 	struct {
 		char * job_name;
 		char * queue_name;
+		char * comment;
+
 		int state;
 		int64_t tag_count;
 		char ** tags;
@@ -244,6 +286,7 @@ struct jobStats {
 	int64_t deferred;
 	int64_t completed;
 	int64_t exited;
+	int64_t start_pending;
 };
 
 typedef struct jersQueue {
@@ -293,7 +336,13 @@ typedef struct jersQueueDel {
 } jersQueueDel;
 
 typedef struct jersStats {
-	struct jobStats server_stats;
+	struct jobStats current;
+	struct {
+			int64_t submitted;
+			int64_t started;
+			int64_t completed;
+			int64_t exited;
+	} total;
 } jersStats;
 
 void jersInitJobAdd(jersJobAdd *j);
@@ -309,6 +358,7 @@ jobid_t jersAddJob(jersJobAdd *s);
 int jersModJob(jersJobMod *j);
 int jersGetJob(jobid_t id, jersJobFilter *filter, jersJobInfo *info);
 int jersDelJob(jobid_t id);
+int jersRestartJob(jobid_t id);
 void jersFreeJobInfo (jersJobInfo *info);
 
 int jersAddQueue(jersQueueAdd *q);

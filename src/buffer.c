@@ -26,6 +26,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
 #include <string.h>
 #include <errno.h>
 #include <buffer.h>
@@ -48,6 +49,7 @@ int buffNew(buff_t * b, size_t initial_size) {
 
 void buffFree(buff_t * b) {
 	free(b->data);
+	b->data = NULL;
 }
 
 /* Resize the buffer to be able to store at least an extra 'length' bytes */
@@ -76,6 +78,7 @@ int buffResize(buff_t * b, size_t length) {
 
 	b->data = new_data;
 	b->size = new_size;
+
 	return 0;
 }
 

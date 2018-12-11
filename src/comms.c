@@ -305,8 +305,10 @@ void handleAgentDisconnect(struct agent * a) {
 	struct job * j;
 
 	for (j = server.jobTable; j != NULL; j = j->hh.next) {
-		if (j->queue->agent == a && j->state & JERS_JOB_RUNNING) {
+		if (j->queue->agent == a && (j->state & JERS_JOB_RUNNING || j->internal_state & JERS_JOB_FLAG_STARTED)) {
 			print_msg(JERS_LOG_WARNING, "Setting JobId %d to unknown", j->jobid);
+			j->internal_state = 0;
+			
 		}
 	}
 
@@ -351,12 +353,6 @@ void handleAgentRead(agent * a) {
 	}
 
 	a->requests.used += len;
-
-	if (load_message(&a->msg, &a->requests) < 0) {
-		print_msg(JERS_LOG_WARNING, "Failed to load agent message:");
-		handleAgentDisconnect(a);
-		return;
-	}
 }
 
 /* Handle read activity on a client socket */

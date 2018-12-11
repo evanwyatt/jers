@@ -112,15 +112,15 @@ int command_add_resource(client *c, void *args) {
 		appendError(c, "-INVARG Invalid name\n");
 		return 1;
 	}
-	
+
 	HASH_FIND_STR(server.resTable, ra->name, r);
 
 	if (r != NULL) {
-		appendError(c, "-INVARG Resource already exists \n");
+		appendError(c, "-INVARG Resource already exists\n");
 		return 1;
 	}
 
-	r = malloc(sizeof(struct resource));
+	r = calloc(sizeof(struct resource), 1);
 
 	r->name = ra->name;
 	r->count = ra->count;
@@ -129,14 +129,14 @@ int command_add_resource(client *c, void *args) {
 
 	resp_t * response = respNew();
 
-        respAddSimpleString(response, "0");
+	respAddSimpleString(response, "0");
 
-        size_t reply_length = 0;
-        char * reply = respFinish(response, &reply_length);
-        appendResponse(c, reply, reply_length);
-        free(reply);
+	size_t reply_length = 0;
+	char * reply = respFinish(response, &reply_length);
+	appendResponse(c, reply, reply_length);
+	free(reply);
 
-        return 0;
+	return 0;
 }
 
 int command_get_resource(client *c, void *args) {
@@ -158,23 +158,19 @@ int command_get_resource(client *c, void *args) {
 	wildcard = ((strchr(rf->filters.name, '*')) || (strchr(rf->filters.name, '?')));
 
 	if (wildcard) {
-		int64_t matched = 0;
+		respAddArray(response);
 
 		for (r = server.resTable; r != NULL; r = r->hh.next) {
-			if (fnmatch(rf->filters.name, r->name, 0) == 0) {
-				/* Add it */
-				if (matched == 0)
-					respAddArray(response);
-	
+			if (matches(rf->filters.name, r->name) == 0) {
 				respAddMap(response);
 				addStringField(response, RESNAME, r->name);
 				addIntField(response, RESCOUNT, r->count);
-				respCloseMap(response);			
+				addIntField(response, RESINUSE, r->in_use);
+				respCloseMap(response);	
 			} 
 		}
-	
-		if (matched)
-			respCloseArray(response);
+
+		respCloseArray(response);
 	} else {
 		HASH_FIND_STR(server.resTable, rf->filters.name, r);
 
@@ -182,6 +178,7 @@ int command_get_resource(client *c, void *args) {
 			respAddMap(response);
 			addStringField(response, RESNAME, r->name);
 			addIntField(response, RESCOUNT, r->count);
+			addIntField(response, RESINUSE, r->in_use);
 			respCloseMap(response);
 		}
 	}

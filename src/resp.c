@@ -32,6 +32,7 @@
 #include <inttypes.h>
 
 #include "resp.h"
+#include "common.h"
 
 #define INIT_SIZE 1024
 #define DELIM_CHAR '\n'
@@ -301,7 +302,10 @@ static int _respClose(resp_t * r, int type) {
 
 	count = (type == RESP_TYPE_ARRAY)? r->items[r->depth + 1].count : (r->items[r->depth + 1].count / 2);
 
-	b->len += sprintf(b->string + b->len, "%c%ld%c", type == RESP_TYPE_ARRAY? '*':'%', count, DELIM_CHAR);
+	b->string[b->len++] = type == RESP_TYPE_ARRAY? '*':'%';
+	b->len += int64tostr(b->string + b->len, count);
+	b->string[b->len++] = DELIM_CHAR;
+
 	memcpy(b->string + b->len, r->items[r->depth + 1].string, r->items[r->depth + 1].len);
 	b->len += r->items[r->depth + 1].len;
 	b->string[b->len] = 0;
@@ -324,7 +328,10 @@ int respAddInt(resp_t * r, int64_t value) {
 	struct buffer * b = &r->items[r->depth];
 
 	_resize(b, 32);
-	b->len += sprintf(b->string + b->len , ":%ld%c", value, DELIM_CHAR);
+	b->string[b->len++] = ':';
+	b->len += int64tostr(b->string + b->len, value);
+	b->string[b->len++] = DELIM_CHAR;
+	b->string[b->len] = '\0';
 	b->count++;
 
 	return 0;
@@ -349,7 +356,9 @@ int respAddBlobString(resp_t * r, const char * string, uint64_t len) {
 	if (string == NULL || *string == '\0')
 		return respAddNull(r);
 
-	b->len += sprintf(b->string + b->len, "$%" PRId64 "%c", len, DELIM_CHAR);
+	b->string[b->len++] = '$';
+	b->len += int64tostr(b->string + b->len, len);
+	b->string[b->len++] = DELIM_CHAR;
 	memcpy(b->string + b->len, string, len);
 	b->len += len;
 	b->string[b->len++] = DELIM_CHAR;
@@ -382,11 +391,15 @@ int respAddStringArray(resp_t * r, int count, char ** strings) {
 
 int respAddSimpleString(resp_t * r, const char * string) {
 	struct buffer * b = &r->items[r->depth];
+	int len;
 	_resize(b, strlen(string) + 8);
 
-	// Check for a newline in the string
+	len = strlen(string);
 
-	b->len += sprintf(b->string + b->len, "+%s%c", string, DELIM_CHAR);
+	b->string[b->len++] = '+';
+	strcpy(b->string + b->len, string);
+	b->len += len;
+	b->string[b->len++] = DELIM_CHAR;
 	b->count++;
 
 	return 0;
@@ -394,11 +407,15 @@ int respAddSimpleString(resp_t * r, const char * string) {
 
 int respAddSimpleError(resp_t * r, const char * error) {
 	struct buffer * b = &r->items[r->depth];
+	int len;
 	_resize(b, strlen(error) + 8);
 
-	// Check for a newline in the string
+	len = strlen(error);
 
-	b->len += sprintf(b->string + b->len, "-%s%c", error, DELIM_CHAR);
+	b->string[b->len++] = '-';
+	strcpy(b->string + b->len, error);
+	b->len += len;
+	b->string[b->len++] = DELIM_CHAR;
 	b->count++;
 
 	return 0;

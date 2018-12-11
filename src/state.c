@@ -145,10 +145,6 @@ static inline ssize_t _writev_state(const struct iovec * iov, int iovcnt) {
 	return bytes;
 }
 
-static inline int int64tostr(char * dest, int64_t num) {
-	return sprintf(dest, "%ld", num);
-}
-
 static inline void _write_field(const char * name, field * f, int array_index) {
 	struct iovec iov[4];
 	char temp_int[32];
@@ -176,6 +172,12 @@ static inline void _write_field(const char * name, field * f, int array_index) {
 				temp = f->value.string_array.strings[array_index];
 			else
 				temp = f->value.string;
+
+			if (!temp) {
+				iov[3].iov_base = "";
+				iov[3].iov_base = 0;
+				break;
+			}
 
 			temp = escapeString(temp, &iov[3].iov_len);
 			iov[3].iov_base = temp;
@@ -305,6 +307,17 @@ void stateReplayJournal(void) {
 	print_msg(JERS_LOG_INFO, "Finished recovery from journal files");
 }
 
+int stateDelJob(struct job * j) {
+	char filename[PATH_MAX];
+	int directory = j->jobid / STATE_DIV_FACTOR;
+	sprintf(filename, "%s/jobs/%d/%d.job", server.state_dir, directory, j->jobid);
+
+	if (unlink(filename) != 0)
+		print_msg(JERS_LOG_WARNING, "Failed to remove statefile for deleted job %d: %s", j->jobid, strerror(errno));
+
+	return 0;
+}
+
 int stateSaveJob(struct job * j) {
 	char filename[PATH_MAX];
 	char new_filename[PATH_MAX];
@@ -357,7 +370,7 @@ int stateSaveJob(struct job * j) {
 	if (j->tag_count) {
 		fprintf(f, "TAG_COUNT %d\n", j->tag_count);
 
-		for (i = 0; i < j->env_count; i++)
+		for (i = 0; i < j->tag_count; i++)
 			fprintf(f, "TAG[%d] %s\n", i, j->tags[i]);
 	}
 
@@ -377,10 +390,16 @@ int stateSaveJob(struct job * j) {
 		fprintf(f, "DEFERTIME %ld\n", j->defer_time);
 
 	if (j->start_time)
-		fprintf(f, "FINISHTIME %ld\n", j->start_time);
+		fprintf(f, "STARTTIME %ld\n", j->start_time);
 
 	if (j->finish_time)
 		fprintf(f, "FINISHTIME %ld\n", j->finish_time);
+
+	if (j->exitcode)
+		fprintf(f, "EXITCODE %d\n", j->exitcode);
+
+	if (j->signal)
+		fprintf(f,"SIGNAL %d\n", j->signal);
 
 	fflush(f);
 	fsync(fileno(f));
@@ -553,20 +572,15 @@ void stateSaveToDisk(void) {
 
 	print_msg(JERS_LOG_DEBUG, "Starting background save to disk");
 
-	server.flush_jobs = server.dirty_jobs;
-	server.flush_queues = server.dirty_queues;
-	server.flush_resources = server.dirty_resources;
-
-	server.dirty_jobs = server.dirty_queues = server.dirty_resources = 0;
-
 	/* Check for dirty objects - saving the references to flush to disk.
 	 * We clear the dirty flags here, and set a flushing state as we might
 	 * make other changes to these objects while they are being saved to disk. */
 
-	if (server.flush_jobs) {
+	if (server.dirty_jobs) {
 		int i = 0;
 		struct job * j = NULL;
-		dirtyJobs = calloc(sizeof(struct job *) * (server.flush_jobs + 1), 1);
+
+		dirtyJobs = malloc(sizeof(struct job *) * (HASH_COUNT(server.jobTable) + 1));
 
 		for (j = server.jobTable; j != NULL; j = j->hh.next) {
 			if (j->dirty) {
@@ -575,12 +589,16 @@ void stateSaveToDisk(void) {
 				j->internal_state |= JERS_JOB_FLAG_FLUSHING;
 			}
 		}
+
+		dirtyJobs[i] = NULL;
+		server.flush_jobs = i;
 	}
 
-	if (server.flush_queues) {
+	if (server.dirty_queues) {
 		int i = 0;
 		struct queue * q = NULL;
-		dirtyQueues = calloc(sizeof(struct queue *) * server.flush_queues + 1, 1);
+
+		dirtyQueues = malloc(sizeof(struct queue *) * (HASH_COUNT(server.queueTable) + 1));
 
 		for (q = server.queueTable; q != NULL; q = q->hh.next) {
 			if (q->dirty) {
@@ -589,12 +607,16 @@ void stateSaveToDisk(void) {
 				q->internal_state |= JERS_JOB_FLAG_FLUSHING;
 			}
 		}
+
+		dirtyQueues[i] = NULL;
+		server.flush_queues = i;
 	}
 
-	if (server.flush_resources) {
+	if (server.dirty_resources) {
 		int i = 0;
 		struct resource * r = NULL;
-		dirtyResources = calloc(sizeof(struct resource *) * server.flush_resources + 1, 1);
+
+		dirtyResources = malloc(sizeof(struct resource *) * (HASH_COUNT(server.resTable) + 1));
 
 		for (r = server.resTable; r != NULL; r = r->hh.next) {
 			if (r->dirty) {
@@ -603,7 +625,12 @@ void stateSaveToDisk(void) {
 				r->internal_state |= JERS_JOB_FLAG_FLUSHING;
 			}
 		}
+
+		dirtyResources[i] = NULL;
+		server.flush_resources = i;
 	}
+
+	server.dirty_jobs = server.dirty_queues = server.dirty_resources = 0;
 
 	startTime = getTimeMS();
 
@@ -654,7 +681,7 @@ int loadKeyValue (char * line, char **key, char ** value, int * index) {
 		*comment = '\0';
 	}
 
-	removeWhitespace(line);
+	//removeWhitespace(line);
 
 	if (!*line) {
 		/* Empty line*/
@@ -768,8 +795,6 @@ int stateLoadJob(char * fileName) {
 
 	jobid = atoi(temp + 1); // + 1 to move past the '/'
 
-	print_msg(JERS_LOG_DEBUG, "Loading job %d from file", jobid);
-
 	struct job * j = calloc(sizeof(struct job), 1);
 	j->jobid = jobid;
 
@@ -831,6 +856,10 @@ int stateLoadJob(char * fileName) {
 			j->finish_time = atoi(value);
 		} else if (strcmp(key, "STARTTIME") == 0) {
 			j->start_time = atoi(value);
+		} else if (strcmp(key, "EXITCODE") == 0) {
+			j->exitcode = atoi(value);
+		} else if (strcmp(key, "SIGNAL") == 0) {
+			j->signal = atoi(value);
 		}
 	}
 
@@ -856,7 +885,6 @@ int stateLoadJob(char * fileName) {
 int stateLoadJobs(void) {
 	int rc;
 	int i;
-	jobid_t loaded = 0;
 	char pattern[PATH_MAX];
 	glob_t jobFiles;
 
@@ -876,12 +904,12 @@ int stateLoadJobs(void) {
 		error_die("Failed to glob() job files from %s : %s\n", pattern, strerror(errno));
 	}
 
-	for (i = 0; i < jobFiles.gl_pathc; i++) {
-		stateLoadJob(jobFiles.gl_pathv[i]);
-		loaded++;
-	}
+	print_msg(JERS_LOG_INFO, "Loading %d jobs from disk", jobFiles.gl_pathc);
 
-	print_msg(JERS_LOG_INFO, "Loaded %d jobs.\n", loaded);
+	for (i = 0; i < jobFiles.gl_pathc; i++)
+		stateLoadJob(jobFiles.gl_pathv[i]);
+
+	print_msg(JERS_LOG_INFO, "Loaded %d jobs", jobFiles.gl_pathc);
 
 	globfree(&jobFiles);
 	return 0;
@@ -997,9 +1025,12 @@ int stateLoadQueues(void) {
 		error_die("Failed to glob() queue files from %s : %s\n", pattern, strerror(errno));
 	}
 
-	for (i = 0; i < qFiles.gl_pathc; i++) {
+	print_msg(JERS_LOG_INFO, "Loading %d queues from disk", qFiles.gl_pathc);
+
+	for (i = 0; i < qFiles.gl_pathc; i++)
 		stateLoadQueue(qFiles.gl_pathv[i]);
-	}
+
+	print_msg(JERS_LOG_INFO, "Loaded %d queues from disk", qFiles.gl_pathc);
 
 	globfree(&qFiles);
 	return 0;
@@ -1080,7 +1111,6 @@ int stateLoadRes(char * file_name) {
 int stateLoadResources(void) {
 	int rc;
 	int i;
-	int loaded = 0;
 	char pattern[PATH_MAX];
 	glob_t resFiles;
 
@@ -1099,48 +1129,49 @@ int stateLoadResources(void) {
 		error_die("Failed to glob() resource files from %s : %s\n", pattern, strerror(errno));
 	}
 
-	for (i = 0; i < resFiles.gl_pathc; i++) {
-		stateLoadRes(resFiles.gl_pathv[i]);
-		loaded++;
-	}
+	print_msg(JERS_LOG_INFO, "Loading %d resources from disk", resFiles.gl_pathc);
 
-	print_msg(JERS_LOG_INFO, "Loaded %d jobs.\n", loaded);
+	for (i = 0; i < resFiles.gl_pathc; i++)
+		stateLoadRes(resFiles.gl_pathv[i]);
+
+	print_msg(JERS_LOG_INFO, "Loaded %d resources.", resFiles.gl_pathc);
 
 	globfree(&resFiles);
 	return 0;
 }
 
 void changeJobState(struct job * j, int new_state, int dirty) {
+	int old_state = j->state;
 
 	/* Adjust the old state */
-	switch (j->state) {
+	switch (old_state) {
 		case JERS_JOB_RUNNING:
-			server.stats.running--;
+			server.stats.jobs.running--;
 			j->queue->stats.running--;
 			break;
 
 		case JERS_JOB_PENDING:
-			server.stats.pending--;
+			server.stats.jobs.pending--;
 			j->queue->stats.pending--;
 			break;
 
 		case JERS_JOB_DEFERRED:
-			server.stats.deferred--;
+			server.stats.jobs.deferred--;
 			j->queue->stats.deferred--;
 			break;
 
 		case JERS_JOB_HOLDING:
-			server.stats.holding--;
+			server.stats.jobs.holding--;
 			j->queue->stats.holding--;
 			break;
 
 		case JERS_JOB_COMPLETED:
-			server.stats.completed--;
+			server.stats.jobs.completed--;
 			j->queue->stats.completed--;
 			break;
 
 		case JERS_JOB_EXITED:
-			server.stats.exited--;
+			server.stats.jobs.exited--;
 			j->queue->stats.exited--;
 			break;
 	}
@@ -1149,32 +1180,38 @@ void changeJobState(struct job * j, int new_state, int dirty) {
 
 	switch (new_state) {
 		case JERS_JOB_RUNNING:
-			server.stats.running++;
+			server.stats.jobs.running++;
 			j->queue->stats.running++;
+
+			server.stats.jobs.start_pending--;
+			j->queue->stats.start_pending--;
 			break;
 
 		case JERS_JOB_PENDING:
-			server.stats.pending++;
+			server.stats.jobs.pending++;
 			j->queue->stats.pending++;
+			server.candidate_recalc = 1;
 			break;
 
 		case JERS_JOB_DEFERRED:
-			server.stats.deferred++;
+			server.stats.jobs.deferred++;
 			j->queue->stats.deferred++;
+			server.candidate_recalc = 1;
 			break;
 
 		case JERS_JOB_HOLDING:
-			server.stats.holding++;
+			server.stats.jobs.holding++;
 			j->queue->stats.holding++;
+			server.candidate_recalc = 1;
 			break;
 
 		case JERS_JOB_COMPLETED:
-			server.stats.completed++;
+			server.stats.jobs.completed++;
 			j->queue->stats.completed++;
 			break;
 
 		case JERS_JOB_EXITED:
-			server.stats.exited++;
+			server.stats.jobs.exited++;
 			j->queue->stats.exited++;
 			break;
 	}
@@ -1183,11 +1220,7 @@ void changeJobState(struct job * j, int new_state, int dirty) {
 
 	/* Mark it as dirty */
 	if (dirty) {
-		if (!j->dirty) {
-			server.dirty_jobs++;
-			server.candidate_recalc = 1;
-		}
-
+		server.dirty_jobs = 1;
 		j->dirty = 1;
 	}
 }

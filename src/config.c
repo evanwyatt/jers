@@ -107,7 +107,7 @@ server.logging_mode = JERS_LOG_DEBUG;
 			free(server.state_dir);
 			server.state_dir = strdup(value);
 		} else if (strcmp(key, "flush_defer") == 0) {
-			if (strcasecmp(value, "TRUE") == 0)
+			if (strcasecmp(value, "yes") == 0)
 				server.flush.defer = 1;
 			else
 				server.flush.defer = 0;
@@ -131,7 +131,6 @@ server.logging_mode = JERS_LOG_DEBUG;
                 } else if (strcmp(key, "client_listen_socket") == 0) {
 			free(server.socket_path);
 			server.socket_path = strdup(value);
-
                 } else if (strcmp(key, "agent_listen_socket") == 0) {
 			free(server.agent_socket_path);
 			server.agent_socket_path = strdup(value);

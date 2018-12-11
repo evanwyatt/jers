@@ -26,6 +26,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
 #include <server.h>
 #include <unistd.h>
 
@@ -45,6 +46,7 @@ void registerEvent(void(*func)(void), int interval) {
 
 void checkClientEvent(void) {
 	client * c = server.client_list;
+	int rc;
 
 	/* Check the connected clients for commands to action,
 	 * we can limit the amount of time we spend running command here.
@@ -52,7 +54,17 @@ void checkClientEvent(void) {
 	 * the reader structure to run the next command */
 
 	while (c) {
-		if (c->msg.command)
+		rc = load_message(&c->msg, &c->request);
+
+		if (rc < 0) {
+			client * c_next = c->next;
+			print_msg(JERS_LOG_WARNING, "Failed to load client request, disconnecting them.");
+			handleClientDisconnect(c);
+			c = c_next;
+			continue;
+		}
+
+		if (rc == 0)
 			runCommand(c);
 
 		c = c->next;
@@ -63,8 +75,22 @@ void checkAgentEvent(void) {
 	agent * a = server.agent_list;
 
 	while (a) {
-		while (a->msg.command)
-			runAgentCommand(a);
+		int rc = 0;
+
+		while (rc == 0) {
+			rc = load_message(&a->msg, &a->requests);
+
+			if (rc < 0) {
+				agent * a_next = a->next;
+				print_msg(JERS_LOG_WARNING, "Failed to load agent message:");
+				handleAgentDisconnect(a);
+				a = a_next;
+				continue;
+			}
+
+			if (rc == 0)
+				runAgentCommand(a);
+		}
 
 		a = a->next;
 	}

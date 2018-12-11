@@ -73,6 +73,16 @@ field fields[] = {
 	{STATSCOMPLETED, RESP_TYPE_INT, "STATSCOMPLETED"},
 	{STATSEXITED,    RESP_TYPE_INT, "STATSEXITED"},
 
+	{STATSTOTALSUBMITTED, RESP_TYPE_INT, "STATSTOTALSUBMITTED"},
+	{STATSTOTALSTARTED,   RESP_TYPE_INT, "STATSTOTALSTARTED"},
+	{STATSTOTALCOMPLETED, RESP_TYPE_INT, "STATSTOTALCOMPLETED"},
+	{STATSTOTALEXITED,    RESP_TYPE_INT, "STATSTOTALEXITED"},
+
+	{WRAPPER, RESP_TYPE_BLOBSTRING, "WRAPPER"},
+	{COMMENT, RESP_TYPE_BLOBSTRING, "COMMENT"},
+	{RESINUSE, RESP_TYPE_INT, "RESINUSE"},
+	{SIGNAL, RESP_TYPE_INT, "SIGNAL"},
+
 	{ENDOFFIELDS, RESP_TYPE_INT, "ENDOFFIELDS"}
 };
 
@@ -96,7 +106,7 @@ void freeStringArray(int count, char *** array) {
 }
 
 char * getStringField(field *f) {
-	char * ret = strdup(f->value.string);
+	char * ret = strdup(f->value.string ? f->value.string : "");
 	return ret;
 }
 
@@ -113,8 +123,10 @@ int64_t getStringArrayField(field *f, char *** array) {
 
 	*array = malloc(sizeof(char *) * f->value.string_array.count);
 
-	for (i = 0; i < f->value.string_array.count; i++)
-		(*array)[i] = strdup(f->value.string_array.strings[i]);
+	for (i = 0; i < f->value.string_array.count; i++) {
+		char * string = f->value.string_array.strings[i];
+		(*array)[i] = strdup(string ? string : "");
+	}
 
 	return f->value.string_array.count;
 }
@@ -270,24 +282,29 @@ void free_message(msg_t * msg, buff_t * buff) {
 
 	respReadReset(&msg->reader);
 	free(msg->items);
+
+	msg->items = NULL;
 	msg->item_count = 0;
 	msg->command = NULL;
 	msg->version = 0;
+	msg->error = NULL;
 
 	if (buff)
 		load_message(msg, buff);
 }
 
 /* Load our string into a message structure
- *  * Returns:
- *   * <0 on error
- *    * 1 If there isn't enough data to load a request
- *     * 0 If loaded succesfully */
+ *   Returns:
+ *   <0 on error
+ *    1 If there isn't enough data to load a request
+ *    0 If loaded succesfully */
 
 int load_message(msg_t * msg, buff_t * buff) {
 	msg->version = 0;
 	msg->item_count = 0;
 	msg->items = NULL;
+	msg->error = NULL;
+	msg->command = NULL;
 
 	respReadUpdate(&msg->reader, buff->data, buff->used);
 

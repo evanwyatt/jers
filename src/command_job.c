@@ -33,7 +33,6 @@
 
 #include <time.h>
 #include <pwd.h>
-#include <fnmatch.h>
 
 struct jobResource * convertResourceStrings(int res_count, char ** res_strings) {
 	struct jobResource * resources = malloc(sizeof(struct jobResource) * res_count);
@@ -103,6 +102,7 @@ void * deserialize_add_job(msg_t * t) {
 			case RESOURCES: s->res_count = getStringArrayField(&t->items[0].fields[i], &s->resources); break;
 			case STDOUT   : s->stdout = getStringField(&t->items[0].fields[i]); break;
 			case STDERR   : s->stderr = getStringField(&t->items[0].fields[i]); break;
+			case WRAPPER  : s->wrapper = getStringField(&t->items[0].fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field %d encountered - Ignoring\n",t->items[0].fields[i].number); break;
 		}
@@ -153,7 +153,7 @@ void * deserialize_mod_job(msg_t * t) {
 	for (i = 0; i < item->field_count; i++) {
 		switch(item->fields[i].number) {
 			case JOBID    : jm->jobid = getNumberField(&item->fields[i]); break;
-			case JOBNAME  : jm->job_name = getStringField(&item->fields[i]); break;
+			case JOBNAME  : jm->name = getStringField(&item->fields[i]); break;
 			case QUEUENAME: jm->queue = getStringField(&item->fields[i]); break;
 			case DEFERTIME: jm->defer_time = getNumberField(&item->fields[i]); break;
 			case NICE     : jm->nice = getNumberField(&item->fields[i]); break;
@@ -174,7 +174,16 @@ void * deserialize_mod_job(msg_t * t) {
 
 void * deserialize_del_job(msg_t * t) {
 	jersJobDel * jd = calloc(sizeof(jersJobDel), 1);
+	msg_item * item = &t->items[0];
+	int i;
 
+	for (i = 0; i < item->field_count; i++) {
+		switch(item->fields[i].number) {
+			case JOBID    : jd->jobid = getNumberField(&item->fields[i]); break;
+
+			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",t->items[0].fields[i].name); break;
+		}
+	}
 
 	return jd;
 }
@@ -185,7 +194,7 @@ void serialize_jersJob(resp_t * r, struct job * j, int fields) {
 	if (fields == 0 || fields & JERS_RET_JOBID)
 		addIntField(r, JOBID, j->jobid);
 
-	if (fields == 0 || fields & JERS_RET_JOBID)
+	if (fields == 0 || fields & JERS_RET_NAME)
 		addStringField(r, JOBNAME, j->jobname);
 
 	if (fields == 0 || fields & JERS_RET_QUEUE)
@@ -194,38 +203,52 @@ void serialize_jersJob(resp_t * r, struct job * j, int fields) {
 	if (fields == 0 || fields & JERS_RET_STATE)
 		addIntField(r, STATE, j->state);
 
-	//TODO: Add return flags for all fields
-	if (fields == 0) {
-		addIntField(r, PRIORITY, j->priority);
-		addIntField(r, NICE, j->nice);
+	if (fields == 0 || fields & JERS_RET_UID)
 		addIntField(r, UID, j->uid);
 
-		if (j->shell)
-			addStringField(r, SHELL, j->shell);
-		if (j->pre_cmd)
-			addStringField(r, PRECMD, j->pre_cmd);
-		if (j->post_cmd)
-			addStringField(r, POSTCMD, j->post_cmd);
-		if (j->stdout)
-			addStringField(r, STDOUT, j->stdout);
-		if (j->stderr)
-			addStringField(r, STDERR, j->stderr);
+	if (fields == 0 || fields & JERS_RET_PRIORITY)
+		addIntField(r, PRIORITY, j->priority);
 
-		addStringArrayField(r, ARGS, j->argc, j->argv);
-
-		if (j->defer_time)
-			addIntField(r, DEFERTIME, j->defer_time);
-
+	if (fields == 0 || fields & JERS_RET_SUBMITTIME)
 		addIntField(r, SUBMITTIME, j->submit_time);
 
-		if (j->start_time)
-			addIntField(r, STARTTIME, j->start_time);
-		if (j->finish_time)
-			addIntField(r, FINISHTIME, j->finish_time);
-		if (j->tag_count)
-			addStringArrayField(r, TAGS, j->tag_count, j->tags);
+	if (fields == 0 || fields & JERS_RET_NICE)
+		addIntField(r, NICE, j->nice);
 
-		if (j->res_count) {
+	if (fields == 0 || fields & JERS_RET_ARGS)
+		addStringArrayField(r, ARGS, j->argc, j->argv);
+
+	if (j->comment && (fields == 0 || fields & JERS_RET_COMMENT))
+		addStringField(r, COMMENT, j->comment);	
+
+	if (j->stdout && (fields == 0 || fields & JERS_RET_STDOUT))
+		addStringField(r, STDOUT, j->stdout);
+
+	if (j->stderr && (fields == 0 || fields & JERS_RET_STDERR))
+		addStringField(r, STDERR, j->stderr);	
+
+	if (j->defer_time && (fields == 0 || fields & JERS_RET_DEFERTIME))
+		addIntField(r, DEFERTIME, j->defer_time);
+
+	if (j->start_time && (fields == 0 || fields & JERS_RET_STARTTIME))
+		addIntField(r, STARTTIME, j->start_time);
+
+	if (j->finish_time && (fields == 0 || fields & JERS_RET_FINISHTIME))
+		addIntField(r, FINISHTIME, j->finish_time);
+
+	if (j->tag_count && (fields == 0 || fields & JERS_RET_TAGS))
+		addStringArrayField(r, TAGS, j->tag_count, j->tags);
+
+	if (j->shell && (fields == 0 || fields & JERS_RET_SHELL))
+		addStringField(r, SHELL, j->shell);	
+
+	if (j->pre_cmd && (fields == 0 || fields & JERS_RET_PRECMD))
+		addStringField(r, POSTCMD, j->pre_cmd);
+
+	if (j->post_cmd && (fields == 0 || fields & JERS_RET_POSTCMD))
+		addStringField(r, PRECMD, j->post_cmd);
+
+	if (j->res_count && (fields == 0 || fields & JERS_RET_RESOURCES)) {
 			int i;
 			char ** res_strings = convertResourceToStrings(j->res_count, j->req_resources);
 			addStringArrayField(r, RESOURCES, j->res_count, res_strings);
@@ -234,9 +257,11 @@ void serialize_jersJob(resp_t * r, struct job * j, int fields) {
 				free(res_strings[i]);
 			}
 
-			free(res_strings[i]);
-		}
+			free(res_strings);
 	}
+
+	addIntField(r, EXITCODE, j->exitcode);
+	addIntField(r, SIGNAL, j->signal);
 
 	respCloseMap(r);
 }
@@ -247,6 +272,7 @@ int command_add_job(client * c, void * args) {
 	struct queue * q = NULL;
 	int state = 0;
 	struct jobResource * resources = NULL;
+	struct user * u = NULL;
 
 	/* Validate the request first up */
 	if (s->queue == NULL) {
@@ -267,7 +293,9 @@ int command_add_job(client * c, void * args) {
 		return -1;
 	}
 
-	if (getpwuid(s->uid) == NULL) {
+	u = lookup_user(s->uid, 0);
+
+	if (u == NULL) {
 		appendError(c, "-NOUSER User not found\n");
 		return -1;
 	}
@@ -291,6 +319,7 @@ int command_add_job(client * c, void * args) {
 	j->shell = s->shell;
 	j->stdout = s->stdout;
 	j->stderr = s->stderr;
+	j->wrapper = s->wrapper;
 	j->pre_cmd = s->pre_cmd;
 	j->post_cmd = s->post_cmd;
 	j->argc = s->argc;
@@ -321,7 +350,7 @@ int command_add_job(client * c, void * args) {
 	addJob(j, state, 1);
 
 	/* Return the jobid */
-	resp_t * response = respNew();
+	resp_t * response = respNew(); 
 
 	respAddArray(response);
 	respAddSimpleString(response, "RESP");
@@ -342,18 +371,9 @@ int command_add_job(client * c, void * args) {
 
 	print_msg(JERS_LOG_DEBUG, "SUBMIT - JOBID %d created", j->jobid);
 
-	return 0;
-}
+	server.stats.total.submitted++;
 
-int matches(const char * pattern, const char * string) {
-	if (strchr(pattern, '*') || strchr(pattern, '?')) {
-		if (fnmatch(pattern, string, 0) == 0)
-			return 0;
-		else 
-			return 1;
-	} else {
-		return strcmp(string, pattern);
-	}
+	return 0;
 }
 
 int command_get_job(client *c, void * args) {
@@ -382,14 +402,17 @@ int command_get_job(client *c, void * args) {
 		count = 1;
 
 	} else {
-		/* If a queue filter has been provided, look it up first */
+		/* If a queue filter has been provided, and its not a wildcard look it up first */
 		if (s->filter_fields & JERS_FILTER_QUEUE) {
 
-			HASH_FIND_STR(server.queueTable, s->filters.queue_name, q);
+			if (strchr(s->filters.queue_name, '*') == NULL && strchr(s->filters.queue_name, '?') == NULL)
+			{
+				HASH_FIND_STR(server.queueTable, s->filters.queue_name, q);
 
-			if (q == NULL) {
-				appendError(c, "-BADQUEUE Queue not found\n");
-				return -1;
+				if (q == NULL) {
+					appendError(c, "-BADQUEUE Queue not found\n");
+					return -1;
+				}
 			}
 		}
 
@@ -416,8 +439,12 @@ int command_get_job(client *c, void * args) {
 			}
 
 			if (s->filter_fields & JERS_FILTER_QUEUE) {
-				if (j->queue != q)
+				if (q && j->queue != q) {
 					continue;
+				} else {
+					if (matches(s->filters.queue_name, j->queue->name) != 0)
+						continue;
+				}
 			}
 
 			if (s->filter_fields & JERS_FILTER_UID) {
@@ -426,7 +453,7 @@ int command_get_job(client *c, void * args) {
 			}
 
 			if (s->filter_fields & JERS_FILTER_JOBNAME) {
-				if (strcmp(j->jobname, s->filters.job_name) != 0)
+				if (matches(s->filters.job_name, j->jobname) != 0)
 					continue;
 			}
 
@@ -517,9 +544,9 @@ int command_mod_job(client *c, void *args) {
 		free(mj->queue);
 	}
 
-	if (mj->job_name) {
+	if (mj->name) {
 		free(j->jobname);
-		j->jobname = mj->job_name;
+		j->jobname = mj->name;
 		dirty = 1;
 	}
 
@@ -531,21 +558,18 @@ int command_mod_job(client *c, void *args) {
 	if (mj->priority != -1) {
 		j->priority = mj->priority;
 
-		server.candidate_recalc = 1;
 		dirty = 1;
 	}
 
 	if (mj->defer_time != -1) {
 		j->defer_time = mj->defer_time;
 
-		server.candidate_recalc = 1;
 		dirty = 1;
 	}
 
 	if (mj->hold != -1) {
 		hold = mj->hold == 0 ? 0 : 1;
 
-		server.candidate_recalc = 1;
 		dirty = 1;
 	}
 
@@ -589,7 +613,6 @@ int command_mod_job(client *c, void *args) {
 		j->req_resources = resources;
 		j->res_count = mj->res_count;
 
-		server.candidate_recalc = 1;
 		dirty = 1;
 	}
 
@@ -600,8 +623,7 @@ int command_mod_job(client *c, void *args) {
 		j->start_time = 0;
 		j->finish_time = 0;
 
-		j->dirty = 1;
-		server.candidate_recalc = 1;
+		dirty = 1;
 	}
 
 	if (j->defer_time)
@@ -638,7 +660,7 @@ int command_del_job(client * c, void * args) {
 	}
 
 	j->internal_state |= JERS_JOB_FLAG_DELETED;
-	changeJobState(j, 0, 1);
+	changeJobState(j, 0, 0);
 
 	r = respNew();
 	respAddSimpleString(r, "0");

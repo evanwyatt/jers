@@ -26,6 +26,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <unistd.h>
@@ -42,7 +43,8 @@
 #include <sys/socket.h>
 #include <sys/epoll.h>
 #include <sys/un.h>
-#include <pwd.h>
+#include <grp.h>
+#include <sys/prctl.h>
 
 #include "jers.h"
 #include "common.h"
@@ -54,13 +56,12 @@
 #define INITIAL_SIZE 0x1000
 #define REQUESTS_THRESHOLD 0x010000
 
-#define JERS_DEFAULT_SHELL "/bin/bash"
-
 int shutdownRequested = 0;
 int loggingMode = JERS_LOG_DEBUG;
 
 struct jobCompletion {
 	int exitcode;
+	time_t finish_time;
 	struct rusage rusage;
 };
 
@@ -70,8 +71,7 @@ struct jobCompletion {
 struct runningJob {
 	pid_t pid;
 	jobid_t jobID;
-	time_t startTime;
-	time_t endTime;
+	time_t start_time;
 	int socket;
 	struct jobCompletion job_completion;
 
@@ -90,6 +90,7 @@ struct agent {
 	int event_fd;
 
 	struct runningJob * jobs;
+	int64_t running_jobs;
 };
 
 struct jersJobSpawn {
@@ -98,6 +99,8 @@ struct jersJobSpawn {
 	char * name;
 	char * queue;
 	char * shell;
+
+	char * wrapper;
 	char * pre_command;
 	char * post_command;
 
@@ -112,6 +115,8 @@ struct jersJobSpawn {
 
 	char * stdout;
 	char * stderr;
+
+	struct user * u;
 };
 
 struct agent agent;
@@ -225,7 +230,7 @@ char * createTempScript(struct jersJobSpawn * j) {
 		return NULL;
 	}
 
-	dprintf(fd, "#!%s\nexport JERS_JOBID=%d\nexport JERS_QUEUE='%s'\nexport JERS_JOBNAME='%s'\n", j->shell, j->jobid, j->queue, j->name);
+	dprintf(fd, "#!%s\n", j->shell);
 
 	if (j->pre_command)
 		dprintf(fd, "%s\n", j->pre_command);
@@ -259,31 +264,42 @@ void jersRunJob(struct jersJobSpawn * j, int socket) {
 	char * tempScript = NULL;
 	int stdout_fd, stderr_fd;
 	struct timespec start, end, elapsed;
-	struct passwd * pw = NULL;
+	int i;
 
-	/* Generate the temporary script we are going to execute */
-
-	if ((tempScript = createTempScript(j)) == NULL) {
-		_exit(1);
+	/* Generate the temporary script we are going to execute, if no wrapper was specified. */
+	if (j->wrapper == NULL) {
+		if ((tempScript = createTempScript(j)) == NULL) {
+			_exit(1);
+		}
 	}
 
 	/* Drop our privs now, to prevent us from overwriting log files
 	 * we shouldn't have access to. Also double check we aren't running a job as root */
 
-	if (j->uid == 0) {
+	if (j->u->uid == 0) {
 		fprintf(stderr, "Jobs running as root are NOT permitted.\n");
 		_exit(1);
 	}
 
-	pw = getpwuid(j->uid);
-
-	if (pw == NULL) {
-		fprintf(stderr, "Failed to get details of uid %d: %s\n", j->uid, strerror(errno));
+	if (setgroups(j->u->group_count, j->u->group_list) != 0) {
+		fprintf(stderr, "Failed to initalise groups for job %d: %s\n", j->jobid, strerror(errno));
 		_exit(1);
 	}
 
-	setuid(j->uid);
-	setgid(j->uid);
+	if (setgid(j->u->gid) != 0) {
+		perror("setgid");
+		_exit(1);
+	}
+
+	if (setuid(j->u->uid) != 0) {
+		perror("setuid");
+		_exit(1);
+	}
+
+	if (getuid() == 0) {
+		fprintf(stderr, "Job STILL running as root after dropping privs\n");
+		_exit(1);
+	}
 
 	/* Redirect stdout/stderr before we spawn,
 	 * so we can write a summary at the end of the job */
@@ -325,13 +341,18 @@ void jersRunJob(struct jersJobSpawn * j, int socket) {
 	}
 
 	/* Start off in the users home directory */
-
-	if (chdir(pw->pw_dir) != 0) {
-		fprintf(stderr, "Failed to change directory to %s: %s\n", pw->pw_dir, strerror(errno));
+	if (chdir(j->u->home_dir) != 0) {
+		fprintf(stderr, "Failed to change directory to %s: %s\n", j->u->home_dir, strerror(errno));
 		_exit(1);
 	}
 
 	clock_gettime(CLOCK_REALTIME_COARSE, &start);
+
+	char new_proc_name[16];
+	snprintf(new_proc_name, sizeof(new_proc_name), "jers_%d", j->jobid);
+
+	if (prctl(PR_SET_NAME, new_proc_name, NULL, NULL, NULL) != 0)
+		fprintf(stderr, "Failed to set process name for new job %d: %s\n", j->jobid, strerror(errno));
 
 	/* Fork & exec the job*/
 	jobPid = fork();
@@ -347,30 +368,44 @@ void jersRunJob(struct jersJobSpawn * j, int socket) {
 		if (j->nice)
 			nice(j->nice);
 
-		/* Environment */
-		if (j->env_count) {
-			int i;
-			for(i = 0; i < j->env_count; i++) {
-				char * ptr = strchr(j->envs[i], '=');
-				if (ptr) {
-					*ptr = 0;
-					setenv(j->envs[i], ptr + 1, 1);
-				} else {
-					unsetenv(j->envs[i]);
-				}
-			}
+		/* Add our variables into the environment, along with
+		 * any the user has requested.
+		 * - We can modify the cached version directly, as we
+		 *   are in a forked child.  */
+
+		/* Resize if needed */
+		int to_add = 6 + j->env_count;
+
+		if (to_add >= j->u->env_size - j->u->env_count) {
+			j->u->users_env = realloc(j->u->users_env, sizeof(char *) * (j->u->env_count + to_add + 1));
 		}
 
-		/* Add our variables */
+		/* Add the users variables first */
+		for (i = 0; i < j->env_count; i++) {
+			j->u->users_env[j->u->env_count++] = j->envs[i];
+		}
 
-		char temp[64];
-		sprintf(temp, "%d", j->jobid);
-		setenv("JERS_JOBID", temp, 1);
-		setenv("JERS_QUEUE", j->queue, 1);
-		setenv("JERS_JOBNAME", j->name, 1);
+		/* Now our generic job ones */
+		int len;
+		len = asprintf(&j->u->users_env[j->u->env_count],"JERS_JOBID=%d ", j->jobid);
+		j->u->users_env[j->u->env_count++][len-1] = '\0';
+
+		len = asprintf(&j->u->users_env[j->u->env_count],"JERS_QUEUE=%s ", j->queue);
+		j->u->users_env[j->u->env_count++][len-1] = '\0';
+
+		len = asprintf(&j->u->users_env[j->u->env_count],"JERS_JOBNAME=%s ", j->name);
+		j->u->users_env[j->u->env_count++][len-1] = '\0';
+
+		len = asprintf(&j->u->users_env[j->u->env_count],"JERS_STDOUT=%s ", j->stdout ? j->stdout : "/dev/null");
+		j->u->users_env[j->u->env_count++][len-1] = '\0';
+
+		len = asprintf(&j->u->users_env[j->u->env_count],"JERS_STDERR=%s ", j->stderr ? j->stderr : j->stdout ? j->stdout : "/dev/null");
+		j->u->users_env[j->u->env_count++][len-1] = '\0';
+
+		j->u->users_env[j->u->env_count] = NULL;
 
 		if (!j->shell) {
-			j->shell = JERS_DEFAULT_SHELL;
+			j->shell = j->u->shell;
 		}
 
 		dup2(stdin_fd, STDIN_FILENO);
@@ -381,13 +416,38 @@ void jersRunJob(struct jersJobSpawn * j, int socket) {
 		close(stderr_fd);
 
 		int k = 0;
-		char * argv[3];
+		char * argv[j->argc + 3];
 
 		argv[k++] = j->shell;
-		argv[k++] = tempScript;
+
+		if (j->wrapper) {
+			int i;
+			argv[k++] = j->wrapper;
+
+			for (i = 0; i < j->argc; i++)
+				argv[k++] = j->argv[i];
+		}
+		else {
+			argv[k++] = tempScript;
+		}
+
 		argv[k++] = NULL;
 
-		execv(argv[0], argv);
+		printf("======= TEMP =======\n");
+		int i;
+		for (i = 0; i < j->argc; i++)
+			printf("ARGV[%d] = %s\n", i, j->argv[i]);
+
+		printf("===== ENV VARS =======\n");
+		i = 0;
+		while(j->u->users_env && j->u->users_env[i]) {
+			printf("[%d]=%s\n",i, j->u->users_env[i]);
+			i++;
+		}
+
+		printf("===============================\n");
+
+		execvpe(argv[0], argv, j->u->users_env);
 		perror("execv failed for child");
 		/* Will only get here if something goes horribly wrong with execv().*/
 		_exit(1);
@@ -420,16 +480,19 @@ void jersRunJob(struct jersJobSpawn * j, int socket) {
 	user_cpu.tv_nsec = job_completion.rusage.ru_utime.tv_usec * 1000;
 	sys_cpu.tv_sec = job_completion.rusage.ru_stime.tv_sec;
 	sys_cpu.tv_nsec = job_completion.rusage.ru_stime.tv_usec * 1000;
-	
+
+	job_completion.finish_time = end.tv_sec;	
 
 	/* Write a summary to the log file and flush it */
-	dprintf(stdout_fd, "========= Job Summary =========\n");
+	dprintf(stdout_fd, "\n========= Job Summary =========\n");
 	dprintf(stdout_fd, " Elapsed Time : %s\n", print_time(&elapsed, 1));
 	dprintf(stdout_fd, " Start time   : %s\n", print_time(&start, 0));
 	dprintf(stdout_fd, " End time     : %s\n", print_time(&end, 0));
 	dprintf(stdout_fd, " User CPU     : %s\n", print_time(&user_cpu, 1));
 	dprintf(stdout_fd, " Sys CPU      : %s\n", print_time(&sys_cpu, 1));
 	dprintf(stdout_fd, " Max RSS      : %ldKB\n", job_completion.rusage.ru_maxrss);
+	dprintf(stdout_fd, " UID          : %d (%s)\n", j->u->uid, j->u->username);
+	dprintf(stdout_fd, " Job ID       : %d\n", j->jobid);
 	dprintf(stdout_fd, " Exit Code    : %d\n", rc);
 
 	if (sig)
@@ -437,7 +500,7 @@ void jersRunJob(struct jersJobSpawn * j, int socket) {
 
 	fdatasync(stdout_fd);
 	close(stdout_fd);
-	
+
 	if (stderr_fd != stdout_fd)
 		close(stderr_fd);
 
@@ -457,7 +520,10 @@ void jersRunJob(struct jersJobSpawn * j, int socket) {
 
 
 
-void removeJob (struct runningJob * j) {
+struct runningJob * removeJob (struct runningJob * j) {
+	struct runningJob * next = NULL;
+
+	next = j->next;
 
 	if (j->prev)
 		j->prev->next = j->next;
@@ -468,11 +534,14 @@ void removeJob (struct runningJob * j) {
 	if (agent.jobs == j)
 		agent.jobs = j->next;
 
+	agent.running_jobs--;
+
+	return next;
 }
 
 struct runningJob * addJob (jobid_t jobid, pid_t pid, int socket) {
 	struct runningJob * j = calloc(sizeof(struct runningJob), 1);
-	j->startTime = time(NULL);
+	j->start_time = time(NULL);
 	j->pid = pid;
 	j->jobID = jobid;
 	j->socket = socket;
@@ -484,6 +553,8 @@ struct runningJob * addJob (jobid_t jobid, pid_t pid, int socket) {
 
 	agent.jobs = j;
 
+	agent.running_jobs++;
+	printf("Have %ld jobs in memory\n", agent.running_jobs);
 	return j;
 }
 
@@ -523,6 +594,7 @@ int send_start(struct runningJob * j) {
 	respAddMap(r);
 	addIntField(r, JOBID, j->jobID);
 	addIntField(r, JOBPID, j->pid);
+	addIntField(r, STARTTIME, j->start_time);
 	respCloseMap(r);
 	respCloseArray(r);
 
@@ -532,18 +604,27 @@ int send_start(struct runningJob * j) {
 }
 
 int send_completion(struct runningJob * j) {
-	resp_t * r = respNew();
+	resp_t * r = NULL;
+
+	/* Only send the completion if we are connected to the main daemon process */
+	if (agent.daemon_fd == -1) {
+		j->pid = -1;
+		return 0;
+	}
 
 	print_msg(JERS_LOG_INFO, "Job complete: JOBID:%d PID:%d RC:%d\n", j->jobID, j->pid, j->job_completion.exitcode);
 
+	r = respNew();
 	respAddArray(r);
 	respAddSimpleString(r, "JOB_COMPLETED");
 	respAddInt(r, 1);
 	respAddMap(r);
 	addIntField(r, JOBID, j->jobID);
 	addIntField(r, EXITCODE, j->job_completion.exitcode);
+	addIntField(r, FINISHTIME, j->job_completion.finish_time);
 
 	/* Usage info */
+	//TODO:
 	//respAddInt(r, j->rusage.ru_utime.tv_sec);
 	//respAddInt(r, j->rusage.ru_utime.tv_usec);
 	//respAddInt(r, j->rusage.ru_stime.tv_sec);
@@ -625,16 +706,19 @@ void handle_terminations(void) {
 }
 
 struct runningJob * spawn_job(struct jersJobSpawn * j) {
-
 	/* Setup a socketpair so the child can return the usage infomation */
 	int sockpair[2];
+	int64_t start, end;
 
 	if (socketpair(AF_UNIX, SOCK_STREAM, 0, sockpair) != 0) {
 		fprintf(stderr, "Failed to create socketpair: %s\n", strerror(errno));
 		return NULL;
 	}
 
+	start = getTimeMS();
+
 	pid_t pid = fork();
+	end = getTimeMS();
 
 	if (pid == -1) {
 		fprintf(stderr, "FAILED TO FORK(): %s\n", strerror(errno));
@@ -642,10 +726,11 @@ struct runningJob * spawn_job(struct jersJobSpawn * j) {
 	} else if (pid == 0) {
 		/* Child */
 		close(sockpair[0]);
-
 		jersRunJob(j, sockpair[1]);
 		/* jersRunJob() does not return */
 	}
+
+	print_msg(JERS_LOG_DEBUG, "Fork took %ld ms", end - start);
 
 	close(sockpair[1]);
 
@@ -673,25 +758,36 @@ void start_command(msg_t * m) {
 			case POSTCMD  : j.post_command = getStringField(&item->fields[i]); break;
 			case STDOUT   : j.stdout = getStringField(&item->fields[i]); break;
 			case STDERR   : j.stderr = getStringField(&item->fields[i]); break;
+			case WRAPPER  : j.wrapper = getStringField(&item->fields[i]) ; break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", item->fields[i].name); break;
 		}
-
 	}
 
-	if ((started = spawn_job(&j)) != NULL) {
+	/* Lookup the user from our cache */
+	j.u = lookup_user(j.uid, 1);
+
+	if (j.u == NULL)
+		print_msg(JERS_LOG_WARNING, "Failed to find user for job:%d uid:%d\n", j.jobid, j.uid);
+
+	if (j.u && (started = spawn_job(&j)) != NULL) {
 		send_start(started);
 	} else {
 		// Send start failed message
 		print_msg(JERS_LOG_WARNING, "JOBID %d failed to start", j.jobid);
+		//TODO: Return an error 
 	}
 
 	free(j.name);
 	free(j.queue);
 	free(j.shell);
 	free(j.pre_command);
-	free(j.argv);
-	free(j.envs);
+	free(j.post_command);
+	free(j.stdout);
+	free(j.stderr);
+	free(j.wrapper);
+	freeStringArray(j.argc, &j.argv);
+	freeStringArray(j.env_count, &j.envs);
 
 	return;
 }
@@ -703,12 +799,23 @@ void stop_command(msg_t * m) {
 void recon_command(msg_t * m) {
 	struct runningJob * j = NULL;
 
-	/* The master daemon is requesting a list of all the jobs we have in memory */
+	/* The master daemon is requesting a list of all the jobs we have in memory
+	 * We can remove completed jobs here */
 
 	printf("=== Start Recon ===\n");
+	j = agent.jobs;
 
-	for (j = agent.jobs; j != NULL; j = j->next) {
+	while (j) {
 		printf("JobID: %d PID:%d ExitCode: %d\n", j->jobID, j->pid, j->job_completion.exitcode);
+
+		if (j->pid == -1) {
+			struct runningJob * next = removeJob(j);
+			free(j);
+			j = next;
+		}
+		else {
+			j = j->next;
+		}
 	}
 
 	printf("=== End Recon ===\n");
@@ -732,9 +839,13 @@ void process_message(msg_t * m) {
 		print_msg(JERS_LOG_WARNING, "Got an unexpected command message '%s'", m->command);
 	}
 
-	free_message(m, &agent.requests);
-}
+	free_message(m, NULL);
 
+	if (buffRemove(&agent.requests, m->reader.pos, 0x10000)) {
+			m->reader.pos = 0;
+			respReadUpdate(&m->reader, agent.requests.data, agent.requests.used);
+	}
+}
 
 /* Loop through processing messages. */
 void process_messages(void) {
@@ -745,7 +856,7 @@ void process_messages(void) {
 
 int connectjers(void) {
 	struct sockaddr_un addr;
-	int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_UNIX;
@@ -777,26 +888,28 @@ int main (int argc, char * argv[]) {
 	int i;
 
 	/* Connect to the main daemon */
-	print_msg(JERS_LOG_INFO, "Starting JERS_AGENT");
+	print_msg(JERS_LOG_INFO, "Starting JERS_AGENTD");
+
+	if (getuid() != 0)
+		error_die("JERS_AGENTD is required to be run as root");
 
 	memset(&agent, 0, sizeof(struct agent));
 
 	agent.daemon_fd = -1;
 
 	/* Setup epoll on the socket */
-	agent.event_fd = epoll_create(MAX_EVENTS);
+	agent.event_fd = epoll_create1(EPOLL_CLOEXEC);
 
 	struct epoll_event * events = malloc(sizeof(struct epoll_event) * MAX_EVENTS);
 
 	/* Buffer to store our requests */
-	buffNew(&agent.requests, 0);
+	buffNew(&agent.requests, 0x10000);
 
 	/* Buffer to store our responses */
 	buffNew(&agent.responses, 0);
 	agent.responses_sent = 0;
 
 	while(1) {
-
 		if (shutdownRequested)
 			break;
 
@@ -812,9 +925,13 @@ int main (int argc, char * argv[]) {
 			if (e->events & EPOLLIN) {
 				/* Message/s from the main daemon.
 				 * We simply keep appending to our request buffer here */
-				buffResize(&agent.requests, 0);
+
+				buffResize(&agent.requests, 0x10000);
+
+				print_msg(JERS_LOG_DEBUG, "Trying to recv %d bytes\n", agent.requests.size - agent.requests.used);
 
 				int len = recv(agent.daemon_fd, agent.requests.data + agent.requests.used, agent.requests.size - agent.requests.used, 0);
+				print_msg(JERS_LOG_DEBUG, "Got %d bytes\n", len);
 
 				if (len <= 0) {
 					/* lost connection to the main daemon. */
@@ -833,12 +950,17 @@ int main (int argc, char * argv[]) {
 				} else {
 					agent.requests.used += len;
 				}
-			} else {
+			}
+
+			if (e->events & EPOLLOUT) {
 				/* We can write to the main daemon */
 				if (agent.responses.used - agent.responses_sent <= 0)
 					continue;
 
+				print_msg(JERS_LOG_DEBUG, "Trying to send %d bytes\n", agent.responses.used - agent.responses_sent);
+
 				int len = send(agent.daemon_fd, agent.responses.data + agent.responses_sent, agent.responses.used - agent.responses_sent, 0);
+				print_msg(JERS_LOG_DEBUG, "Sent %d bytes\n", len);
 
 				if (len <= 0) {
 					/* lost connection to the main daemon. */
@@ -863,9 +985,10 @@ int main (int argc, char * argv[]) {
 					ee.events = EPOLLIN;
 					ee.data.ptr = NULL;
 					if (epoll_ctl(agent.event_fd, EPOLL_CTL_MOD, agent.daemon_fd, &ee)) {
-                                                print_msg(JERS_LOG_WARNING, "Failed to clear EPOLLOUT from daemon socket");
-                                        }
+                        print_msg(JERS_LOG_WARNING, "Failed to clear EPOLLOUT from daemon socket");
+                    }
 
+					agent.responses_sent = agent.responses.used = 0;
 				}
 
 			}

@@ -34,6 +34,9 @@
 #include <sys/epoll.h>
 #include <sys/un.h>
 
+typedef struct client client;
+typedef struct agent agent;
+
 enum connectionTypes {
 	CLIENT_CONN = 1,
 	AGENT_CONN,
@@ -54,5 +57,8 @@ int setReadable(struct connectionType * connection);
 int setWritable(struct connectionType * connection);
 void handleReadable(struct epoll_event * e);
 void handleWriteable(struct epoll_event * e);
+
+void handleClientDisconnect(client * c);
+void handleAgentDisconnect(agent * a);
 
 #endif

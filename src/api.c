@@ -109,6 +109,7 @@ void jersFinish(void) {
 	close(fd);
 	buffFree(&response);
 	initalised = 0;
+	fd = -1;
 }
 
 /* Establish a connection to the main daemon */
@@ -143,7 +144,7 @@ static int sendRequest(char * request, size_t length) {
 	size_t total_sent = 0;
 
 	while (total_sent < length) {
-		ssize_t sent = send(fd, request + total_sent, length - total_sent, 0);
+		ssize_t sent = send(fd, request + total_sent, length - total_sent, MSG_NOSIGNAL);
 
 		if (sent == -1 && errno != EINTR) {
 			fprintf(stderr, "send to jers daemon failed: %s\n", strerror(errno));
@@ -238,6 +239,48 @@ void jersFreeJobInfo (jersJobInfo * info) {
 	free(info->jobs);
 }
 
+int deserialize_jersQueue(msg_item * item, jersQueue *q) {
+	int i;
+
+	for (i = 0; i < item->field_count; i++) {
+		switch(item->fields[i].number) {
+			case QUEUENAME : q->name = getStringField(&item->fields[i]); break;
+			case DESC      : q->desc = getStringField(&item->fields[i]); break;
+			case NODE      : q->node = getStringField(&item->fields[i]); break;
+			case JOBLIMIT  : q->job_limit = getNumberField(&item->fields[i]); break;
+			case STATE     : q->state = getNumberField(&item->fields[i]); break;
+			case PRIORITY  : q->priority = getNumberField(&item->fields[i]); break;
+
+			case STATSRUNNING   : q->stats.running = getNumberField(&item->fields[i]); break;
+			case STATSPENDING   : q->stats.pending = getNumberField(&item->fields[i]); break;
+			case STATSHOLDING   : q->stats.holding = getNumberField(&item->fields[i]); break;
+			case STATSDEFERRED  : q->stats.deferred = getNumberField(&item->fields[i]); break;
+			case STATSCOMPLETED : q->stats.completed = getNumberField(&item->fields[i]); break;
+			case STATSEXITED    : q->stats.exited = getNumberField(&item->fields[i]); break;
+
+			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",item->fields[i].name); break;
+		}
+	}
+
+	return 0;
+}
+
+int deserialize_jersResource(msg_item * item, jersResource *r) {
+	int i;
+
+	for (i = 0; i < item->field_count; i++) {
+		switch(item->fields[i].number) {
+			case RESNAME   : r->name = getStringField(&item->fields[i]); break;
+			case RESCOUNT  : r->count = getNumberField(&item->fields[i]); break;
+			case RESINUSE  : r->inuse = getNumberField(&item->fields[i]); break;
+
+			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",item->fields[i].name); break;
+		}
+	}
+
+	return 0;
+}
+
 int deserialize_jersJob(msg_item * item, jersJob *j) {
 	int i;
 
@@ -246,6 +289,8 @@ int deserialize_jersJob(msg_item * item, jersJob *j) {
 			case JOBID     : j->jobid = getNumberField(&item->fields[i]); break;
 			case JOBNAME   : j->jobname = getStringField(&item->fields[i]); break;
 			case QUEUENAME : j->queue = getStringField(&item->fields[i]); break;
+			case EXITCODE  : j->exit_code = getNumberField(&item->fields[i]); break;
+			case SIGNAL    : j->signal = getNumberField(&item->fields[i]); break;
 			case PRIORITY  : j->priority = getNumberField(&item->fields[i]); break;
 			case STATE     : j->state = getNumberField(&item->fields[i]); break;
 			case NICE      : j->nice = getNumberField(&item->fields[i]); break;
@@ -261,6 +306,7 @@ int deserialize_jersJob(msg_item * item, jersJob *j) {
 			case STARTTIME : j->start_time = getNumberField(&item->fields[i]); break;
 			case FINISHTIME: j->finish_time = getNumberField(&item->fields[i]); break;
 			case TAGS      : j->tag_count = getStringArrayField(&item->fields[i], &j->tags); break;
+			case RESOURCES : j->res_count = getStringArrayField(&item->fields[i], &j->resources); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",item->fields[i].name); break;
 		}
@@ -331,6 +377,7 @@ int jersGetJob(jobid_t jobid, jersJobFilter * filter, jersJobInfo * job_info) {
 
 	if (msg.error) {
 		setError(JERS_INVALID, msg.error);
+		free_message(&msg, NULL);
 		return 1;
 	}
 
@@ -349,10 +396,53 @@ int jersGetJob(jobid_t jobid, jersJobFilter * filter, jersJobInfo * job_info) {
 	return 0;
 }
 
+
+int jersDelJob(jobid_t jobid) {
+	if (jersInitAPI(NULL)) {
+		setError(JERS_ERROR, NULL);
+		return 0;
+	}
+
+	/* Serialise the request */
+	resp_t * r = respNew();
+
+	respAddArray(r);
+	respAddSimpleString(r, "DEL_JOB");
+	respAddInt(r, 1);
+	respAddMap(r);
+
+	addIntField(r, JOBID, jobid);
+
+	respCloseMap(r);
+	respCloseArray(r);
+
+	size_t req_len;
+	char * request = respFinish(r, &req_len);
+
+	if (sendRequest(request, req_len)) {
+		free(request);
+		return 0;
+	}
+
+	free(request);
+
+	if(readResponse())
+		return 0;
+
+	if (msg.error) {
+		setError(JERS_INVALID, msg.error);
+		free_message(&msg, NULL);
+		return 0;
+	}
+
+	return 0;
+}
+
 void jersInitJobAdd(jersJobAdd * j) {
 	memset(j, 0, sizeof(jersJobAdd));
 	j->uid = -1;
 	j->priority = -1;
+	j->defer_time = -1;
 }
 
 jobid_t jersAddJob(jersJobAdd * j) {
@@ -422,12 +512,16 @@ jobid_t jersAddJob(jersJobAdd * j) {
 		addStringArrayField(r, ENVS, j->env_count, j->envs);
 	}
 
-	if (j->pre_cmd) {
-		addStringField(r, PRECMD, j->pre_cmd);
-	}
+	if (j->wrapper) {
+		addStringField(r, WRAPPER, j->wrapper);
+	} else {
+		if (j->pre_cmd) {
+			addStringField(r, PRECMD, j->pre_cmd);
+		}
 
-	if (j->post_cmd) {
-		addStringField(r, POSTCMD, j->post_cmd);
+		if (j->post_cmd) {
+			addStringField(r, POSTCMD, j->post_cmd);
+		}
 	}
 
 	if (j->stdout)
@@ -435,6 +529,9 @@ jobid_t jersAddJob(jersJobAdd * j) {
 
 	if (j->stderr)
 		addStringField(r, STDERR, j->stderr);
+
+	if (j->defer_time != -1)
+		addIntField(r, DEFERTIME, j->defer_time);
 
 	respCloseMap(r);
 	respCloseArray(r);
@@ -454,6 +551,7 @@ jobid_t jersAddJob(jersJobAdd * j) {
 
 	if (msg.error) {
 		setError(JERS_INVALID, msg.error);
+		free_message(&msg, NULL);
 		return 0;
 	}
 
@@ -498,11 +596,11 @@ int jersModJob(jersJobMod *j) {
 
 	addIntField(r, JOBID, j->jobid);
 
-	if (j->job_name)
-		addStringField(r, JOBNAME, j->job_name);
+	if (j->name)
+		addStringField(r, JOBNAME, j->name);
 
 	if (j->queue)
-		addStringField(r, QUEUENAME, j->job_name);
+		addStringField(r, QUEUENAME, j->queue);
 
 	if (j->defer_time != -1)
 		addIntField(r, DEFERTIME, j->defer_time);
@@ -546,6 +644,7 @@ int jersModJob(jersJobMod *j) {
 
 	if (msg.error) {
 		setError(JERS_INVALID, "Error modifying job");
+		free_message(&msg, NULL);
 		return 1;
 	}
 
@@ -570,6 +669,81 @@ void jersInitQueueAdd(jersQueueAdd *q) {
 	q->state = -1;
 	q->job_limit = -1;
 	q->priority = -1;
+}
+
+/* Note: filter is currently not used for queues */
+
+int jersGetQueue(char * name, jersQueueFilter * filter, jersQueueInfo * info) {
+	if (jersInitAPI(NULL)) {
+		setError(JERS_ERROR, NULL);
+		return 0;
+	}
+
+	info->count = 0;
+	info->queues = NULL;
+
+	resp_t * r = respNew();
+
+	respAddArray(r);
+	respAddSimpleString(r, "GET_QUEUE");
+	respAddInt(r, 1); // Version
+	respAddMap(r);
+
+	if (name)
+		addStringField(r, QUEUENAME, name);
+	else
+		addStringField(r, QUEUENAME, "*");
+
+	respCloseMap(r);
+	respCloseArray(r);
+
+	size_t req_len;
+	char * request = respFinish(r, &req_len);
+
+	if (sendRequest(request, req_len)) {
+		free(request);
+		return 1;
+	}
+
+	free(request);
+
+	if(readResponse())
+		return 1;
+
+	if (msg.error) {
+		setError(JERS_INVALID, msg.error);
+		free_message(&msg, NULL);
+		return 1;
+	}
+
+	int64_t i;
+
+	info->queues = calloc(sizeof(jersQueue) *  msg.item_count, 1);
+
+	for (i = 0; i < msg.item_count; i++) {
+		deserialize_jersQueue(&msg.items[i], &info->queues[i]);
+	}
+
+	info->count = msg.item_count;
+
+	free_message(&msg, &response);
+
+	return 0;
+}
+
+void jersFreeQueueInfo(jersQueueInfo * info) {
+	int i;
+
+	for (i = 0; i < info->count; i++) {
+		jersQueue * queue = &info->queues[i];
+
+		free(queue->name);
+		free(queue->desc);
+		free(queue->node);
+	}
+
+	free(info->queues);
+	return;
 }
 
 int jersAddQueue(jersQueueAdd *q) {
@@ -631,6 +805,7 @@ int jersAddQueue(jersQueueAdd *q) {
 
 	if (msg.error) {
 		setError(JERS_INVALID, "Error adding queue");
+		free_message(&msg, NULL);
 		return 1;
 	}
 
@@ -650,7 +825,7 @@ int jersModQueue(jersQueueMod *q) {
 		return 1;
 	}
 
-	if (q->desc == NULL && q->node == NULL && q->job_limit == -1 && q->priority == -1) {
+	if (q->desc == NULL && q->node == NULL && q->job_limit == -1 && q->priority == -1 && q->state == -1) {
 		setError(JERS_INVALID, "Nothing to update");
 		return 1;
 	}
@@ -660,7 +835,7 @@ int jersModQueue(jersQueueMod *q) {
 	resp_t * r = respNew();
 
 	respAddArray(r);
-	respAddSimpleString(r, "QUEUE_MODIFY");
+	respAddSimpleString(r, "MOD_QUEUE");
 	respAddInt(r, 1);
 	respAddMap(r);
 
@@ -677,6 +852,9 @@ int jersModQueue(jersQueueMod *q) {
 
 	if (q->priority != -1)
 		addIntField(r, PRIORITY, q->priority);
+
+	if (q->state != -1)
+		addIntField(r, STATE, q->state);
 
 	respCloseMap(r);
 	respCloseArray(r);
@@ -696,6 +874,7 @@ int jersModQueue(jersQueueMod *q) {
 
 	if (msg.error) {
 		setError(JERS_INVALID, "Error modifying queue");
+		free_message(&msg, NULL);
 		return 1;
 	}
 
@@ -743,12 +922,119 @@ int jersAddResource(char *name, int count) {
 
 	if (msg.error) {
 		setError(JERS_INVALID, "Error adding resource");
+		free_message(&msg, NULL);
 		return 1;
 	}
 
 	free_message(&msg, &response);
 
 	return 0;
+}
+int jersGetResource(char * name, jersResourceFilter *filter, jersResourceInfo *info) {
+	if (jersInitAPI(NULL)) {
+		setError(JERS_ERROR, NULL);
+		return 0;
+	}
+
+	info->count = 0;
+	info->resources = NULL;
+
+	resp_t * r = respNew();
+
+	respAddArray(r);
+	respAddSimpleString(r, "GET_RESOURCE");
+	respAddInt(r, 1); // Version
+	respAddMap(r);
+
+	if (name)
+		addStringField(r, RESNAME, name);
+	else
+		addStringField(r, RESNAME, "*");
+
+	respCloseMap(r);
+	respCloseArray(r);
+
+	size_t req_len;
+	char * request = respFinish(r, &req_len);
+
+	if (sendRequest(request, req_len)) {
+		free(request);
+		return 1;
+	}
+
+	free(request);
+
+	if(readResponse())
+		return 1;
+
+	if (msg.error) {
+		setError(JERS_INVALID, msg.error);
+		free_message(&msg, NULL);
+		return 1;
+	}
+
+	int64_t i;
+
+	info->resources = calloc(sizeof(jersResource) *  msg.item_count, 1);
+
+	for (i = 0; i < msg.item_count; i++) {
+		deserialize_jersResource(&msg.items[i], &info->resources[i]);
+	}
+
+	info->count = msg.item_count;
+
+	free_message(&msg, &response);
+
+	return 0;
+}
+
+int jersModResource(char *name, int new_count) {
+	return 0;
+}
+
+int jersDelResource(char *name) {
+	if (jersInitAPI(NULL)) {
+		setError(JERS_ERROR, NULL);
+		return 0;
+	}
+
+	/* Serialise the request */
+	resp_t * r = respNew();
+
+	respAddArray(r);
+	respAddSimpleString(r, "DEL_RESOURCE");
+	respAddInt(r, 1);
+	respAddMap(r);
+
+	addStringField(r, RESNAME, name);
+
+	respCloseMap(r);
+	respCloseArray(r);
+
+	size_t req_len;
+	char * request = respFinish(r, &req_len);
+
+	if (sendRequest(request, req_len)) {
+		free(request);
+		return 0;
+	}
+
+	free(request);
+
+	if(readResponse())
+		return 0;
+
+	if (msg.error) {
+		setError(JERS_INVALID, msg.error);
+		free_message(&msg, NULL);
+		return 1;
+	}
+
+	return 0;
+}
+
+void jersFreeResourceInfo(jersResourceInfo *info) {
+	return;
 }
 
 int jersGetStats(jersStats * s) {
@@ -784,7 +1070,8 @@ int jersGetStats(jersStats * s) {
 		return 1;
 
 	if (msg.error) {
-		setError(JERS_INVALID, "Error adding resource");
+		setError(JERS_INVALID, "Error getting stats");
+		free_message(&msg, NULL);
 		return 1;
 	}
 
@@ -792,12 +1079,17 @@ int jersGetStats(jersStats * s) {
 
 	for (i = 0; i < item->field_count; i++) {
 		switch(item->fields[i].number) {
-			case STATSRUNNING   : s->server_stats.running = getNumberField(&item->fields[i]); break;
-			case STATSPENDING   : s->server_stats.pending = getNumberField(&item->fields[i]); break;
-			case STATSDEFERRED  : s->server_stats.deferred = getNumberField(&item->fields[i]); break;
-			case STATSHOLDING   : s->server_stats.holding = getNumberField(&item->fields[i]); break;
-			case STATSCOMPLETED : s->server_stats.completed = getNumberField(&item->fields[i]); break;
-			case STATSEXITED    : s->server_stats.exited = getNumberField(&item->fields[i]); break;
+			case STATSRUNNING   : s->current.running = getNumberField(&item->fields[i]); break;
+			case STATSPENDING   : s->current.pending = getNumberField(&item->fields[i]); break;
+			case STATSDEFERRED  : s->current.deferred = getNumberField(&item->fields[i]); break;
+			case STATSHOLDING   : s->current.holding = getNumberField(&item->fields[i]); break;
+			case STATSCOMPLETED : s->current.completed = getNumberField(&item->fields[i]); break;
+			case STATSEXITED    : s->current.exited = getNumberField(&item->fields[i]); break;
+
+			case STATSTOTALSUBMITTED : s->total.submitted = getNumberField(&item->fields[i]); break;
+			case STATSTOTALSTARTED   : s->total.started = getNumberField(&item->fields[i]); break;
+			case STATSTOTALCOMPLETED : s->total.completed = getNumberField(&item->fields[i]); break;
+			case STATSTOTALEXITED    : s->total.exited = getNumberField(&item->fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",item->fields[i].name); break;
 		}
