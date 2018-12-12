@@ -40,6 +40,8 @@
 #include <fields.h>
 #include <buffer.h>
 
+#define DEFAULT_CLIENT_TIMEOUT 60 // seconds
+
 char * socket_path = NULL;
 int fd = -1;
 msg_t msg;
@@ -122,6 +124,14 @@ static int jersConnect(void) {
 
 	if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
 		fprintf(stderr, "Failed to connect to jers daemon: %s\n", strerror(errno));
+		return 1;
+	}
+
+	/* Set a recv timeout on the socket */
+	struct timeval tv = {DEFAULT_CLIENT_TIMEOUT, 0};
+
+	if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) == -1) {
+		fprintf(stderr, "Failed to set rcvtimeo on socket\n");
 		return 1;
 	}
 
