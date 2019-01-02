@@ -188,6 +188,23 @@ void * deserialize_del_job(msg_t * t) {
 	return jd;
 }
 
+void * deserialize_sig_job(msg_t * t) {
+	jersJobSig * js = calloc(sizeof(jersJobSig), 1);
+	msg_item * item = &t->items[0];
+	int i;
+
+	for (i = 0; i < item->field_count; i++) {
+		switch(item->fields[i].number) {
+			case JOBID    : js->jobid = getNumberField(&item->fields[i]); break;
+			case SIGNAL   : js->signum = getNumberField(&item->fields[i]); break;
+
+			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",t->items[0].fields[i].name); break;
+		}
+	}
+
+	return js;
+}
+
 void serialize_jersJob(resp_t * r, struct job * j, int fields) {
 	respAddMap(r);
 
@@ -671,3 +688,52 @@ int command_del_job(client * c, void * args) {
 	free(reply);
 	return 0;
 }
+
+int command_sig_job(client * c, void * args) {
+	jersJobSig * js = args;
+	struct job * j = NULL;
+	resp_t * r = NULL;
+
+	HASH_FIND_INT(server.jobTable, &js->jobid, j);
+
+	if (!j || j->internal_state &JERS_JOB_FLAG_DELETED) {
+		appendError(c, "-NOJOB Job does not exist\n");
+		return 0;
+	}
+
+	r = respNew();
+
+	/* signo == 0 wants to just test the job is running */
+	if (js->signum == 0) {
+		respAddSimpleString(r, j->pid == 0 ? "1" : "0");
+	} else {
+		/* Send the requested signal to the job (via the agent) */
+		resp_t * sig_message = respNew();
+		size_t length;
+
+		respAddArray(sig_message);
+		respAddSimpleString(sig_message, "SIG_JOB");
+		respAddInt(sig_message, 1);
+		respAddMap(sig_message);
+
+		addIntField(sig_message, JOBID, js->jobid);
+		addIntField(sig_message, SIGNAL, js->signum);
+
+		respCloseMap(sig_message);
+		respCloseArray(sig_message);
+
+		char * sig_cmd = respFinish(sig_message, &length);
+
+		sendAgentMessage(j->queue->agent, sig_cmd, length);
+		free(sig_cmd);
+
+		respAddSimpleString(r, "0");
+	}
+
+	size_t reply_length = 0;
+	char * reply = respFinish(r, &reply_length);
+	appendResponse(c, reply, reply_length);
+	free(reply);
+	return 0;
+}
+

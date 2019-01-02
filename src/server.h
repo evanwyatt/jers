@@ -339,4 +339,6 @@ void initEvents(void);
 
 int cleanupJobs(int max_clean);
 
+void sendAgentMessage(agent * a, char * message, int64_t length);
+
 #endif

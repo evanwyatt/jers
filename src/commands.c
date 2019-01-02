@@ -45,6 +45,7 @@ command_t commands[] = {
 	{"GET_JOB",      CMD_READ,  command_get_job,      deserialize_get_job},
 	{"MOD_JOB",      CMD_WRITE, command_mod_job,      deserialize_mod_job},
 	{"DEL_JOB",      CMD_WRITE, command_del_job,      deserialize_del_job},
+	{"SIG_JOB",      CMD_WRITE, command_sig_job,      deserialize_sig_job},
 	{"ADD_QUEUE",    CMD_WRITE, command_add_queue,    deserialize_add_queue},
 	{"GET_QUEUE",    CMD_READ,  command_get_queue,    deserialize_get_queue},
 	{"MOD_QUEUE",    CMD_WRITE, command_mod_queue,    deserialize_mod_queue},

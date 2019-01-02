@@ -70,6 +70,7 @@ struct jobCompletion {
 
 struct runningJob {
 	pid_t pid;
+	pid_t job_pid;
 	jobid_t jobID;
 	time_t start_time;
 	int socket;
@@ -356,7 +357,7 @@ void jersRunJob(struct jersJobSpawn * j, int socket) {
 	if (prctl(PR_SET_NAME, new_proc_name, NULL, NULL, NULL) != 0)
 		fprintf(stderr, "Failed to set process name for new job %d: %s\n", j->jobid, strerror(errno));
 
-	/* Fork & exec the job*/
+	/* Fork & exec the job */
 	jobPid = fork();
 
 	if (jobPid < 0) {
@@ -451,12 +452,21 @@ void jersRunJob(struct jersJobSpawn * j, int socket) {
 
 		execvpe(argv[0], argv, j->u->users_env);
 		perror("execv failed for child");
-		/* Will only get here if something goes horribly wrong with execv().*/
+		/* Will only get here if something goes horribly wrong with execvpe().*/
 		_exit(1);
 	}
 
 	struct jobCompletion job_completion = {0};
-	int rc = 0, sig = 0;
+	int rc = 0, sig = 0, status;
+
+	/* Send the PID of the job */
+	do {
+		status = write(socket, &jobPid, sizeof(jobPid));
+
+		if (status != sizeof(jobPid))
+			fprintf(stderr, "Failed to send PID of job %d to agent: (status=%d) %s\n", j->jobid, status, strerror(errno));
+	} while (status == -1 && errno == EINTR);
+
 
 	/* Wait for the job to complete */
 	while (wait4(jobPid, &job_completion.exitcode, 0, &job_completion.rusage) < 0) {
@@ -506,8 +516,6 @@ void jersRunJob(struct jersJobSpawn * j, int socket) {
 	if (stderr_fd != stdout_fd)
 		close(stderr_fd);
 
-	int status = 0;
-
 	do {
 		status = write(socket, &job_completion, sizeof(struct jobCompletion));
 		
@@ -545,6 +553,7 @@ struct runningJob * addJob (jobid_t jobid, pid_t pid, int socket) {
 	struct runningJob * j = calloc(sizeof(struct runningJob), 1);
 	j->start_time = time(NULL);
 	j->pid = pid;
+	j->job_pid = 0;
 	j->jobID = jobid;
 	j->socket = socket;
 
@@ -556,7 +565,6 @@ struct runningJob * addJob (jobid_t jobid, pid_t pid, int socket) {
 	agent.jobs = j;
 
 	agent.running_jobs++;
-	printf("Have %ld jobs in memory\n", agent.running_jobs);
 	return j;
 }
 
@@ -666,30 +674,46 @@ int send_login(void) {
 	return 0;
 }
 
-void handle_terminations(void) {
-	pid_t pid;
-	int child_status;
+/* Check for PID messages for any children we've started
+ * For any job we have a PID for, check if they have terminated */
+
+void check_children(void) {
+	struct runningJob * j = NULL;
 	int status;
+	int child_status;
+	pid_t pid;
 
+	for (j = agent.jobs; j; j = j->next) {
+		if (j->job_pid == 0) {	
+			do {
+				status = read(j->socket, &j->job_pid, sizeof(pid_t));
+			} while (status == -1 && errno == EINTR);
+
+			if (status == -1 && (errno != EAGAIN && errno != EWOULDBLOCK)) {
+				fprintf(stderr, "Failed to read pid from job %d\n", j->jobID);
+				continue;
+			}
+		}
+	}
+
+	/* Check to see if we any jobs have completed */
 	while ((pid = waitpid(-1, &child_status, WNOHANG)) > 0) {
-		struct runningJob * j = agent.jobs;
-
-		/* Find the jobid for this pid */
-		while (j && j->pid != pid) {
-			j = j->next;
+		for (j = agent.jobs; j; j = j->next) {
+			if (j->pid == pid)
+				break;
 		}
 
-		if (!j) {
+		if (j == NULL) {
 			fprintf(stderr, "Got completion for PID %d, but can't find a matching job?!\n", pid);
 			continue;
 		}
 
 		/* If a job was started correctly, the child will always return 0
-		 * Anything else indicates it failed to start. */
+		 * - Anything else indicates it failed to start correctly */
 
 		if (child_status) {
 			fprintf(stderr, "Job %d failed to start.\n", j->jobID);
-			j->job_completion.exitcode = 255;
+			j->job_completion.exitcode = 255; //TODO: Use a different exitcode for this.
 			send_completion(j);
 			continue;
 		}
@@ -702,25 +726,22 @@ void handle_terminations(void) {
 		send_completion(j);
 	}
 
-	if (pid == -1 && errno != ECHILD) {
+	if (pid == -1 && errno != ECHILD)
 		fprintf(stderr, "waitpid failed? %s\n", strerror(errno));
-	}
+
+	return;
 }
 
 struct runningJob * spawn_job(struct jersJobSpawn * j) {
 	/* Setup a socketpair so the child can return the usage infomation */
 	int sockpair[2];
-	int64_t start, end;
 
-	if (socketpair(AF_UNIX, SOCK_STREAM, 0, sockpair) != 0) {
+	if (socketpair(AF_UNIX, SOCK_STREAM|SOCK_NONBLOCK|SOCK_CLOEXEC, 0, sockpair) != 0) {
 		fprintf(stderr, "Failed to create socketpair: %s\n", strerror(errno));
 		return NULL;
 	}
 
-	start = getTimeMS();
-
 	pid_t pid = fork();
-	end = getTimeMS();
 
 	if (pid == -1) {
 		fprintf(stderr, "FAILED TO FORK(): %s\n", strerror(errno));
@@ -731,8 +752,6 @@ struct runningJob * spawn_job(struct jersJobSpawn * j) {
 		jersRunJob(j, sockpair[1]);
 		/* jersRunJob() does not return */
 	}
-
-	print_msg(JERS_LOG_DEBUG, "Fork took %ld ms", end - start);
 
 	close(sockpair[1]);
 
@@ -794,8 +813,50 @@ void start_command(msg_t * m) {
 	return;
 }
 
-void stop_command(msg_t * m) {
-	printf("Stop_command:\n");
+void signal_command(msg_t * m) {
+	jobid_t id = 0;
+	int signum = 0;
+	int i;
+	struct runningJob * j = NULL;
+
+	msg_item * item = &m->items[0];
+
+	for (i = 0; i < item->field_count; i++) {
+		switch(item->fields[i].number) {
+			case JOBID    : id = getNumberField(&item->fields[i]); break;
+			case SIGNAL   : signum = getNumberField(&item->fields[i]); break;
+
+			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", item->fields[i].name); break;
+		}
+	}
+
+	if (id == 0) {
+		print_msg(JERS_LOG_WARNING, "No job passed to signal?");
+		return;
+	}
+
+	j = agent.jobs;
+	while (j) {
+		if (j->jobID == id)
+			break;
+
+		j = j->next;
+	}
+
+	if (j == NULL) {
+		print_msg(JERS_LOG_WARNING, "Got request to signal a job that is not running? %d", id);
+		return;
+	}
+
+	if (j->job_pid == 0) {
+		fprintf(stderr, "Got request to signal job %d, but it hasn't sent us its PID yet...\n", j->jobID);
+		return;
+	}
+
+	if (kill(j->job_pid, signum) != 0)
+		print_msg(JERS_LOG_WARNING, "Failed to signal JOBID:%d with SIGNUM:%d", id, signum);
+
+	return;
 }
 
 void recon_command(msg_t * m) {
@@ -829,14 +890,11 @@ void process_message(msg_t * m) {
 	print_msg(JERS_LOG_DEBUG, "Got command '%s'", m->command);
 
 	if (strcmp(m->command, "START_JOB") == 0) {
-		/* Start a job */
 		start_command(m);
-	} else if (strcmp(m->command, "STOP_JOB") == 0) {
-		/* Stop a job */
-		stop_command(m);
+	} else if (strcmp(m->command, "SIG_JOB") == 0) {
+		signal_command(m);
 	} else if (strcmp(m->command, "RECON") == 0) {
 		recon_command(m);
-		/* The JERS Daemon is requesting a list of job statuses */
 	} else {
 		print_msg(JERS_LOG_WARNING, "Got an unexpected command message '%s'", m->command);
 	}
@@ -844,8 +902,8 @@ void process_message(msg_t * m) {
 	free_message(m, NULL);
 
 	if (buffRemove(&agent.requests, m->reader.pos, 0x10000)) {
-			m->reader.pos = 0;
-			respReadUpdate(&m->reader, agent.requests.data, agent.requests.used);
+		m->reader.pos = 0;
+		respReadUpdate(&m->reader, agent.requests.data, agent.requests.used);
 	}
 }
 
@@ -938,10 +996,7 @@ int main (int argc, char * argv[]) {
 
 				buffResize(&agent.requests, 0x10000);
 
-				print_msg(JERS_LOG_DEBUG, "Trying to recv %d bytes\n", agent.requests.size - agent.requests.used);
-
 				int len = recv(agent.daemon_fd, agent.requests.data + agent.requests.used, agent.requests.size - agent.requests.used, 0);
-				print_msg(JERS_LOG_DEBUG, "Got %d bytes\n", len);
 
 				if (len <= 0) {
 					/* lost connection to the main daemon. */
@@ -967,10 +1022,7 @@ int main (int argc, char * argv[]) {
 				if (agent.responses.used - agent.responses_sent <= 0)
 					continue;
 
-				print_msg(JERS_LOG_DEBUG, "Trying to send %d bytes\n", agent.responses.used - agent.responses_sent);
-
 				int len = send(agent.daemon_fd, agent.responses.data + agent.responses_sent, agent.responses.used - agent.responses_sent, 0);
-				print_msg(JERS_LOG_DEBUG, "Sent %d bytes\n", len);
 
 				if (len <= 0) {
 					/* lost connection to the main daemon. */
@@ -1000,13 +1052,11 @@ int main (int argc, char * argv[]) {
 
 					agent.responses_sent = agent.responses.used = 0;
 				}
-
 			}
 		}
 			
 		process_messages();
-
-		handle_terminations();
+		check_children();
 	}
 
 	print_msg(JERS_LOG_INFO, "Finished.");

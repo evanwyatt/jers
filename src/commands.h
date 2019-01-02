@@ -50,6 +50,8 @@ int command_add_job(client *, void *);
 int command_get_job(client *, void *);
 int command_mod_job(client *, void *);
 int command_del_job(client *, void *);
+int command_sig_job(client *, void *);
+
 
 int command_add_queue(client *, void *);
 int command_get_queue(client *, void *);
@@ -65,6 +67,7 @@ void* deserialize_add_job(msg_t *);
 void* deserialize_get_job(msg_t *);
 void* deserialize_mod_job(msg_t *);
 void* deserialize_del_job(msg_t *);
+void* deserialize_sig_job(msg_t *);
 void* deserialize_add_queue(msg_t *);
 void* deserialize_get_queue(msg_t *);
 void* deserialize_mod_queue(msg_t *);

@@ -34,6 +34,7 @@
 #include <sys/epoll.h>
 #include <sys/un.h>
 #include <errno.h>
+#include <signal.h>
 
 #include <jers.h>
 #include <resp.h>
@@ -651,8 +652,61 @@ int jersModJob(jersJobMod *j) {
 
 	free_message(&msg, &response);
 	return 0;
-
 }
+
+int jersSignalJob(jobid_t id, int signum) {
+	if (jersInitAPI(NULL)) {
+		setError(JERS_ERROR, NULL);
+		return 1;
+	}
+
+	if (id == 0 ) {
+		setError(JERS_INVALID, "No jobid provided");
+		return 1;
+	}
+
+	if (signum <= 0 || signum >= NSIG) {
+		setError(JERS_INVALID, "Invalid signum provided");
+		return 1;
+	}
+
+	/* Serialise the request */
+	resp_t * r = respNew();
+
+	respAddArray(r);
+	respAddSimpleString(r, "SIG_JOB");
+	respAddInt(r, 1);
+	respAddMap(r);
+
+	addIntField(r, JOBID, id);
+	addIntField(r, SIGNAL, signum);
+
+	respCloseMap(r);
+	respCloseArray(r);
+
+	size_t req_len;
+	char * request = respFinish(r, &req_len);
+
+	if (sendRequest(request, req_len)) {
+		free(request);
+		return 1;
+	}
+
+	free(request);
+
+	if(readResponse())
+		return 1;
+
+	if (msg.error) {
+		setError(JERS_INVALID, "Error signaling job");
+		free_message(&msg, NULL);
+		return 1;
+	}
+
+	free_message(&msg, &response);
+	return 0;
+}
+
 
 void jersInitQueueMod(jersQueueMod *q) {
 	q->name = NULL;

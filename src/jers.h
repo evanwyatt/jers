@@ -181,6 +181,11 @@ typedef struct jersJobDel {
 	jobid_t jobid;
 } jersJobDel;
 
+typedef struct {
+	jobid_t jobid;
+	int signum;
+} jersJobSig;
+
 typedef struct jersJob {
 	jobid_t jobid;
 	char * jobname;
@@ -359,6 +364,7 @@ int jersModJob(jersJobMod *j);
 int jersGetJob(jobid_t id, jersJobFilter *filter, jersJobInfo *info);
 int jersDelJob(jobid_t id);
 int jersRestartJob(jobid_t id);
+int jersSignalJob(jobid_t id, int signo);
 void jersFreeJobInfo (jersJobInfo *info);
 
 int jersAddQueue(jersQueueAdd *q);
