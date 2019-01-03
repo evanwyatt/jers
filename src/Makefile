@@ -3,8 +3,8 @@ CFLAGS= -g -Wall -fPIC
 
 INC=-I./ -I ../deps/
 
-ifeq ($(PREFIX),)
-	PREFIX := /usr/local
+ifeq ($(DESTDIR),)
+	DESTDIR := /usr/local
 endif
 
 JERSD_OBJS=jersd.o error.o config.o event.o resp.o commands.o state.o jobs.o auth.o comms.o sched.o common.o queue.o buffer.o queue.o fields.o resource.o command_job.o command_queue.o command_resource.o
@@ -32,11 +32,11 @@ jers_dump_env: $(JERS_DUMP_OBJS)
 
 install: libjers.so jersd jers_agentd jers
 
-	install -d $(PREFIX)/lib64/jers
-	install -m 644 libjers.so $(PREFIX)/lib64/jers
+	install -d $(DESTDIR)/lib/jers
+	install -m 644 libjers.so $(DESTDIR)/lib/jers
 
-	install -m 644 jers.h $(PREFIX)/include/
-	install -m 755 jersd jers_agentd jers jers_dump_env $(PREFIX)/bin
+	install -m 644 jers.h $(DESTDIR)/include/
+	install -m 755 jersd jers_agentd jers jers_dump_env $(DESTDIR)/bin
 	
 clean:
 	rm -rf jersd jers jers_agentd *.o *.so
