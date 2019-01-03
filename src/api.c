@@ -122,6 +122,7 @@ static int jersConnect(void) {
 	addr.sun_family = AF_UNIX;
 
 	strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path));
+	addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
 
 	if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
 		fprintf(stderr, "Failed to connect to jers daemon: %s\n", strerror(errno));

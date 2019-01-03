@@ -264,10 +264,13 @@ static int load_users_env(char * username, struct user * u) {
 		}
 	}
 
+	e[bytes] = '\0';
+
 	waitpid(pid, &status, 0);
 
 	if ((WIFEXITED(status) && WEXITSTATUS(status)) || WIFSIGNALED(status)) {
 		fprintf(stderr, "Failed to get user environment: %s\n", username);
+		free(e);
 		return 1;
 	}
 

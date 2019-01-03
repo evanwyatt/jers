@@ -245,6 +245,8 @@ char * createTempScript(struct jersJobSpawn * j) {
 
 	if (fchown(fd, j->uid, j->uid) != 0) {
 		fprintf(stderr, "Failed to change owner of temporary script: %s\n", strerror(errno));
+		close(fd);
+		unlink(script);
 		return NULL;
 	}
 
@@ -858,12 +860,20 @@ int connectjers(void) {
 	struct sockaddr_un addr;
 	int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
 
+	if (fd < 0) {
+		print_msg(JERS_LOG_WARNING, "Failed to connect to JERS daemon (socket failed): %s", strerror(errno));
+		close(fd);
+		sleep(5);
+		return 1;
+	}
+
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_UNIX;
 	strncpy(addr.sun_path, "/var/run/jers/agent.socket", sizeof(addr.sun_path)-1); //TODO: remove hardcoded path
 
 	if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
 		print_msg(JERS_LOG_WARNING, "Failed to connect to JERS daemon: %s", strerror(errno));
+		close(fd);
 		sleep(5);
 		return 1;
 	}
