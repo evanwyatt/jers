@@ -29,6 +29,11 @@
 #ifndef _JERS_SERVER_H
 #define _JERS_SERVER_H
 
+#include <unistd.h>
+#include <sys/types.h>
+#include <limits.h>
+#include <time.h>
+
 #include <uthash.h>
 
 #include <jers.h>
@@ -37,6 +42,8 @@
 #include <buffer.h>
 #include <comms.h>
 #include <fields.h>
+
+#define UNUSED(x) (void)(x)
 
 /* Configuration defaults */
 
@@ -65,7 +72,7 @@ enum job_pending_reasons {
 		PEND_REASON_NOAGENT,
 };
 
-typedef struct client {
+typedef struct _client {
 	struct connectionType connection;
 
 	msg_t msg;
@@ -76,11 +83,11 @@ typedef struct client {
 
 	uid_t uid;
 
-	struct client * next;
-	struct client * prev;
+	struct _client * next;
+	struct _client * prev;
 } client;
 
-typedef struct agent {
+typedef struct _agent {
 	struct connectionType connection;
 
 	msg_t msg;
@@ -94,8 +101,8 @@ typedef struct agent {
 	/* Data we've read from this agent */
 	buff_t responses;
 
-	struct agent * next;
-	struct agent * prev;
+	struct _agent * next;
+	struct _agent * prev;
 } agent;
 
 struct queue {
@@ -106,7 +113,7 @@ struct queue {
 	int priority;
 
 	char * host;
-	struct agent * agent;
+	agent * agent;
 
 	struct jobStats stats;
 
@@ -195,13 +202,13 @@ struct jersServer {
 	char * state_dir;
 	int state_count;
 
-	uint32_t dirty_jobs;
-	uint32_t dirty_queues;
-	uint32_t dirty_resources;
+	int64_t dirty_jobs;
+	int64_t dirty_queues;
+	int64_t dirty_resources;
 
-	uint32_t flush_jobs;
-	uint32_t flush_queues;
-	uint32_t flush_resources;
+	int64_t flush_jobs;
+	int64_t flush_queues;
+	int64_t flush_resources;
 
 	int background_save_ms;
 
@@ -337,7 +344,16 @@ void checkEvents(void);
 
 void initEvents(void);
 
-int cleanupJobs(int max_clean);
+int cleanupJobs(uint32_t max_clean);
+
+void setup_listening_sockets(void);
+int setReadable(struct connectionType * connection);
+int setWritable(struct connectionType * connection);
+void handleReadable(struct epoll_event * e);
+void handleWriteable(struct epoll_event * e);
+
+void handleClientDisconnect(client * c);
+void handleAgentDisconnect(agent * a);
 
 void sendAgentMessage(agent * a, char * message, int64_t length);
 

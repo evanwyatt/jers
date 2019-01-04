@@ -27,7 +27,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -66,7 +65,7 @@ int64_t getTimeMS(void) {
  *    ie 1969-07-21 02:56:15.000
  *    or 151m 40.000s */
 
-char * print_time(struct timespec * time, int elapsed) {
+char * print_time(const struct timespec * time, int elapsed) {
 	static char formatted[64];
 
 	if (elapsed) {
@@ -213,7 +212,8 @@ static int load_users_env(char * username, struct user * u) {
 	int pipefd[2];
 	int status;
 	size_t e_size = 0x2000; //Guess.
-	ssize_t bytes = 0, len = 0;
+	size_t bytes = 0;
+	ssize_t len = 0;
 	char * e = NULL;
 
 	if (pipe(pipefd) == -1) {

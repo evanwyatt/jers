@@ -27,6 +27,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "server.h"
+#include "jers.h"
+#include "common.h"
+
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
@@ -38,9 +42,6 @@
 #include <time.h>
 #include <glob.h>
 
-#include "jers.h"
-#include "server.h"
-#include "common.h"
 
 #define STATE_DIV_FACTOR 10000
 
@@ -277,7 +278,7 @@ void stateReplayJournal(void) {
 	print_msg(JERS_LOG_INFO, "Recovering state from journal files");
 
 	int rc = 0;
-	int i;
+	size_t i;
 	glob_t journalGlob;
 	char pattern[PATH_MAX];
 
@@ -424,7 +425,6 @@ int stateSaveQueue(struct queue * q) {
 		return 1;
 	}
 
-	fprintf(f, "NAME %s\n", q->name);
 	fprintf(f, "DESC %s\n", q->desc);
 	fprintf(f, "JOBLIMIT %d\n", q->job_limit);
 	fprintf(f, "PRIORITY %d\n", q->priority);
@@ -523,7 +523,7 @@ void stateSaveToDisk(void) {
 
 			/* Clear the flushing flag on the objects */
 			if (server.flush_jobs) {
-				int32_t i;
+				int64_t i;
 				for (i = 0; i < server.flush_jobs; i++)
 					dirtyJobs[i]->internal_state &= ~JERS_JOB_FLAG_FLUSHING;
 
@@ -531,7 +531,7 @@ void stateSaveToDisk(void) {
 			}
 
 			if (server.flush_queues) {
-				int32_t i;
+				int64_t i;
 				for (i = 0; i < server.flush_queues; i++)
 					dirtyQueues[i]->internal_state &= ~JERS_JOB_FLAG_FLUSHING;
 
@@ -539,7 +539,7 @@ void stateSaveToDisk(void) {
 			}
 
 			if (server.flush_resources) {
-				int32_t i;
+				int64_t i;
 				for (i = 0; i < server.flush_resources; i++)
 					dirtyResources[i]->internal_state &= ~JERS_JOB_FLAG_FLUSHING;
 
@@ -884,7 +884,7 @@ int stateLoadJob(char * fileName) {
 
 int stateLoadJobs(void) {
 	int rc;
-	int i;
+	size_t i;
 	char pattern[PATH_MAX];
 	glob_t jobFiles;
 
@@ -1005,7 +1005,7 @@ int stateLoadQueue(char * fileName) {
 
 int stateLoadQueues(void) {
 	int rc;
-	int i;
+	size_t i;
 	char pattern[PATH_MAX];
 	glob_t qFiles;
 
@@ -1110,7 +1110,7 @@ int stateLoadRes(char * file_name) {
 
 int stateLoadResources(void) {
 	int rc;
-	int i;
+	size_t i;
 	char pattern[PATH_MAX];
 	glob_t resFiles;
 

@@ -29,6 +29,8 @@
 #ifndef __JERS_COMMON_H
 #define __JERS_COMMON_H
 
+#include <sys/types.h>
+
 #include <uthash.h>
 
 /* Used for loggingMode */
@@ -71,7 +73,7 @@ char * gethost(void);
 
 int matches(const char * pattern, const char * string);
 
-char * print_time(struct timespec * time, int elapsed);
+char * print_time(const struct timespec * time, int elapsed);
 void timespec_diff(const struct timespec *start, const struct timespec *end, struct timespec *diff);
 
 struct user * lookup_user(uid_t uid, int load_env);

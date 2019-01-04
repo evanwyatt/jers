@@ -144,7 +144,7 @@ int command_add_queue(client * c, void * args) {
 	/* Check if we need to link this queue to an agent that
 	 * is already connected . */
 
-	struct agent * a = server.agent_list;
+	agent * a = server.agent_list;
 
 	while (a) {
 		if (strcmp(a->host, q->host) == 0) {

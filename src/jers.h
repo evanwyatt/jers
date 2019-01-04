@@ -29,15 +29,15 @@
 #ifndef __JERS_H
 #define __JERS_H
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <sys/types.h>
 
 typedef uint32_t jobid_t;
 
-#define JERS_VERSION "0.01"
+#define JERS_VERSION "0.0.1"
 
 #define JERS_RES_NAME_MAX 64
 #define JERS_TAG_MAX 64

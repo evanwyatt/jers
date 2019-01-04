@@ -41,6 +41,9 @@
 struct jersServer server;
 
 int parseOpts(int argc, char * argv[]) {
+	for (int i = 0; i < argc; i++) {
+		print_msg(JERS_LOG_DEBUG, "Checking opt %s", argv[i]);
+	}
 
 	return 0;
 }

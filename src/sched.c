@@ -45,12 +45,6 @@ int __comp(const void * a_, const void * b_) {
 	return (a->jobid - b->jobid);
 }
 
-void sendAgentMessage(agent * a, char * message, int64_t length) {
-	buffAdd(&a->responses, message, length);
-	setWritable(&a->connection);
-	return;
-}
-
 void sendStartCmd(struct job * j) {
 	resp_t * r = respNew();
 	size_t length;

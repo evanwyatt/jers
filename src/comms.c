@@ -26,16 +26,16 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#define _GNU_SOURCE
+
 #include <stdio.h>
 #include <errno.h>
 #include <fcntl.h>
-
+#include <sys/stat.h>
 #include <unistd.h>
 
-#include <server.h>
-#include <comms.h>
-#include <resp.h>
+#include "server.h"
+#include "comms.h"
+#include "resp.h"
 
 static ssize_t _recv(int fd, void * buf, size_t count) {
 	ssize_t len;
@@ -116,9 +116,7 @@ void setup_listening_sockets(void) {
 	addr.sun_family = AF_UNIX;
 	strncpy(addr.sun_path, server.socket_path, sizeof(addr.sun_path)-1);
 
-	if (unlink(server.socket_path) && errno != ENOENT) {
-		error_die("failed to unlink socket: %s\n", strerror(errno));
-	}
+	unlink(server.socket_path);
 
 	if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
 		perror("bind error");
@@ -129,6 +127,12 @@ void setup_listening_sockets(void) {
 		perror("listen error");
 		exit(-1);
 	}
+
+	/* Permissions are controlled by the daemon, when a request is made.
+	 * This means the permissions on the socket are fairly open.
+	 * This should be changed at some point to have the permissions/owner/group configurable via the config file */
+	if (chmod(server.socket_path, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH) != 0)
+		error_die("chmod failed on listening socket %s", strerror(errno));
 
 	server.client_connection.type = CLIENT_CONN;
 	server.client_connection.socket = fd;
@@ -292,7 +296,7 @@ void handleAgentConnection(void) {
  * - Mark any jobs that were in running as 'Unknown'. There is a chance they will reconnect.
  */
 
-void handleAgentDisconnect(struct agent * a) {
+void handleAgentDisconnect(agent * a) {
 	print_msg(JERS_LOG_CRITICAL, "JERS AGENT DISCONNECTED.");
 
 	/* Stop receiving events for this socket */
@@ -454,5 +458,11 @@ void handleWriteable(struct epoll_event * e) {
 		default:     print_msg(JERS_LOG_WARNING, "Unexpected write event - Ignoring"); break;
 	}
 
+	return;
+}
+
+void sendAgentMessage(agent * a, char * message, int64_t length) {
+	buffAdd(&a->responses, message, length);
+	setWritable(&a->connection);
 	return;
 }

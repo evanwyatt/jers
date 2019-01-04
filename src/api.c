@@ -35,6 +35,7 @@
 #include <sys/un.h>
 #include <errno.h>
 #include <signal.h>
+#include <sys/time.h>
 
 #include <jers.h>
 #include <resp.h>
@@ -69,7 +70,8 @@ static void setError(int error, const char * errorString) {
 	apierrorstring = errorString ? errorString : NULL;
 }
 
-static int customInit(void * arg) {
+static int customInit(char * custom_config) {
+	
 	return 0;
 }
 
@@ -78,17 +80,17 @@ static int defaultInit(void) {
 	return 0;
 }
 
-int jersInitAPI(void * arg) {
+int jersInitAPI(char * custom_config) {
 	int rc = 0;
 
 	/* We can be reinitalised by providing a config argument */
-	if (initalised && !arg) {
+	if (initalised && !custom_config) {
 		setError(JERS_OK, NULL);
 		return 0;
 	}
 
-	if (arg) {
-		rc = customInit(arg);
+	if (custom_config) {
+		rc = customInit(custom_config);
 	} else {
 		rc = defaultInit();
 	}
@@ -442,7 +444,6 @@ int jersDelJob(jobid_t jobid) {
 
 void jersInitJobAdd(jersJobAdd * j) {
 	memset(j, 0, sizeof(jersJobAdd));
-	j->uid = -1;
 	j->priority = -1;
 	j->defer_time = -1;
 }
@@ -490,7 +491,7 @@ jobid_t jersAddJob(jersJobAdd * j) {
 	if (j->queue)
 		addStringField(r, QUEUENAME, j->queue);
 
-	if (j->uid >= 0)
+	if (j->uid > 0)
 		addIntField(r, UID, j->uid);
 
 	if (j->shell)
@@ -665,7 +666,7 @@ int jersSignalJob(jobid_t id, int signum) {
 		return 1;
 	}
 
-	if (signum <= 0 || signum >= NSIG) {
+	if (signum < 0 || signum >= SIGRTMAX) {
 		setError(JERS_INVALID, "Invalid signum provided");
 		return 1;
 	}
@@ -1089,6 +1090,13 @@ int jersDelResource(char *name) {
 }
 
 void jersFreeResourceInfo(jersResourceInfo *info) {
+	for (int i = 0; i < info->count; i++) {
+		jersResource * res = &info->resources[i];
+
+		free(res->name);
+	}
+
+	free(info->resources);
 	return;
 }
 

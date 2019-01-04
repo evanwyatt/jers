@@ -27,7 +27,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <unistd.h>
 #include <time.h>
@@ -674,6 +673,28 @@ int send_login(void) {
 	return 0;
 }
 
+int get_job_completion(struct runningJob * j) {
+	int status;
+
+	/* Read in the completion details */
+	do {
+		status = read(j->socket, &j->job_completion, sizeof(struct jobCompletion));
+	} while (status == -1 && errno == EINTR);
+
+	if (status == -1) {
+		if (errno == EAGAIN || errno == EWOULDBLOCK) {
+			/* Clear the pid for this job, we will try later to read in the completion infomation again later */
+			j->pid = 0;
+			return 1;
+		} else {
+			print_msg(JERS_LOG_WARNING, "Failed to read in job completion infomation for jobid:%d :%s", j->jobID, strerror(errno));
+			j->job_completion.exitcode = 255; //TODO: Use a different exitcode for this?
+		}
+	}
+
+	return 0;
+}
+
 /* Check for PID messages for any children we've started
  * For any job we have a PID for, check if they have terminated */
 
@@ -683,16 +704,30 @@ void check_children(void) {
 	int child_status;
 	pid_t pid;
 
-	for (j = agent.jobs; j; j = j->next) {
+	j = agent.jobs;
+
+	while (j != NULL){
 		if (j->job_pid == 0) {	
 			do {
 				status = read(j->socket, &j->job_pid, sizeof(pid_t));
 			} while (status == -1 && errno == EINTR);
 
-			if (status == -1 && (errno != EAGAIN && errno != EWOULDBLOCK)) {
+			if (status == -1 && (errno != EAGAIN && errno != EWOULDBLOCK))
 				fprintf(stderr, "Failed to read pid from job %d\n", j->jobID);
-				continue;
+		}
+
+		/* Check for any children we have cleaned up, but didn't get the completion infomation from */
+		if (j->pid == 0) {
+			struct runningJob * next = j->next;
+
+			if (get_job_completion(j) == 0) {
+				send_completion(j);
+				j = next;
+			} else {
+				j = j->next;
 			}
+		} else {
+			j = j->next;
 		}
 	}
 
@@ -718,12 +753,8 @@ void check_children(void) {
 			continue;
 		}
 
-		/* Read in the completion details */
-		do {
-			status = read(j->socket, &j->job_completion, sizeof(struct jobCompletion));
-		} while (status == -1 && errno == EINTR);
-
-		send_completion(j);
+		if (get_job_completion(j) == 0)
+			send_completion(j);
 	}
 
 	if (pid == -1 && errno != ECHILD)

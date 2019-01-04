@@ -28,6 +28,7 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
+#include <strings.h>
 
 #include <jers.h>
 
@@ -180,12 +181,18 @@ int stats(void) {
 	return 0;
 }
 
+int ping (void) {
+	return 0;
+}
+
 int main (int argc, char * argv[]) {
 
 	if (argc < 2)
 		return 1;
 
-	if (strcasecmp(argv[1], "SUBMIT") == 0)
+	if (strcasecmp(argv[1], "PING") == 0)
+		return ping();
+	else if (strcasecmp(argv[1], "SUBMIT") == 0)
 		return submit(argc, argv);
 	else if (strcasecmp(argv[1], "SHOW") == 0)
 		return show(argc, argv);

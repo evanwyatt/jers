@@ -26,16 +26,18 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
 #ifndef __RESP_H
 #define __RESP_H
 
 #include <stdint.h>
+#include <sys/types.h>
 
 struct buffer {
 	char * string;
-	uint64_t len;
-	uint64_t size;
-	uint64_t count;
+	size_t len;
+	size_t size;
+	size_t count;
 };
 
 typedef struct _resp_t {
@@ -46,7 +48,7 @@ typedef struct _resp_t {
 
 typedef struct _resp_read_t {
 	char * string;
-	size_t length;
+	off_t length;
 	off_t pos;		// Current parsing postion
 	int ready;
 	struct argItem * currentItem;

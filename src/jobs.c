@@ -56,7 +56,6 @@ jobid_t getNextJobID(void) {
 	if (cleanupJobs(5))
 		return getNextJobID();
 
-
 	return 0;
 }
 
@@ -87,7 +86,7 @@ void free_job (struct job * j) {
 /* Cleanup jobs that are marked as deleted, returning the number of jobs cleaned up
  * - Only cleanup jobs until the max_clean threshold is reached. */
 
-int cleanupJobs(int max_clean) {
+int cleanupJobs(uint32_t max_clean) {
 	jobid_t cleaned_up = 0;
 	struct job * j;
 
