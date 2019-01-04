@@ -3,11 +3,10 @@ Description=JERS Daemon
 After=syslog.target
 
 [Service]
-PermissionsStartOnly=true
-ExecStartPre=/usr/bin/install -m 775 -o jers -d /var/run/jers
-
-User=jers_user
-ExecStart=/usr/local/bin/jersd
+RuntimeDirectory=jers
+User=jers
+Group=jers
+ExecStart=/usr/bin/jersd
 RestartSec=5s
 Restart=on-success
 

@@ -4,9 +4,9 @@ After=syslog.target
 
 [Service]
 PermissionsStartOnly=true
-ExecStartPre=/usr/bin/install -m 775 -o jers -d /var/run/jers
+ExecStartPre=/usr/bin/install -m 775 -o jers -d /var/spool/jers
 
-ExecStart=/usr/local/bin/jers_agentd
+ExecStart=/usr/bin/jers_agentd
 RestartSec=5s
 Restart=on-success
 

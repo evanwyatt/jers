@@ -1,4 +1,4 @@
-CFLAGS= -g -Wall -fPIC
+CFLAGS= -g -fPIC -pedantic  -Wno-missing-field-initializers -std=c99 -D_GNU_SOURCE #-Wall -W
 #LDFLAGS= -shared
 
 INC=-I./ -I ../deps/
@@ -32,10 +32,7 @@ jers_dump_env: $(JERS_DUMP_OBJS)
 
 install: libjers.so jersd jers_agentd jers
 
-	install -d $(DESTDIR)/lib64
 	install -m 644 libjers.so $(DESTDIR)/lib64/
-
-	install -m 644 jers.h $(DESTDIR)/include/
 	install -m 755 jersd jers_agentd jers jers_dump_env $(DESTDIR)/bin
 	
 clean:
