@@ -33,6 +33,7 @@ jers_dump_env: $(JERS_DUMP_OBJS)
 install: libjers.so jersd jers_agentd jers
 
 	install -m 644 libjers.so $(DESTDIR)/lib64/
+	install -m 644 jers.h $(DESTDIR)/include/
 	install -m 755 jersd jers_agentd jers jers_dump_env $(DESTDIR)/bin
 	
 clean:
