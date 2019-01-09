@@ -90,6 +90,8 @@ struct agent {
 
 	msg_t msg;
 
+	int daemon;
+
 	int daemon_fd;
 	int event_fd;
 
@@ -969,17 +971,35 @@ int connectjers(void) {
 	return 0;
 }
 
-int main (int argc, char * argv[]) {
+int parseOpts(int argc, char * argv[]) {
+	for (int i = 0; i < argc; i++) {
+		if (strcasecmp("--daemon", argv[i]) == 0)
+			agent.daemon = 1;
+	}
 
+	return 0;
+}
+
+void shutdownHandler(int signum) {
+	shutdown_requested = 1;
+}
+
+int main (int argc, char * argv[]) {
 	int i;
+
+	memset(&agent, 0, sizeof(struct agent));
+	parseOpts(argc, argv);
+
+	setup_handlers(shutdownHandler);
+
+	if (agent.daemon)
+		setLogfileName(server_log);
 
 	/* Connect to the main daemon */
 	print_msg(JERS_LOG_INFO, "Starting JERS_AGENTD");
 
 	if (getuid() != 0)
 		error_die("JERS_AGENTD is required to be run as root");
-
-	memset(&agent, 0, sizeof(struct agent));
 
 	agent.daemon_fd = -1;
 

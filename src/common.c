@@ -51,6 +51,7 @@
 
 struct user * user_cache = NULL;
 volatile sig_atomic_t clear_cache = 0;
+volatile sig_atomic_t reopen_logfile = 1;
 
 
 /* Return the time, in milliseconds
@@ -438,6 +439,10 @@ void clearCacheHandler(int signum) {
 	clear_cache = 1;
 }
 
+void hupHandler(int signum) {
+	reopen_logfile = 1;
+}
+
 void setup_handlers(void(*shutdownHandler)(int)) {
 	struct sigaction sigact;
 
@@ -455,6 +460,13 @@ void setup_handlers(void(*shutdownHandler)(int)) {
     sigact.sa_handler = clearCacheHandler;
 
     sigaction(SIGUSR1, &sigact, NULL);
+
+	/* SIGHUP - Close and reopen the current logfile */
+	sigemptyset(&sigact.sa_mask);
+    sigact.sa_flags = 0;
+    sigact.sa_handler = hupHandler;
+
+	sigaction(SIGHUP, &sigact, NULL);
 
 	/* Fatal signals - Display a backtrace if we get these */
 	sigemptyset(&sigact.sa_mask);

@@ -14,6 +14,8 @@ The Job Execution and Resource Scheduler
 
 %{?systemd_requires}
 BuildRequires: systemd
+Requires:   logrotate
+Requires:   sudo
 
 %package devel
 Summary:	JERS development files
@@ -32,14 +34,17 @@ make %{?_smp_mflags}
 
 %install
 rm -rf $RPM_BUILD_ROOT
-install -d %{buildroot}/usr/bin %{buildroot}/usr/include %{buildroot}/usr/lib64
-install -d %{buildroot}/%{_unitdir}
+install -d %{buildroot}%{_bindir} %{buildroot}%{_includedir} %{buildroot}%{_libdir}
+install -d %{buildroot}/%{_unitdir} %{buildroot}%{_sysconfdir}/logrotate.d
+install -d %{buildroot}%{_localstatedir}/log/jers
 
 make install DESTDIR=%{buildroot}%{_prefix}
 
 find %buildroot -type f \( -name '*.so' -o -name '*.so.*' \) -exec chmod 755 {} +
 
 install -Dm 0644 src/jersd.service src/jers_agentd.service %{buildroot}/%{_unitdir}/ 
+install -m 0644 src/jers_logrotate.conf %{buildroot}%{_sysconfdir}/logrotate.d/jers
+install -m 0644 src/default.conf %{buildroot}%{_sysconfdir}/jers.conf
 
 %files
 %{_bindir}/jers
@@ -49,8 +54,11 @@ install -Dm 0644 src/jersd.service src/jers_agentd.service %{buildroot}/%{_unitd
 %{_libdir}/libjers.so
 
 # Systemd service files
-%config(noreplace)
-%{_unitdir}/*.service
+%config(noreplace) %{_sysconfdir}/jers.conf
+%config(noreplace) %{_unitdir}/*.service
+%config(noreplace) %{_sysconfdir}/logrotate.d/jers
+
+%dir %attr(0750,jers,jers) %{_localstatedir}/log/jers
 
 %files devel
 %{_includedir}/jers.h
@@ -67,10 +75,11 @@ getent passwd jers >/dev/null || /usr/sbin/useradd -g jers -s /bin/false -r -c "
 
 %post
 /sbin/ldconfig
+/usr/bin/systemctl daemon-reload
 
 %postun
 /sbin/ldconfig
-
+/usr/bin/systemctl daemon-reload
 
 %changelog
 

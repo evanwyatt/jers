@@ -54,8 +54,6 @@ void loadConfig(char * config) {
 	}
 
 	/* Populate the defaults before we start parsing the config file */
-	
-	memset(&server, 0, sizeof(struct jersServer));
 	server.state_fd = -1;
 	server.state_dir = strdup(DEFAULT_CONFIG_STATEDIR);
 	server.background_save_ms = DEFAULT_CONFIG_BACKGROUNDSAVEMS;
@@ -114,33 +112,32 @@ server.logging_mode = JERS_LOG_DEBUG;
 
 		} else if (strcmp(key, "flush_defer_ms") == 0) {
 			server.flush.defer_ms = atoi(value);
-                } else if (strcmp(key, "background_save_ms") == 0) {
+		} else if (strcmp(key, "background_save_ms") == 0) {
 			server.background_save_ms = atoi(value);
-                } else if (strcmp(key, "event_freq") == 0) {
+		} else if (strcmp(key, "event_freq") == 0) {
 			server.event_freq = atoi(value);
-                } else if (strcmp(key, "sched_freq") == 0) {
+		} else if (strcmp(key, "sched_freq") == 0) {
 			server.sched_freq = atoi(value);
-                } else if (strcmp(key, "sched_max") == 0) {
+		} else if (strcmp(key, "sched_max") == 0) {
 			server.sched_max = atoi(value);
-                } else if (strcmp(key, "max_system_jobs") == 0) {
+		} else if (strcmp(key, "max_system_jobs") == 0) {
 			server.max_run_jobs = atoi(value);
-                } else if (strcmp(key, "max_jobid") == 0) {
+		} else if (strcmp(key, "max_jobid") == 0) {
 			server.highest_jobid = atoi(value);
-                } else if (strcmp(key, "max_clean_job") == 0) {
+		} else if (strcmp(key, "max_clean_job") == 0) {
 			server.max_cleanup = atoi(value);
-                } else if (strcmp(key, "client_listen_socket") == 0) {
+		} else if (strcmp(key, "client_listen_socket") == 0) {
 			free(server.socket_path);
 			server.socket_path = strdup(value);
-                } else if (strcmp(key, "agent_listen_socket") == 0) {
+		} else if (strcmp(key, "agent_listen_socket") == 0) {
 			free(server.agent_socket_path);
 			server.agent_socket_path = strdup(value);
+		} else if (strcmp(key, "logfile") == 0) {
+			server.logfile = strdup(value);
 		} else {
-
 			print_msg(JERS_LOG_WARNING, "Skipping unknown config key: %s\n", key);
 			continue;
 		}
-
-
 	}
 
 	free(line);

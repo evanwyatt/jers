@@ -33,12 +33,6 @@
 
 #include <uthash.h>
 
-/* Used for loggingMode */
-#define JERS_LOG_DEBUG    0
-#define JERS_LOG_INFO     1
-#define JERS_LOG_WARNING  2
-#define JERS_LOG_CRITICAL 3
-
 struct user {
 	uid_t uid;
 	gid_t gid;

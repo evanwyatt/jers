@@ -1,12 +1,18 @@
 [Unit]
 Description=JERS Daemon
 After=syslog.target
+After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 RuntimeDirectory=jers
 User=jers
 Group=jers
-ExecStart=/usr/bin/jersd
+
+ExecStart=/usr/bin/jersd --daemon
+ExecReload=/bin/kill -HUP $MAINPID
+
 RestartSec=5s
 Restart=on-success
 

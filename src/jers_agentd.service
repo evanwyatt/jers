@@ -1,12 +1,17 @@
 [Unit]
 Description=JERS Agent Daemon
 After=syslog.target
+After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 PermissionsStartOnly=true
 ExecStartPre=/usr/bin/install -m 775 -o jers -d /var/spool/jers
 
-ExecStart=/usr/bin/jers_agentd
+ExecStart=/usr/bin/jers_agentd --daemon
+ExecReload=/bin/kill -HUP $MAINPID
+
 RestartSec=5s
 Restart=on-success
 

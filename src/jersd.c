@@ -46,7 +46,8 @@ struct jersServer server;
 
 int parseOpts(int argc, char * argv[]) {
 	for (int i = 0; i < argc; i++) {
-		print_msg(JERS_LOG_DEBUG, "Checking opt %s", argv[i]);
+		if (strcasecmp("--daemon", argv[i]) == 0)
+			server.daemon = 1;
 	}
 
 	return 0;
@@ -137,15 +138,24 @@ void shutdownHandler(int signum) {
 		server.shutdown = 1;
 }
 
+void setupAsDaemon(void) {
+	/* If we are running as a daemon, we want to redirect
+	 * our output to logfile specified in the config file */
+	setLogfileName(server_log);
+}
+
 int main (int argc, char * argv[]) {
 
-	setup_handlers(shutdownHandler);
+	memset(&server, 0, sizeof(struct jersServer));
 
-	if (parseOpts(argc, argv)) {
+	if (parseOpts(argc, argv))
 		error_die("Argument parsing failed\n");
-	}
 
+	setup_handlers(shutdownHandler);
 	loadConfig(server.config_file);
+
+	if (server.daemon)
+		setupAsDaemon();
 
 	server_log_mode = server.logging_mode;
 

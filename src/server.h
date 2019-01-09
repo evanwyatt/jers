@@ -197,6 +197,8 @@ struct jersServer {
 	char * state_dir;
 	int state_count;
 
+	int daemon;
+
 	int64_t dirty_jobs;
 	int64_t dirty_queues;
 	int64_t dirty_resources;
@@ -207,6 +209,7 @@ struct jersServer {
 
 	int background_save_ms;
 
+	char * logfile;
 	int logging_mode;
 	//int logging_fd;;
 
