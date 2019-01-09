@@ -224,3 +224,27 @@ int command_mod_resource(client *c, void *args) {
 int command_del_resource(client *c, void *args) {
 	return 0;
 }
+
+void free_add_resource(void * args) {
+	jersResourceAdd * ra = args;
+	free(ra);
+}
+
+void free_get_resource(void * args) {
+	jersResourceFilter * rf = args;
+
+	free(rf->filters.name);
+	free(rf);
+}
+
+void free_mod_resource(void * args) {
+	jersResourceMod * rm = args;
+	free(rm);
+}
+
+void free_del_resource(void * args) {
+	jersResourceDel * rd = args;
+
+	free(rd->name);
+	free(rd);
+}

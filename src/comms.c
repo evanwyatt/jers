@@ -185,6 +185,7 @@ void handleClientDisconnect(client * c) {
 	close(c->connection.socket);
 	buffFree(&c->response);
 	buffFree(&c->request);
+	respReadFree(&c->msg.reader);
 	removeClient(c);
 	free(c);
 
@@ -330,6 +331,8 @@ void handleAgentDisconnect(agent * a) {
 	close(a->connection.socket);
 	buffFree(&a->requests);
 	buffFree(&a->responses);
+	respReadFree(&a->msg.reader);
+	free(a->host);
 
 	removeAgent(a);
 	free(a);
@@ -383,12 +386,6 @@ void handleClientRead(client * c) {
 	 * Update the buffer and length in the
 	 * reader, so we can try to parse this request */
 	c->request.used += len;
-
-	if (load_message(&c->msg, &c->request) < 0) {
-		print_msg(JERS_LOG_WARNING, "Failed to load client request:");
-		handleClientDisconnect(c);
-		return;
-	}
 }
 
 void handleAgentWrite(agent * a) {

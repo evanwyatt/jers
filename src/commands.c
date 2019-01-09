@@ -41,20 +41,20 @@ void runSimpleCommand(client * c);
 void runComplexCommand(client * c);
 
 command_t commands[] = {
-	{"ADD_JOB",      CMD_WRITE, command_add_job,      deserialize_add_job},
-	{"GET_JOB",      CMD_READ,  command_get_job,      deserialize_get_job},
-	{"MOD_JOB",      CMD_WRITE, command_mod_job,      deserialize_mod_job},
-	{"DEL_JOB",      CMD_WRITE, command_del_job,      deserialize_del_job},
-	{"SIG_JOB",      CMD_WRITE, command_sig_job,      deserialize_sig_job},
-	{"ADD_QUEUE",    CMD_WRITE, command_add_queue,    deserialize_add_queue},
-	{"GET_QUEUE",    CMD_READ,  command_get_queue,    deserialize_get_queue},
-	{"MOD_QUEUE",    CMD_WRITE, command_mod_queue,    deserialize_mod_queue},
-	{"DEL_QUEUE",    CMD_WRITE, command_del_queue,    deserialize_del_queue},
-	{"ADD_RESOURCE", CMD_WRITE, command_add_resource, deserialize_add_resource},
-	{"GET_RESOURCE", CMD_READ,  command_get_resource, deserialize_get_resource},
-	{"MOD_RESOURCE", CMD_WRITE, command_mod_resource, deserialize_mod_resource},
-	{"DEL_RESOURCE", CMD_WRITE, command_del_resource, deserialize_del_resource},
-	{"STATS",        CMD_READ,  command_stats,        NULL},
+	{"ADD_JOB",      CMD_WRITE, command_add_job,      deserialize_add_job, free_add_job},
+	{"GET_JOB",      CMD_READ,  command_get_job,      deserialize_get_job, free_get_job},
+	{"MOD_JOB",      CMD_WRITE, command_mod_job,      deserialize_mod_job, free_mod_job},
+	{"DEL_JOB",      CMD_WRITE, command_del_job,      deserialize_del_job, free_del_job},
+	{"SIG_JOB",      CMD_WRITE, command_sig_job,      deserialize_sig_job, free_sig_job},
+	{"ADD_QUEUE",    CMD_WRITE, command_add_queue,    deserialize_add_queue, free_add_queue},
+	{"GET_QUEUE",    CMD_READ,  command_get_queue,    deserialize_get_queue, free_get_queue},
+	{"MOD_QUEUE",    CMD_WRITE, command_mod_queue,    deserialize_mod_queue, free_mod_queue},
+	{"DEL_QUEUE",    CMD_WRITE, command_del_queue,    deserialize_del_queue, free_del_queue},
+	{"ADD_RESOURCE", CMD_WRITE, command_add_resource, deserialize_add_resource, free_add_resource},
+	{"GET_RESOURCE", CMD_READ,  command_get_resource, deserialize_get_resource, free_get_resource},
+	{"MOD_RESOURCE", CMD_WRITE, command_mod_resource, deserialize_mod_resource, free_mod_resource},
+	{"DEL_RESOURCE", CMD_WRITE, command_del_resource, deserialize_del_resource, free_del_resource},
+	{"STATS",        CMD_READ,  command_stats,        NULL, NULL},
 };
 
 /* Append to or allocate a new reponse buffer */
@@ -203,13 +203,6 @@ void command_agent_login(agent * a) {
 		} else if (strcmp(q->host, a->host) == 0) {
 			q->agent = a;
 		}
-
-		if (q->agent) {
-			print_msg(JERS_LOG_DEBUG, "Enabling queue %s\n", q->name);
-
-			//HACK:
-			q->state |= JERS_QUEUE_FLAG_STARTED; 
-		}
 	}
 }
 
@@ -299,14 +292,12 @@ void command_agent_jobcompleted(agent * a) {
 	else
 		server.stats.total.completed++;
 
-	print_msg(JERS_LOG_DEBUG, "JobID: %d %s exitcode:%d finish_time:%d", jobid, exitcode ? "EXITED" : "COMPLETED", j->exitcode, j->finish_time);
+	print_msg(JERS_LOG_INFO, "JobID: %d %s exitcode:%d finish_time:%d", jobid, exitcode ? "EXITED" : "COMPLETED", j->exitcode, j->finish_time);
 
 	return;
 }
 
 int runAgentCommand(agent * a) {
-	printf("Got AGENT command: %s\n", a->msg.command);
-
 	if (strcasecmp(a->msg.command, "AGENT_LOGIN") == 0) {
 		command_agent_login(a);
 	} else if (strcasecmp(a->msg.command, "JOB_STARTED") == 0) {
@@ -317,7 +308,12 @@ int runAgentCommand(agent * a) {
 		print_msg(JERS_LOG_WARNING, "Invalid agent command %s received", a->msg.command);
 	}
 
-	free_message(&a->msg, &a->requests);
+	free_message(&a->msg, NULL);
+
+	if (buffRemove(&a->requests, a->msg.reader.pos, 0)) {
+			a->msg.reader.pos = 0;
+			respReadUpdate(&a->msg.reader, a->requests.data, a->requests.used);
+	}
 
 	return 0;
 }

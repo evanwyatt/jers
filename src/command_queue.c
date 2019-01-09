@@ -121,6 +121,8 @@ int command_add_queue(client * c, void * args) {
 	char * buff = NULL;
 	size_t buff_length = 0;
 
+	lowercasestring(qa->name);
+
 	HASH_FIND_STR(server.queueTable, qa->name, q);
 
 	if (q != NULL) {
@@ -150,8 +152,7 @@ int command_add_queue(client * c, void * args) {
 		if (strcmp(a->host, q->host) == 0) {
 			q->agent = a;
 			break;
-		}
-		else if (strcmp(q->host, "localhost") == 0) {
+		} else if (strcmp(q->host, "localhost") == 0) {
 			if (strcmp(a->host, gethost()) == 0) {
 				q->agent = a;
 				break;
@@ -313,4 +314,29 @@ int command_del_queue(client *c, void *args) {
 
 
 	return 0;
+}
+
+void free_add_queue(void * args) {
+	jersQueueAdd *q = args;
+	free(q);
+}
+
+void free_get_queue(void * args) {
+	jersQueueFilter *qf = args;
+
+	free(qf->filters.name);
+	free(qf);
+}
+
+void free_mod_queue(void * args) {
+	jersQueueMod * qm = args;
+	
+	free(qm->name);
+	free(qm);
+}
+
+void free_del_queue(void * args) {
+	jersQueueDel * qd = args;
+	free(qd->name);
+	free(qd);
 }

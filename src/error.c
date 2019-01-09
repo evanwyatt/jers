@@ -26,10 +26,12 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <stdio.h>
+#include <stdlib.h>
 #include <stdarg.h>
 
-#include <jers.h>
-#include <common.h>
+#include "server.h"
 
 const char * job_pending_reason_strings[] = {
 	"No reason",
@@ -51,5 +53,9 @@ void error_die(char * msg, ...) {
 	va_end(args);
 
 	_logMessage("jersd", JERS_LOG_CRITICAL, logMessage);
+
+	fflush(stdout);
+	fflush(stderr);
+
 	exit(EXIT_FAILURE);
 }

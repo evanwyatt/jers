@@ -737,3 +737,38 @@ int command_sig_job(client * c, void * args) {
 	return 0;
 }
 
+void free_add_job(void * args) {
+	jersJobAdd * ja = args;
+
+	freeStringArray(ja->res_count, &ja->resources);
+
+	free(ja);
+}
+
+void free_get_job(void * args) {
+	jersJobFilter * jf = args;
+
+	free(jf->filters.job_name);
+	free(jf->filters.queue_name);
+	freeStringArray(jf->filters.tag_count, &jf->filters.tags);
+	freeStringArray(jf->filters.res_count, &jf->filters.resources);
+	free(jf);
+}
+
+void free_mod_job(void * args) {
+	jersJobMod * jm = args;
+
+	freeStringArray(jm->res_count, &jm->resources);	
+	free(jm->queue);
+	free(jm);
+}
+
+void free_del_job(void * args) {
+	jersJobDel * jd = args;
+	free(jd);
+}
+
+void free_sig_job(void * args) {
+	jersJobSig * js = args;
+	free(js);
+}

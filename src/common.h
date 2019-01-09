@@ -68,7 +68,6 @@ char * removeWhitespace(char * str);
 void uppercasestring(char * str);
 void lowercasestring(char * str);
 int int64tostr(char * dest, int64_t num);
-void _logMessage(const char * whom, int level, const char * message);
 char * gethost(void);
 
 int matches(const char * pattern, const char * string);
@@ -77,5 +76,8 @@ char * print_time(const struct timespec * time, int elapsed);
 void timespec_diff(const struct timespec *start, const struct timespec *end, struct timespec *diff);
 
 struct user * lookup_user(uid_t uid, int load_env);
+void freeUserCache(void);
+
+void setup_handlers(void(*shutdownHandler)(int));
 
 #endif

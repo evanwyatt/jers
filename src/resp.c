@@ -456,6 +456,7 @@ int respReadFree(resp_read_t * r) {
 	if (r->args) {
 		_respFreeItem(r->args);
 		free(r->args);
+		r->args = NULL;
 	}
 
 	return RESP_OK;

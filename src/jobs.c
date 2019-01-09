@@ -61,24 +61,35 @@ jobid_t getNextJobID(void) {
 
 /* Free a struct job entry, freeing all associated memory */
 
-void free_job (struct job * j) {
+void freeJob (struct job * j) {
 
-	if (j->tags) {
-		char ** tag = j->tags;
+	for (int i = 0; i < j->tag_count; i++)
+		free(j->tags[i]);
 
-		while (*tag) {
-			free(*tag);
-			tag++;
-		}
+	free(j->tags);
 
-		free(j->tags);
-	}
+	for (int i = 0; i < j->argc; i++)
+		free(j->argv[i]);
+
+	free(j->argv);
+
+	for (int i = 0; i < j->env_count; i++)
+		free(j->envs[i]);
+
+	free(j->envs);
 
 	if (j->res_count) {
 		free(j->req_resources);
 	}
 
-	free(j->argv);
+	free(j->jobname);
+	free(j->shell);
+	free(j->pre_cmd);
+	free(j->post_cmd);
+	free(j->wrapper);
+	free(j->stdout);
+	free(j->stderr);
+
 	free(j);
 }
 

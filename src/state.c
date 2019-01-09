@@ -481,8 +481,6 @@ void stateSaveToDiskChild(struct job ** jobs, struct queue ** queues, struct res
 	for (i = 0; i < server.flush_queues; i++)
 		stateSaveQueue(queues[i]);
 
-print_msg(JERS_LOG_DEBUG, "Background save jobs: %d", server.flush_jobs);
-
 	for (i = 0; i < server.flush_jobs; i++)
 		stateSaveJob(jobs[i]);
 }
@@ -986,6 +984,7 @@ int stateLoadQueue(char * fileName) {
 		error_die("Error reading queue file %s: %s\n", fileName, strerror(errno));
 	}
 
+	fclose(f);
 	free(line);
 
 	if (q->host == NULL) {

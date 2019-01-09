@@ -26,6 +26,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -110,7 +111,10 @@ int jersInitAPI(char * custom_config) {
 
 void jersFinish(void) {
 	close(fd);
+	free_message(&msg, NULL);
+	memset(&msg, 0, sizeof(msg)); //HACK
 	buffFree(&response);
+
 	initalised = 0;
 	fd = -1;
 }
@@ -1129,8 +1133,10 @@ int jersGetStats(jersStats * s) {
 
 	free(request);
 
-	if (readResponse())
+	if (readResponse()) {
+		free_message(&msg, NULL);
 		return 1;
+	}
 
 	if (msg.error) {
 		setError(JERS_INVALID, "Error getting stats");
@@ -1158,7 +1164,7 @@ int jersGetStats(jersStats * s) {
 		}
 	}
 
-	free_message(&msg, &response);
+	free_message(&msg, NULL);
 
 	return 0;
 }

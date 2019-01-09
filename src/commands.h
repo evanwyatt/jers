@@ -41,7 +41,7 @@ typedef struct command {
 	enum command_type type;
 	int (*cmd_func)(client * c, void *);
 	void * (*deserialize_func)(msg_t *);
-	void * (*free_func)(void *);
+	void (*free_func)(void *);
 } command_t;
 
 int command_stats(client *, void *);
@@ -76,6 +76,22 @@ void* deserialize_add_resource(msg_t *);
 void* deserialize_get_resource(msg_t *);
 void* deserialize_mod_resource(msg_t *);
 void* deserialize_del_resource(msg_t *);
+
+void free_add_job(void *);
+void free_get_job(void *);
+void free_mod_job(void *);
+void free_del_job(void *);
+void free_sig_job(void *);
+
+void free_add_queue(void *);
+void free_get_queue(void *);
+void free_mod_queue(void *);
+void free_del_queue(void *);
+
+void free_add_resource(void *);
+void free_get_resource(void *);
+void free_mod_resource(void *);
+void free_del_resource(void *);
 
 /* Magic values */
 

@@ -35,8 +35,12 @@
 #include <fcntl.h>
 #include <stdarg.h>
 
-#include <server.h>
-#include <jers.h>
+#include "server.h"
+#include "jers.h"
+#include "logging.h"
+
+char * server_log = "jersd";
+int server_log_mode = JERS_LOG_DEBUG;
 
 struct jersServer server;
 
@@ -92,28 +96,58 @@ void removeAgent(agent * a) {
 	}
 }
 
+void serverShutdown(void) {
+	/* Close our sockets */
+	close(server.client_connection.socket);
+	close(server.agent_connection.socket);
 
-void print_msg(int level, const char * format, ...) {
-	va_list args;
-	char logMessage[1024];
+	unlink(server.socket_path);
+	unlink(server.agent_socket_path);
 
-	if (level < server.logging_mode)
-		return;
+	/* Free jobs */
+	struct job * j, *job_tmp;
+	HASH_ITER(hh, server.jobTable, j, job_tmp) {
+		HASH_DEL(server.jobTable, j);
+		freeJob(j);
+	}
 
-	va_start(args, format);
-	vsnprintf(logMessage, sizeof(logMessage), format, args);
-	va_end(args);
+	/* Free resources */
+	struct resource * r, *res_tmp;
+	HASH_ITER(hh, server.resTable, r, res_tmp) {
+		HASH_DEL(server.resTable, r);
+		freeRes(r);
+	}
 
-	_logMessage("jersd", level, logMessage);
+	/* Free queues */
+	struct queue * q, *queue_tmp;
+	HASH_ITER(hh, server.queueTable, q, queue_tmp) {
+		HASH_DEL(server.queueTable, q);
+		freeQueue(q);
+	}
+
+	/* User cache */
+	freeUserCache();
+
+	/* Scheduling candidate pool */
+	free(server.candidate_pool);
+}
+
+void shutdownHandler(int signum) {
+	if (signum == SIGINT || signum == SIGTERM)
+		server.shutdown = 1;
 }
 
 int main (int argc, char * argv[]) {
+
+	setup_handlers(shutdownHandler);
 
 	if (parseOpts(argc, argv)) {
 		error_die("Argument parsing failed\n");
 	}
 
 	loadConfig(server.config_file);
+
+	server_log_mode = server.logging_mode;
 
 	print_msg(JERS_LOG_INFO, "jersd v%s starting.", JERS_VERSION);
 
@@ -157,20 +191,20 @@ int main (int argc, char * argv[]) {
 
 	server.candidate_recalc = 1;
 
-	print_msg(JERS_LOG_INFO, "*********************************************");
-	print_msg(JERS_LOG_INFO, "* JERSD entering main loop...");
-	print_msg(JERS_LOG_INFO, "*********************************************");
+	print_msg(JERS_LOG_INFO, "* JERSD v%s entering main loop...\n", JERS_VERSION);
 
 	/* Away we go. We will sit in this loop until a shutdown is requested */
 	while (1) {
 
-		if (server.shutdown)
+		if (server.shutdown) {
+			print_msg(JERS_LOG_INFO, "Shutdown requested via signal");
 			break;
+		}
+
 		/* Poll for any events on our sockets */
 		int status = epoll_wait(server.event_fd, events, MAX_EVENTS, server.event_freq);
-		int i;
 
-		for (i = 0; i < status; i++) {
+		for (int i = 0; i < status; i++) {
 			struct epoll_event * e = &events[i];
 
 			/* The socket is readable */
@@ -181,10 +215,14 @@ int main (int argc, char * argv[]) {
 				handleWriteable(e);
 		}
 
+		/* Check for any expired events to check */
 		checkEvents();
 	}
 
-	print_msg(JERS_LOG_INFO, "Shutting down.\n");
+	print_msg(JERS_LOG_INFO, "Exited main loop - Shutting down.\n");
+
+	free(events);
+	serverShutdown();
 
 	/* Lets do a final flush of our state file*/
 	if (server.state_fd >= 0) {

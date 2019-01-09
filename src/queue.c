@@ -124,6 +124,8 @@ int addQueue(struct queue * q, int def, int dirty) {
 		return 2;
 	}
 
+	q->state = JERS_QUEUE_DEFAULT_STATE;
+
 	HASH_ADD_STR(server.queueTable, name, q);
 
 	if (def || server.defaultQueue == NULL) {
@@ -144,6 +146,8 @@ int addQueue(struct queue * q, int def, int dirty) {
 void freeQueue(struct queue * q) {
 	free(q->name);
 	free(q->desc);
+	free(q->host);
+
 	free(q);
 }
 

@@ -46,6 +46,7 @@
 #include <sys/prctl.h>
 
 #include "jers.h"
+#include "logging.h"
 #include "common.h"
 #include "resp.h"
 #include "buffer.h"
@@ -55,8 +56,10 @@
 #define INITIAL_SIZE 0x1000
 #define REQUESTS_THRESHOLD 0x010000
 
-int shutdownRequested = 0;
-int loggingMode = JERS_LOG_DEBUG;
+char * server_log = "jers_agentd";
+int server_log_mode = JERS_LOG_DEBUG;
+
+volatile sig_atomic_t shutdown_requested = 0;
 
 struct jobCompletion {
 	int exitcode;
@@ -120,20 +123,6 @@ struct jersJobSpawn {
 };
 
 struct agent agent;
-
-void print_msg(int level, const char * format, ...) {
-	va_list args;
-	char logMessage[1024];
-
-	if (level < loggingMode)
-		return;
-
-	va_start(args, format);
-	vsnprintf(logMessage, sizeof(logMessage), format, args);
-	va_end(args);
-
-	_logMessage("jers_agent", level, logMessage);
-}
 
 /* Open 'file', moving any existing file to 'file_YYYYMMDDhhmmss_nnn'
  * It will try 10 times over 10 seconds to create the logfile
@@ -434,20 +423,6 @@ void jersRunJob(struct jersJobSpawn * j, int socket) {
 		}
 
 		argv[k++] = NULL;
-
-		printf("======= TEMP =======\n");
-		int i;
-		for (i = 0; i < j->argc; i++)
-			printf("ARGV[%d] = %s\n", i, j->argv[i]);
-
-		printf("===== ENV VARS =======\n");
-		i = 0;
-		while(j->u->users_env && j->u->users_env[i]) {
-			printf("[%d]=%s\n",i, j->u->users_env[i]);
-			i++;
-		}
-
-		printf("===============================\n");
 
 		execvpe(argv[0], argv, j->u->users_env);
 		perror("execv failed for child");
@@ -772,6 +747,11 @@ struct runningJob * spawn_job(struct jersJobSpawn * j) {
 		return NULL;
 	}
 
+	/* Need to flush stdout/stderr otherwise the child may get
+	 * a copy of the buffered output from the parent */
+	fflush(stdout);
+	fflush(stderr);
+
 	pid_t pid = fork();
 
 	if (pid == -1) {
@@ -1009,8 +989,10 @@ int main (int argc, char * argv[]) {
 	agent.responses_sent = 0;
 
 	while(1) {
-		if (shutdownRequested)
+		if (shutdown_requested) {
+			print_msg(JERS_LOG_INFO, "Shutdown has been requested");
 			break;
+		}
 
 		if (agent.daemon_fd == -1) {
 			if (connectjers() == 0)

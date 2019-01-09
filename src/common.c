@@ -41,12 +41,17 @@
 #include <grp.h>
 #include <errno.h>
 #include <fnmatch.h>
+#include <stdarg.h>
+#include <execinfo.h>
 
 #include <uthash.h>
 
+#include "jers.h"
 #include "common.h"
 
 struct user * user_cache = NULL;
+volatile sig_atomic_t clear_cache = 0;
+
 
 /* Return the time, in milliseconds
  * Note: This is not the real time, and is mainly used
@@ -99,27 +104,6 @@ void timespec_diff(const struct timespec *start, const struct timespec *end, str
 		diff->tv_sec = end->tv_sec - start->tv_sec;
 		diff->tv_nsec = end->tv_nsec - start->tv_nsec;
 	}
-}
-
-void _logMessage(const char * whom, int level, const char * message) {
-	const char * levels[] = {"DEBUG", "INFO", "WARNING", "CRITICAL"};
-	char currentTime[64];
-	struct timespec tp;
-	struct tm * tm;
-	time_t t;
-	int len;
-
-	clock_gettime(CLOCK_REALTIME_COARSE, &tp);
-	t = tp.tv_sec;
-	tm = localtime(&t);
-
-	len = strftime(currentTime, sizeof(currentTime), "%d %b %H:%M:%S", tm);
-	snprintf(currentTime + len, sizeof(currentTime) - len, ".%02d", (int)tp.tv_nsec/10000000);
-
-	fprintf(stdout, "%d-%s %s [%8s] %s", (int)getpid(), whom, currentTime, levels[level], message);
-
-	if (message[strlen(message)-1] != '\n')
-		fputc('\n', stdout);
 }
 
 /* Remove leading and trailing whitespace from a string */
@@ -176,25 +160,25 @@ void lowercasestring(char * str) {
  * Caution - No overflow checking is performed */
 
 static inline char * _int64tostr(char * dest, int64_t num) {
-        if (num <= -10)
-                dest = _int64tostr(dest, num / 10);
+	if (num <= -10)
+			dest = _int64tostr(dest, num / 10);
 
-        *dest++ = '0' - (num % 10);
-        return dest;
+	*dest++ = '0' - (num % 10);
+	return dest;
 }
 
 int int64tostr(char * dest, int64_t num) {
-        char *p = dest;
+	char *p = dest;
 
-        if (num < 0)
-            *p++ = '-';
-        else
-            num = -num;
+	if (num < 0)
+		*p++ = '-';
+	else
+		num = -num;
 
-        p = _int64tostr(p, num);
-        *p = '\0';
+	p = _int64tostr(p, num);
+	*p = '\0';
 
-        return p - dest;
+	return p - dest;
 }
 
 int matches(const char * pattern, const char * string) {
@@ -231,12 +215,13 @@ static int load_users_env(char * username, struct user * u) {
 	if (pid == 0) {
 		char *cmd = NULL;
 
-		asprintf(&cmd, "%s %d", "/usr/local/bin/jers_dump_env", pipefd[1]);
+		asprintf(&cmd, "%s %d", "jers_dump_env", pipefd[1]);
 
 		char * args[] = {"/usr/bin/su", "--login", username, "-c", cmd, NULL};
 		int nullfd = open("/dev/null", O_WRONLY);
 
 		if (nullfd < 0) {
+			fprintf(stderr, "Failed to open /dev/null: %s\n", strerror(errno));
 			_exit(1);
 		}
 
@@ -245,8 +230,9 @@ static int load_users_env(char * username, struct user * u) {
 		dup2(nullfd, STDOUT_FILENO);
 		dup2(nullfd, STDERR_FILENO);
 
-		execv(args[0], args);
+		execvp(args[0], args);
 
+		fprintf(stderr, "Failed to call jers_dump_env: %s\n", strerror(errno));
 		_exit(1);
 	}
 
@@ -315,6 +301,11 @@ struct user * lookup_user(uid_t uid, int load_env) {
 	struct passwd * pw = NULL;
 	int update = 0;
 
+	if (clear_cache) {
+		clear_cache = 0;
+		freeUserCache();
+	}
+
 	if (user_cache) {
 		HASH_FIND_INT(user_cache, &uid, u);
 
@@ -327,16 +318,15 @@ struct user * lookup_user(uid_t uid, int load_env) {
 			update = 1;
 	}
 
-	if (u) {
+	if (u == NULL) {
+		u = calloc(1, sizeof(struct user));
+	} else {
 		free(u->username);
 		free(u->shell);
 		free(u->home_dir);
 		free(u->group_list);
 		free(u->users_env);
 		free(u->users_env_buffer);
-	}
-	else {
-		u = calloc(1, sizeof(struct user));
 	}
 
 	pw = getpwuid(uid);
@@ -390,4 +380,90 @@ struct user * lookup_user(uid_t uid, int load_env) {
 		HASH_ADD_INT(user_cache, uid, u);
 
 	return u;
+}
+
+void freeUserCache(void) {
+	struct user * u, * user_tmp;
+
+	HASH_ITER(hh, user_cache, u, user_tmp) {
+		free(u->username);
+		free(u->shell);
+		free(u->home_dir);
+		free(u->group_list);
+		free(u->users_env);
+		free(u->users_env_buffer);
+
+		HASH_DEL(user_cache, u);
+
+		free(u);
+	}
+
+	user_cache = NULL;
+}
+
+void handlerSigsegv(int signum, siginfo_t *info, void *context) {
+	void * btrace[100];
+	int btrace_size = 0;
+
+	/* We still use fprintf here, as we are going to crash anyway */
+	fprintf(stderr, "====================================================================\n");
+	fprintf(stderr, " JERS v%s CRASH - Signal '%s' (Signum:%d)\n", JERS_VERSION, strsignal(signum), signum);
+	fprintf(stderr, "====================================================================\n");
+
+	if (signum == SIGSEGV || signum == SIGBUS || signum == SIGILL || signum == SIGFPE || signum == SIGTRAP)
+		fprintf(stderr, "Crash occured accessing memory at address %p\n", info->si_addr);
+
+	if (signum == SIGSEGV) {
+		fprintf(stderr, "SIGSEGV - %s\n", info->si_code == SEGV_MAPERR ? "address not mapped to object" : info->si_code == SEGV_ACCERR ?
+			 "invalid permissions for mapped object" : "????");
+	}
+
+	fprintf(stderr, "\nCurrent Stack:\n\n");
+	btrace_size = backtrace(btrace, 100);
+	backtrace_symbols_fd(btrace, btrace_size, STDERR_FILENO);
+	fprintf(stderr, "====================================================================\n");
+
+	/* Reinstate the default handler and send ourselves
+	 * the same signal so we can produce a core dump */
+	struct sigaction sigact;
+    sigemptyset(&sigact.sa_mask);
+    sigact.sa_flags = SA_NODEFER|SA_RESETHAND;
+    sigact.sa_handler = SIG_DFL;
+	sigaction(signum, &sigact, NULL);
+
+	kill(getpid(), signum);
+}
+
+void clearCacheHandler(int signum) {
+	clear_cache = 1;
+}
+
+void setup_handlers(void(*shutdownHandler)(int)) {
+	struct sigaction sigact;
+
+	/* Wrapup & shutdown signals */
+    sigemptyset(&sigact.sa_mask);
+    sigact.sa_flags = 0;
+    sigact.sa_handler = shutdownHandler;
+
+    sigaction(SIGTERM, &sigact, NULL);
+	sigaction(SIGINT, &sigact, NULL);
+
+	/* Handler for SIGUSR1, which prompts us to drop our cached data */
+    sigemptyset(&sigact.sa_mask);
+    sigact.sa_flags = 0;
+    sigact.sa_handler = clearCacheHandler;
+
+    sigaction(SIGUSR1, &sigact, NULL);
+
+	/* Fatal signals - Display a backtrace if we get these */
+	sigemptyset(&sigact.sa_mask);
+    sigact.sa_flags = SA_NODEFER | SA_RESETHAND | SA_SIGINFO;
+    sigact.sa_sigaction = handlerSigsegv;
+    sigaction(SIGSEGV, &sigact, NULL);
+    sigaction(SIGBUS, &sigact, NULL);
+    sigaction(SIGFPE, &sigact, NULL);
+	sigaction(SIGILL, &sigact, NULL);
+
+	return;
 }

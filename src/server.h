@@ -33,6 +33,7 @@
 #include <sys/types.h>
 #include <limits.h>
 #include <time.h>
+#include <signal.h>
 
 #include <uthash.h>
 
@@ -42,6 +43,7 @@
 #include <buffer.h>
 #include <comms.h>
 #include <fields.h>
+#include <logging.h>
 
 #define UNUSED(x) (void)(x)
 
@@ -190,13 +192,6 @@ struct job {
 	UT_hash_handle hh;
 };
 
-struct event {
-	void (*func)(void);
-	int interval;    // Milliseconds between event triggering
-	int64_t last_fire;
-	struct event * next;
-};
-
 struct jersServer {
 	int state_fd;
 	char * state_dir;
@@ -215,7 +210,8 @@ struct jersServer {
 	int logging_mode;
 	//int logging_fd;;
 
-	int shutdown;
+	/* Flags set by signal handlers */
+	volatile sig_atomic_t shutdown;
 
 	int event_freq;
 
@@ -294,7 +290,7 @@ extern struct jersServer server;
 
 jobid_t getNextJobID(void);
 int addJob(struct job * j, int state, int dirty);
-void freeRes(struct resource * r);
+void freeJob(struct job * j);
 
 int addRes(struct resource * r, int dirty);
 void freeRes(struct resource *r);
@@ -307,17 +303,8 @@ void removeClient(client * c);
 void addAgent(agent * a);
 void removeAgent(agent * a);
 
-void print_msg(int level, const char * format, ...);
-
-
-//config.c
 void loadConfig(char * config);
 
-//error.c
-void error_die(char * msg, ...);
-char * get_pend_reason(int reason);
-
-//state.c
 int stateSaveCmd(uid_t uid, char * cmd, int64_t field_count, field fields[], int64_t extra_field_count, field extra_fields[]);
 void stateInit(void);
 int stateLoadJobs(void);
@@ -333,14 +320,12 @@ int stateDelJob(struct job * j);
 
 void changeJobState(struct job * j, int new_state, int dirty);
 
-//auth.c
 int ValidateUserAction(uid_t uid, int action);
 
 int runCommand(client * c);
 int runAgentCommand(agent * a);
 
 void checkEvents(void);
-
 
 void initEvents(void);
 

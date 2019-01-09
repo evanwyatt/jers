@@ -30,6 +30,13 @@
 #include <server.h>
 #include <unistd.h>
 
+struct event {
+	void (*func)(void);
+	int interval;    // Milliseconds between event triggering
+	int64_t last_fire;
+	struct event * next;
+};
+
 struct event * eventList = NULL;
 
 void registerEvent(void(*func)(void), int interval) {
