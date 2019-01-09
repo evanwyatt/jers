@@ -55,6 +55,7 @@
 #define MAX_EVENTS 1024
 #define INITIAL_SIZE 0x1000
 #define REQUESTS_THRESHOLD 0x010000
+#define DEFAULT_DIR "/tmp"
 
 char * server_log = "jers_agentd";
 int server_log_mode = JERS_LOG_DEBUG;
@@ -332,9 +333,15 @@ void jersRunJob(struct jersJobSpawn * j, int socket) {
 	}
 
 	/* Start off in the users home directory */
+
 	if (chdir(j->u->home_dir) != 0) {
-		fprintf(stderr, "Failed to change directory to %s: %s\n", j->u->home_dir, strerror(errno));
-		_exit(1);
+		dprintf(stderr_fd, "Warning: Failed to change directory to %s: %s\n", j->u->home_dir, strerror(errno));
+		dprintf(stderr_fd, "Attempting to use %s\n", DEFAULT_DIR);
+
+		if (chdir(DEFAULT_DIR) != 0) {
+			dprintf(stderr_fd, "Error: Failed to change directory to %s: %s\n", DEFAULT_DIR, strerror(errno));
+			_exit(1);
+		}
 	}
 
 	clock_gettime(CLOCK_REALTIME_COARSE, &start);
@@ -343,7 +350,7 @@ void jersRunJob(struct jersJobSpawn * j, int socket) {
 	snprintf(new_proc_name, sizeof(new_proc_name), "jers_%d", j->jobid);
 
 	if (prctl(PR_SET_NAME, new_proc_name, NULL, NULL, NULL) != 0)
-		fprintf(stderr, "Failed to set process name for new job %d: %s\n", j->jobid, strerror(errno));
+		dprintf(stderr_fd, "Warning: Failed to set process name for new job %d: %s\n", j->jobid, strerror(errno));
 
 	/* Fork & exec the job */
 	jobPid = fork();
