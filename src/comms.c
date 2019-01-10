@@ -226,6 +226,19 @@ void handleClientConnection(void) {
 		error_die("Failed to malloc memory for client: %s\n", strerror(errno));
 	}
 
+	/* Get the client UID off the socket */
+	struct ucred creds;
+	socklen_t len = sizeof(struct ucred);
+
+	if (getsockopt(client_fd, SOL_SOCKET, SO_PEERCRED, &creds, &len) == -1) {
+		print_msg(JERS_LOG_WARNING, "Failed to get peercred from client connection: %s", strerror(errno));
+		print_msg(JERS_LOG_WARNING, "Closing connection to client");
+		close(client_fd);
+		free(c);
+		return;
+	}
+
+	c->uid = creds.uid;
 	c->connection.type = CLIENT;
 	c->connection.ptr = c;
 	c->connection.socket = client_fd;
