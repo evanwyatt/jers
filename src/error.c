@@ -53,6 +53,7 @@ void error_die(char * msg, ...) {
 	va_end(args);
 
 	_logMessage("jersd", JERS_LOG_CRITICAL, logMessage);
+	_logMessage("jersd", JERS_LOG_CRITICAL, "**** Server fatal error - exiting ****");
 
 	fflush(stdout);
 	fflush(stderr);

@@ -114,21 +114,35 @@ void unescapeString(char * string) {
  *   The state journals (journal.yymmdd) are written to when commands are received
  *   These commands are then applied to the job/queue/res files as needed */
 
-int openStateFile(void) {
-	char state_file[PATH_MAX];
+int openStateFile(time_t now) {
+	char * state_file = NULL;
 	int fd;
 	int flags = O_CREAT | O_RDWR;
+	int mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP;
+	struct tm * tm = NULL;
+
+	tm = localtime(&now);
+
+	if (tm == NULL)
+		error_die("Failed to get time for state file name: %s", strerror(errno));
 
 	if (!server.state_dir)
 		error_die("No state directory specified");
 
-	server.state_count++;
-	snprintf(state_file, sizeof(state_file), "%s/journal.%d", server.state_dir, server.state_count); //todo: error checking
-	fd = open(state_file, flags, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+	asprintf(&state_file, "%s/journal.%d%02d%02d", server.state_dir, 1900 + tm->tm_year, tm->tm_mon + 1, tm->tm_mday);
 
-	if (fd == -1) {
-		error_die("Failed to open state file: %s", strerror(errno));
-	}
+	if (state_file == NULL)
+		error_die("Failed to open new state file: %s", strerror(errno));
+
+	if ((fd = open(state_file, flags, mode)) < 0)
+		error_die("Failed to open state file %s: %s", state_file, strerror(errno));
+
+	/* Seek to the end of the file to append to it.
+	 * We don't open the file with O_APPEND as we can't do a offset write (pwrite) */
+	if (lseek(fd, 0, SEEK_END) == -1)
+		error_die("Failed to seek to the end of state file %s: %s", state_file, strerror(errno));
+
+	free(state_file);
 
 	return fd;
 }
@@ -200,6 +214,17 @@ static inline void _write_field(const char * name, field * f, int array_index) {
 	_writev_state(iov, 4);
 }
 
+time_t getRollOver(time_t now) {
+	time_t result;
+	struct tm * tm = localtime(&now);
+
+	/* Clear out everything but the year/month/day */
+	tm->tm_sec = tm->tm_min = tm->tm_hour = 0;
+	tm->tm_mday++; //mktime will normalize the result. ie. 40 October is changed into 9 November
+
+	return mktime(tm);
+}
+
 /* Function to save the current command to disk (& flush it, if in sync mode)
  * Only 'update' command are written, ie command that modify jobs/queues or resources.
  * 
@@ -212,18 +237,31 @@ static inline void _write_field(const char * name, field * f, int array_index) {
  *  1544430918.333\t1001\tADD_JOB\tJOBID=12345\tNAME=JOB_1\tARGS[0]=Argument\\twith\\ttabs\n
  *
  * Note: There is a space at the start of line, this space will have a '*' character written
- *       to this position when these transaction have been commited to disk as the job/queue/resource state files */
+ *       to this position when these transaction have been commited to disk as the job/queue/resource state files
+ *       A '$' will be written to this position as a 'End of journal' marker when rotating the journal files */
 
 int stateSaveCmd(uid_t uid, char * cmd, int64_t field_count, field fields[], int64_t extra_field_count, field extra_fields[]) {
 	off_t start_offset;
 	struct timespec now;
 	int64_t i;
 	char name[64];
+	static time_t next_rollover = 0;
 
 	clock_gettime(CLOCK_REALTIME_COARSE, &now);
 	
-	if (server.state_fd == -1) {
-		server.state_fd = openStateFile();
+	if (now.tv_sec >= next_rollover) {
+		/* Write the End of journal marker and close the current file */
+		if (server.state_fd > 0) {
+			write(server.state_fd, "$\n", 2);
+			fdatasync(server.state_fd);
+			close(server.state_fd);
+		}
+
+		/* Work out the next rollover */
+		if ((next_rollover = getRollOver(now.tv_sec)) < 0)
+			error_die("Failed to determine next journal rollover time");
+
+		server.state_fd = openStateFile(now.tv_sec);
 	}
 
 	/* Save the offset of this new record, so we can write the '*' later if needed */
