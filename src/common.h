@@ -26,6 +26,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
 #ifndef __JERS_COMMON_H
 #define __JERS_COMMON_H
 
@@ -33,9 +34,18 @@
 
 #include <uthash.h>
 
+#define PERM_READ   0x01
+#define PERM_WRITE  0x02
+#define PERM_SETUID 0x04
+#define PERM_QUEUE  0x08
+
+#define PERM_NOTUSED 0x8000
+
 struct user {
 	uid_t uid;
 	gid_t gid;
+
+	int permissions;
 
 	char * username;
 	char * shell;

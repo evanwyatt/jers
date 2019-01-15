@@ -82,7 +82,7 @@ void * deserialize_add_job(msg_t * t) {
 	jersJobAdd * s = calloc(sizeof(jersJobAdd), 1);
 	int i;
 
-	s->uid = -1; //TODO: == clients uid
+	s->uid = -1; //TODO: Don't use -1
 	s->priority = JERS_JOB_DEFAULT_PRIORITY;
 
 	for (i = 0; i < t->items[0].field_count; i++) {
@@ -235,9 +235,6 @@ void serialize_jersJob(resp_t * r, struct job * j, int fields) {
 	if (fields == 0 || fields & JERS_RET_ARGS)
 		addStringArrayField(r, ARGS, j->argc, j->argv);
 
-	if (j->comment && (fields == 0 || fields & JERS_RET_COMMENT))
-		addStringField(r, COMMENT, j->comment);	
-
 	if (j->stdout && (fields == 0 || fields & JERS_RET_STDOUT))
 		addStringField(r, STDOUT, j->stdout);
 
@@ -305,9 +302,21 @@ int command_add_job(client * c, void * args) {
 		free(s->queue);
 	}
 
+	if (s->uid < 0) //TODO: Don't use -1
+		s->uid = c->uid;
+
 	if (s->uid == 0) {
 		appendError(c, "-BADUSER Jobs not allowed to run as root\n");
 		return -1;
+	}
+
+	/* Validate if the requester is allowed to submit a job
+	 * under another uid */
+	if (c->uid != s->uid) {
+		if (c->user->permissions &PERM_SETUID == 0) {
+			appendError(c, "-NOPERM No setuid permissions\n");
+			return -1;
+		}
 	}
 
 	u = lookup_user(s->uid, 0);

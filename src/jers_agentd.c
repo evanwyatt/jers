@@ -947,7 +947,7 @@ int connectjers(void) {
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_UNIX;
-	strncpy(addr.sun_path, "/var/run/jers/agent.socket", sizeof(addr.sun_path)-1); //TODO: remove hardcoded path
+	strncpy(addr.sun_path, "/run/jers/agent.sock", sizeof(addr.sun_path)-1); //TODO: remove hardcoded path
 
 	if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
 		print_msg(JERS_LOG_WARNING, "Failed to connect to JERS daemon: %s", strerror(errno));

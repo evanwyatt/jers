@@ -376,6 +376,7 @@ struct user * lookup_user(uid_t uid, int load_env) {
 	u->username = strdup(pw->pw_name);
 	u->shell = strdup(pw->pw_shell);
 	u->home_dir = strdup(pw->pw_dir);
+	u->permissions = -1;
 
 	if (!update)
 		HASH_ADD_INT(user_cache, uid, u);

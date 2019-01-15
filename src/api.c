@@ -77,7 +77,7 @@ static int customInit(char * custom_config) {
 }
 
 static int defaultInit(void) {
-	socket_path = "/var/run/jers/jers.socket";
+	socket_path = "/run/jers/jers.sock";
 	return 0;
 }
 

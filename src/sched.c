@@ -179,7 +179,7 @@ void checkJobs(void) {
 	struct job * j;
 
 	/* Don't need to do anything if we are at maximum capacity */
-	if (server.stats.jobs.running >= server.max_run_jobs)
+	if (server.max_run_jobs != UNLIMITED_JOBS && server.stats.jobs.running >= server.max_run_jobs)
 		return;
 
 	if (server.candidate_recalc)
@@ -187,8 +187,10 @@ void checkJobs(void) {
 
 	jobs_to_start = server.candidate_pool_jobs;
 
-	if (jobs_to_start > server.max_run_jobs - server.stats.jobs.running)
+	if (server.max_run_jobs != UNLIMITED_JOBS &&
+		jobs_to_start > server.max_run_jobs - server.stats.jobs.running) {
 		jobs_to_start = server.max_run_jobs - server.stats.jobs.running;
+	}
 
 	for (i = 0; i < server.candidate_pool_jobs; i++) {
 		checked++;
@@ -203,7 +205,7 @@ void checkJobs(void) {
 
 		j->pend_reason = 0;
 
-		if (server.stats.jobs.running + server.stats.jobs.start_pending > server.max_run_jobs) {
+		if (server.max_run_jobs != UNLIMITED_JOBS && server.stats.jobs.running + server.stats.jobs.start_pending > server.max_run_jobs) {
 			j->pend_reason = PEND_REASON_SYSTEMFULL;
 			continue;
 		}

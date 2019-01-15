@@ -26,10 +26,53 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
 #include <unistd.h>
 #include <sys/types.h>
 
-int ValidateUserAction(uid_t uid, short action) {
-	//TODO: User security.
+#include "server.h"
+#include "common.h"
+#include "logging.h"
+
+/* Load a users permissions based on groups in the config file */
+static void loadPermissions(struct user * u) {
+	u->permissions = 0;
+
+	for (int i = 0; i < u->group_count; i++) {
+		gid_t g = u->group_list[i];
+
+		if (g == server.permissions.read)
+			u->permissions |= PERM_READ;
+		if (g == server.permissions.write)
+			u->permissions |= PERM_WRITE;
+		if (g == server.permissions.setuid)
+			u->permissions |= PERM_SETUID;
+		if (g == server.permissions.queue)
+			u->permissions |= PERM_QUEUE;
+	}
+}
+
+/* Lookup the user, checking if they have the requested permissions.
+ * Returns:
+ * 0 = Authorized
+ * Non-zero = not authorized */
+
+int validateUserAction(client * c, int required_perm) {
+	if (c->uid == 0)
+		return 0;
+
+	c->user = lookup_user(c->uid, 0);
+
+	if (c->user == NULL) {
+		print_msg(JERS_LOG_WARNING, "Failed to find user uid %ld for permissions lookup", c->uid);
+		return 1;
+	}
+
+	if (c->user->permissions == -1)
+		loadPermissions(c->user);
+
+	if ((c->user->permissions &required_perm) != required_perm)
+		return 1;
+
 	return 0;
 }

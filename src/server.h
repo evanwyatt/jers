@@ -47,6 +47,8 @@
 
 #define UNUSED(x) (void)(x)
 
+#define UNLIMITED_JOBS -1
+
 /* Configuration defaults */
 
 #define DEFAULT_CONFIG_FILE "/etc/jers/jers.conf"
@@ -57,7 +59,7 @@
 #define DEFAULT_CONFIG_EVENTFREQ 10
 #define DEFAULT_CONFIG_SCHEDFREQ 25
 #define DEFAULT_CONFIG_SCHEDMAX 250
-#define DEFAULT_CONFIG_MAXJOBS  0
+#define DEFAULT_CONFIG_MAXJOBS UNLIMITED_JOBS
 #define DEFAULT_CONFIG_MAXCLEAN 50
 #define DEFAULT_CONFIG_HIGHJOBID 9999999
 #define DEFAULT_CONFIG_SOCKETPATH "/var/run/jers/jers.socket"
@@ -66,12 +68,12 @@
 #define DEFAULT_CONFIG_FLUSHDEFERMS 1000
 
 enum job_pending_reasons {
-		PEND_REASON_QUEUESTOPPED = 1,
-		PEND_REASON_QUEUEFULL,
-		PEND_REASON_SYSTEMFULL,
-		PEND_REASON_WAITINGSTART,
-		PEND_REASON_WAITINGRES,
-		PEND_REASON_NOAGENT,
+	PEND_REASON_QUEUESTOPPED = 1,
+	PEND_REASON_QUEUEFULL,
+	PEND_REASON_SYSTEMFULL,
+	PEND_REASON_WAITINGSTART,
+	PEND_REASON_WAITINGRES,
+	PEND_REASON_NOAGENT,
 };
 
 typedef struct _client {
@@ -84,6 +86,7 @@ typedef struct _client {
 	size_t response_sent;
 
 	uid_t uid;
+	struct user * user;
 
 	struct _client * next;
 	struct _client * prev;
@@ -243,6 +246,14 @@ struct jersServer {
 		} total;
 	} stats;
 
+	/* Describes the groups required to run commands */
+	struct {
+		gid_t read;
+		gid_t write;
+		gid_t setuid;
+		gid_t queue;
+	} permissions;
+
 	int candidate_recalc;
 
 	int64_t candidate_pool_size;
@@ -323,7 +334,7 @@ int stateDelJob(struct job * j);
 
 void changeJobState(struct job * j, int new_state, int dirty);
 
-int ValidateUserAction(uid_t uid, int action);
+int validateUserAction(client * c, int action);
 
 int runCommand(client * c);
 int runAgentCommand(agent * a);

@@ -41,20 +41,20 @@ void runSimpleCommand(client * c);
 void runComplexCommand(client * c);
 
 command_t commands[] = {
-	{"ADD_JOB",      CMD_WRITE, command_add_job,      deserialize_add_job, free_add_job},
-	{"GET_JOB",      CMD_READ,  command_get_job,      deserialize_get_job, free_get_job},
-	{"MOD_JOB",      CMD_WRITE, command_mod_job,      deserialize_mod_job, free_mod_job},
-	{"DEL_JOB",      CMD_WRITE, command_del_job,      deserialize_del_job, free_del_job},
-	{"SIG_JOB",      CMD_WRITE, command_sig_job,      deserialize_sig_job, free_sig_job},
-	{"ADD_QUEUE",    CMD_WRITE, command_add_queue,    deserialize_add_queue, free_add_queue},
-	{"GET_QUEUE",    CMD_READ,  command_get_queue,    deserialize_get_queue, free_get_queue},
-	{"MOD_QUEUE",    CMD_WRITE, command_mod_queue,    deserialize_mod_queue, free_mod_queue},
-	{"DEL_QUEUE",    CMD_WRITE, command_del_queue,    deserialize_del_queue, free_del_queue},
-	{"ADD_RESOURCE", CMD_WRITE, command_add_resource, deserialize_add_resource, free_add_resource},
-	{"GET_RESOURCE", CMD_READ,  command_get_resource, deserialize_get_resource, free_get_resource},
-	{"MOD_RESOURCE", CMD_WRITE, command_mod_resource, deserialize_mod_resource, free_mod_resource},
-	{"DEL_RESOURCE", CMD_WRITE, command_del_resource, deserialize_del_resource, free_del_resource},
-	{"STATS",        CMD_READ,  command_stats,        NULL, NULL},
+	{"ADD_JOB",      PERM_WRITE, command_add_job,      deserialize_add_job, free_add_job},
+	{"GET_JOB",      PERM_READ,  command_get_job,      deserialize_get_job, free_get_job},
+	{"MOD_JOB",      PERM_WRITE, command_mod_job,      deserialize_mod_job, free_mod_job},
+	{"DEL_JOB",      PERM_WRITE, command_del_job,      deserialize_del_job, free_del_job},
+	{"SIG_JOB",      PERM_WRITE, command_sig_job,      deserialize_sig_job, free_sig_job},
+	{"ADD_QUEUE",    PERM_WRITE|PERM_QUEUE, command_add_queue,    deserialize_add_queue, free_add_queue},
+	{"GET_QUEUE",    PERM_READ,  command_get_queue,    deserialize_get_queue, free_get_queue},
+	{"MOD_QUEUE",    PERM_WRITE|PERM_QUEUE, command_mod_queue,    deserialize_mod_queue, free_mod_queue},
+	{"DEL_QUEUE",    PERM_WRITE|PERM_QUEUE, command_del_queue,    deserialize_del_queue, free_del_queue},
+	{"ADD_RESOURCE", PERM_WRITE, command_add_resource, deserialize_add_resource, free_add_resource},
+	{"GET_RESOURCE", PERM_READ,  command_get_resource, deserialize_get_resource, free_get_resource},
+	{"MOD_RESOURCE", PERM_WRITE, command_mod_resource, deserialize_mod_resource, free_mod_resource},
+	{"DEL_RESOURCE", PERM_WRITE, command_del_resource, deserialize_del_resource, free_del_resource},
+	{"STATS",        PERM_READ,  command_stats,        NULL, NULL},
 };
 
 /* Append to or allocate a new reponse buffer */
@@ -121,19 +121,25 @@ void runComplexCommand(client * c) {
 		if (strcmp(c->msg.command, commands[i].name) == 0) {
 			void * args = NULL;
 
+			if (validateUserAction(c, commands[i].perm) != 0) {
+				appendError(c, "-NOPERM Permission denied\n");
+				print_msg(JERS_LOG_DEBUG, "User %d not authorized to run %s", c->uid, c->msg.command);
+				break;
+			}
+
 			if (commands[i].deserialize_func) {
 				args = commands[i].deserialize_func(&c->msg);
 
 				if (!args) {
 					fprintf(stderr, "Failed to deserialize %s args\n", c->msg.command);
-					return;
+					break;
 				}
 			}
 
 			status = commands[i].cmd_func(c, args);
 
 			/* Write to the journal if the transaction was an update and successful */
-			if (commands[i].type == CMD_WRITE && status == 0)
+			if (commands[i].perm &PERM_WRITE && status == 0)
 				stateSaveCmd(c->uid, c->msg.command, c->msg.items[0].field_count, c->msg.items[0].fields, c->msg.out_field_count, c->msg.out_fields);
 
 			if (commands[i].free_func)
