@@ -63,8 +63,10 @@ jobid_t getNextJobID(void) {
 
 void freeJob (struct job * j) {
 
-	for (int i = 0; i < j->tag_count; i++)
-		free(j->tags[i]);
+	for (int i = 0; i < j->tag_count; i++) {
+		free(j->tags[i].key);
+		free(j->tags[i].value);
+	}
 
 	free(j->tags);
 

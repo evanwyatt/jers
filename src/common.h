@@ -68,6 +68,8 @@ struct user {
 
 int64_t getTimeMS(void);
 
+char * escapeString(const char * string, size_t * length);
+void unescapeString(char * string);
 char * removeWhitespace(char * str);
 void uppercasestring(char * str);
 void lowercasestring(char * str);

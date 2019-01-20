@@ -45,71 +45,6 @@
 
 #define STATE_DIV_FACTOR 10000
 
-/* Escape / unescape newlines, tabs and backslash characters
- *  - A static buffer is used to hold the escaped string,
- *    so needs to copied to if required */
-
-char * escapeString(const char * string, size_t * length) {
-	static char * escaped = NULL;
-	static size_t escaped_size = 0;
-	size_t string_length = strlen(string);
-	const char * temp = string;
-	char * dest;
-
-	/* Assume we have to escape everything */
-	if (escaped_size <= string_length * 2 ) {
-		escaped_size = string_length *2;
-		escaped = realloc(escaped, escaped_size);
-	}
-
-	dest = escaped;
-
-	while (*temp != '\0') {
-		if (*temp == '\\') {
-			*dest++ = '\\';
-			*dest++ = '\\';
-		} else if (*temp == '\n') {
-			*dest++ = '\\';
-			*dest++ = 'n';
-		} else if (*temp == '\t') {
-			*dest++ = '\\';
-			*dest++ = 't';
-		} else {
-			*dest++ = *temp;
-		}
-
-		temp++;
-	}
-
-	*dest = '\0';
-
-	if (length)
-		*length = dest - escaped;
-
-	return escaped;
-}
-
-void unescapeString(char * string) {
-	char * temp = string;
-
-	while (*temp != '\0') {
-		if (*temp != '\\') {
-			temp++;
-			continue;
-		}
-
-		if (*(temp + 1) == 'n')
-			*temp = '\n';
-		else if (*(temp + 1) == '\\')
-			*temp = '\\';
-		else if (*(temp + 1) == 't')
-			*temp = '\t';
-
-		memmove(temp + 1, temp + 2, strlen(temp + 2) + 1);
-		temp+=2;
-	}
-}
-
 /* Functions to save/recover the state to/from disk
  *   The state journals (journal.yymmdd) are written to when commands are received
  *   These commands are then applied to the job/queue/res files as needed */
@@ -182,9 +117,12 @@ static inline void _write_field(const char * name, field * f, int array_index) {
 		case RESP_TYPE_SIMPLESTRING:
 		case RESP_TYPE_SIMPLEERROR:
 		case RESP_TYPE_ARRAY:
+		case RESP_TYPE_MAP:
 
 			if (f->type == RESP_TYPE_ARRAY)
 				temp = f->value.string_array.strings[array_index];
+			else if (f->type == RESP_TYPE_MAP)
+				temp = f->value.map.keys[array_index].value;
 			else
 				temp = f->value.string;
 
@@ -267,13 +205,19 @@ int stateSaveCmd(uid_t uid, char * cmd, int64_t field_count, field fields[], int
 	/* Save the offset of this new record, so we can write the '*' later if needed */
 	start_offset = lseek(server.state_fd, 0, SEEK_CUR);
 
-	dprintf(server.state_fd, " %ld.%d\t%d\t%s", now.tv_sec, (int)(now.tv_nsec / 1000000), uid, cmd);
+	dprintf(server.state_fd, " %ld.%03d\t%d\t%s", now.tv_sec, (int)(now.tv_nsec / 1000000), uid, cmd);
 
 	for (i = 0; i < field_count; i++) {
 		if (fields[i].type == RESP_TYPE_ARRAY) {
 			int64_t j;
 			for (j = 0; j < fields[i].value.string_array.count; j++) {
 				sprintf(name, "%s[%ld]", fields[i].name, j);
+				_write_field(name, &fields[i], j);
+			}
+		} else if (fields[i].type == RESP_TYPE_MAP) {
+			int64_t j;
+			for (j = 0; j < fields[i].value.map.count; j++) {
+				sprintf(name, "%s[%s]", fields[i].name, fields[i].value.map.keys[j].key);
 				_write_field(name, &fields[i], j);
 			}
 		} else {
@@ -287,6 +231,12 @@ int stateSaveCmd(uid_t uid, char * cmd, int64_t field_count, field fields[], int
 			for (j = 0; j < extra_fields[i].value.string_array.count; j++) {
 				sprintf(name, "%s[%ld]", extra_fields[i].name, j);
 				_write_field(name, &extra_fields[i], j);
+			}
+		} else if (fields[i].type == RESP_TYPE_MAP) {
+			int64_t j;
+			for (j = 0; j < fields[i].value.map.count; j++) {
+				sprintf(name, "%s[%s]", fields[i].name, fields[i].value.map.keys[j].key);
+				_write_field(name, &fields[i], j);
 			}
 		} else {
 			_write_field(NULL, &extra_fields[i], 0);
@@ -408,9 +358,8 @@ int stateSaveJob(struct job * j) {
 
 	if (j->tag_count) {
 		fprintf(f, "TAG_COUNT %d\n", j->tag_count);
-
 		for (i = 0; i < j->tag_count; i++)
-			fprintf(f, "TAG[%d] %s\n", i, j->tags[i]);
+			fprintf(f, "TAG[%s] %s\n", j->tags[i].key, escapeString(j->tags[i].value, NULL));
 	}
 
 	if (j->uid)
@@ -735,7 +684,7 @@ int loadKeyValue (char * line, char **key, char ** value, int * index) {
 		removeWhitespace(l_value);
 	}
 
-	/* Does the key have and index? ie KEY[1] */
+	/* Does the key have an index? ie KEY[1] */
 
 	temp = strchr(l_key, '[');
 
@@ -875,7 +824,17 @@ int stateLoadJob(char * fileName) {
 			j->tag_count = atoi(value);
 			j->tags = malloc (sizeof(char *) * j->tag_count);
 		} else if (strcmp(key, "TAG") == 0) {
-			j->tags[index] = strdup(value);
+			/* A tag itself is a key value pair */
+			char * tag_key = value;
+			char * tag_value = strchr(value, '=');
+			if (tag_value == NULL)
+				error_die("Error loading job %d, TAG[%d] does not contain a value: %s\n", jobid, index, value);
+
+			*tag_value = '\0';
+			tag_value++;
+
+			j->tags[index].key = strdup(tag_key);
+			j->tags[index].value = strdup(tag_value);
 		}else if (strcmp(key, "UID") == 0) {
 			j->uid = atoi(value);
 		} else if (strcmp(key, "NICE") == 0) {

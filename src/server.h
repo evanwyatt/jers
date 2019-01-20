@@ -186,7 +186,7 @@ struct job {
 	time_t finish_time;
 
 	int tag_count;
-	char ** tags;
+	key_val_t * tags;
 
 	int res_count;
 	struct jobResource * req_resources;

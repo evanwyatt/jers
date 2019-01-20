@@ -55,6 +55,7 @@ struct jobResource * convertResourceStrings(int res_count, char ** res_strings) 
 		if (res == NULL) {
 			free(resources);
 			return NULL;
+			
 		}
 
 		resources[i].res = res;
@@ -98,7 +99,7 @@ void * deserialize_add_job(msg_t * t) {
 			case PRECMD   : s->pre_cmd = getStringField(&t->items[0].fields[i]); break;
 			case POSTCMD  : s->post_cmd = getStringField(&t->items[0].fields[i]); break;
 			case DEFERTIME: s->defer_time = getNumberField(&t->items[0].fields[i]); break;
-			case TAGS     : s->tag_count = getStringArrayField(&t->items[0].fields[i], &s->tags); break;
+			case TAGS     : s->tag_count = getStringMapField(&t->items[0].fields[i], (key_val_t **)&s->tags); break;
 			case RESOURCES: s->res_count = getStringArrayField(&t->items[0].fields[i], &s->resources); break;
 			case STDOUT   : s->stdout = getStringField(&t->items[0].fields[i]); break;
 			case STDERR   : s->stderr = getStringField(&t->items[0].fields[i]); break;
@@ -123,7 +124,7 @@ void * deserialize_get_job(msg_t * t) {
 			case JOBNAME  : s->filters.job_name = getStringField(&item->fields[i]); s->filter_fields |= JERS_FILTER_JOBNAME ; break;
 			case QUEUENAME: s->filters.queue_name = getStringField(&item->fields[i]); s->filter_fields |= JERS_FILTER_QUEUE ; break;
 			case STATE    : s->filters.state = getNumberField(&item->fields[i]); s->filter_fields |= JERS_FILTER_STATE ; break;
-			case TAGS     : s->filters.tag_count = getStringArrayField(&item->fields[i], &s->filters.tags); s->filter_fields |= JERS_FILTER_TAGS ; break;
+			case TAGS     : s->filters.tag_count = getStringMapField(&item->fields[i], (key_val_t **)&s->filters.tags); s->filter_fields |= JERS_FILTER_TAGS ; break;
 			case RESOURCES: s->filters.res_count = getStringArrayField(&item->fields[i], &s->filters.resources); s->filter_fields |= JERS_FILTER_RESOURCES ; break;
 			case UID      : s->filters.uid = getNumberField(&item->fields[i]); s->filter_fields |= JERS_FILTER_UID ; break;
 
@@ -162,7 +163,7 @@ void * deserialize_mod_job(msg_t * t) {
 			case RESTART  : jm->restart = getBoolField(&item->fields[i]); break;
 
 			case ENVS     : jm->env_count = getStringArrayField(&item->fields[i], &jm->envs); break;
-			case TAGS     : jm->tag_count = getStringArrayField(&item->fields[i], &jm->tags); break;
+			case TAGS     : jm->tag_count = getStringMapField(&item->fields[i], (key_val_t **)&jm->tags); break;
 			case RESOURCES: jm->res_count = getStringArrayField(&item->fields[i], &jm->resources); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",t->items[0].fields[i].name); break;
@@ -251,7 +252,7 @@ void serialize_jersJob(resp_t * r, struct job * j, int fields) {
 		addIntField(r, FINISHTIME, j->finish_time);
 
 	if (j->tag_count && (fields == 0 || fields & JERS_RET_TAGS))
-		addStringArrayField(r, TAGS, j->tag_count, j->tags);
+		addStringMapField(r, TAGS, j->tag_count, j->tags);
 
 	if (j->shell && (fields == 0 || fields & JERS_RET_SHELL))
 		addStringField(r, SHELL, j->shell);	
@@ -356,7 +357,7 @@ int command_add_job(client * c, void * args) {
 	j->defer_time = s->defer_time;
 	j->priority = s->priority;
 	j->tag_count = s->tag_count;
-	j->tags = s->tags;
+	j->tags = (key_val_t *)s->tags;
 
 	if (resources) {
 		j->res_count = s->res_count;
@@ -490,8 +491,12 @@ int command_get_job(client *c, void * args) {
 				for (i = 0; i < s->filters.tag_count; i++) {
 					int k;
 					for (k = 0; k < j->tag_count; k++) {
-						if (matches(s->filters.tags[i], j->tags[k]) == 0)
-							break;
+						/* Match the tag first */
+						if (strcmp(j->tags[k].key, s->filters.tags[i].key) == 0) {
+							/* Match the value */
+							if (matches(j->tags[k].value, s->filters.tags[i].value) == 0)
+								break;
+						}
 					}
 
 					if (k == j->tag_count) {
@@ -535,12 +540,13 @@ int command_mod_job(client *c, void *args) {
 
 	HASH_FIND_INT(server.jobTable, &mj->jobid, j);
 
-	state = j->state;
-
 	if (j == NULL || j->internal_state &JERS_JOB_FLAG_DELETED) {
 		appendError(c, "-NOJOB Job does not exist\n");
 		return 0;
 	}
+
+	state = j->state;
+	hold = (j->state == JERS_JOB_HOLDING);
 
 	if ((j->state == JERS_JOB_COMPLETED || j->state == JERS_JOB_EXITED) && mj->restart != 1) {
 		appendError(c, "-INVARG Unable to modify a completed job without restart flag\n");
@@ -598,7 +604,7 @@ int command_mod_job(client *c, void *args) {
 
 		dirty = 1;
 	}
-
+ 
 	if (mj->nice != -1) {
 		j->nice = mj->nice;
 
@@ -615,10 +621,10 @@ int command_mod_job(client *c, void *args) {
 
 	if (mj->tag_count) {
 		if (j->tag_count)
-			freeStringArray(j->tag_count, &j->tags);
+			freeStringMap(j->tag_count, &j->tags);
 
 		j->tag_count = mj->tag_count;
-		j->tags = mj->tags;
+		j->tags = (key_val_t *)mj->tags;
 	}
 
 	if (mj->res_count) {
@@ -759,7 +765,7 @@ void free_get_job(void * args) {
 
 	free(jf->filters.job_name);
 	free(jf->filters.queue_name);
-	freeStringArray(jf->filters.tag_count, &jf->filters.tags);
+	freeStringMap(jf->filters.tag_count, (key_val_t **)&jf->filters.tags);
 	freeStringArray(jf->filters.res_count, &jf->filters.resources);
 	free(jf);
 }

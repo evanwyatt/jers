@@ -33,6 +33,11 @@
 #include <buffer.h>
 
 typedef struct {
+	char * key;
+	char * value;
+} key_val_t;
+
+typedef struct {
 	int number;
 	int type;
 	const char * name;
@@ -46,6 +51,11 @@ typedef struct {
 			int64_t count;
 			char ** strings;
 		} string_array;
+
+		struct {
+			int64_t count;
+			key_val_t * keys;
+		} map;
 	} value;
 } field;
 
@@ -129,14 +139,17 @@ int isFieldSet(unsigned char * bitmap, int field_no);
 int setIntField(field * f, int field_no, int64_t value);
 
 void freeStringArray(int count, char *** array);
+void freeStringMap(int count, key_val_t ** keys);
 
 void addIntField(resp_t * r, int field_no, int64_t value);
 void addStringField(resp_t * r, int field_no, char * value);
 void addBoolField(resp_t * r, int field_no, char value);
 void addStringArrayField(resp_t * r, int field_no, int count, char ** strings);
+void addStringMapField(resp_t * r, int field_no, int count, key_val_t * keys);
 
 char * getStringField(field * f);
 int64_t getNumberField(field * f);
 char getBoolField(field *f);
 int64_t getStringArrayField(field *f, char *** array);
+int64_t getStringMapField(field * f, key_val_t ** array);
 #endif

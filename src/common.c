@@ -54,6 +54,79 @@ volatile sig_atomic_t clear_cache = 0;
 volatile sig_atomic_t reopen_logfile = 1;
 
 
+/* Escape / unescape newlines, tabs and backslash characters
+ *  - A static buffer is used to hold the escaped string,
+ *    so it needs to be copied if required */
+
+char * escapeString(const char * string, size_t * length) {
+	static char * escaped = NULL;
+	static size_t escaped_size = 0;
+	size_t string_length = strlen(string);
+	const char * temp = string;
+	char * dest;
+
+	/* Assume we have to escape everything */
+	if (escaped_size <= string_length * 2 ) {
+		escaped_size = string_length *2;
+		escaped = realloc(escaped, escaped_size);
+	}
+
+	dest = escaped;
+
+	while (*temp != '\0') {
+		switch (*temp) {
+			case '\\': 
+				*dest++ = '\\';
+				*dest++ = '\\';
+				break;
+
+			case '\n':
+				*dest++ = '\\';
+				*dest++ = 'n';
+				break;
+
+			case '\t':
+				*dest++ = '\\';
+				*dest++ = 't';
+				break;
+
+			default:
+				*dest++ = *temp;
+				break;
+		}
+
+		temp++;
+	}
+
+	*dest = '\0';
+
+	if (length)
+		*length = dest - escaped;
+
+	return escaped;
+}
+
+void unescapeString(char * string) {
+	char * temp = string;
+
+	while (*temp != '\0') {
+		if (*temp != '\\') {
+			temp++;
+			continue;
+		}
+
+		if (*(temp + 1) == 'n')
+			*temp = '\n';
+		else if (*(temp + 1) == '\\')
+			*temp = '\\';
+		else if (*(temp + 1) == 't')
+			*temp = '\t';
+
+		memmove(temp + 1, temp + 2, strlen(temp + 2) + 1);
+		temp+=2;
+	}
+}
+
 /* Return the time, in milliseconds
  * Note: This is not the real time, and is mainly used
  *       for timed events, where only the duration between

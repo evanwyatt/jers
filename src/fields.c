@@ -49,7 +49,7 @@ field fields[] = {
 	{SUBMITTIME, RESP_TYPE_INT,        "SUBMITTIME"},
 	{STARTTIME,  RESP_TYPE_INT,        "STARTIME"},
 
-	{TAGS,       RESP_TYPE_ARRAY,      "TAGS"},
+	{TAGS,       RESP_TYPE_MAP,        "TAGS"},
 	{STATE,      RESP_TYPE_INT,        "STATE"},
 	{NICE,       RESP_TYPE_INT,        "NICE"},
 	{STDOUT,     RESP_TYPE_BLOBSTRING, "STDOUT"},
@@ -105,6 +105,18 @@ void freeStringArray(int count, char *** array) {
 	return;
 }
 
+void freeStringMap(int count, key_val_t ** keys) {
+	for (int i = 0; i < count; i++) {
+		free((*keys)[i].key);
+		free((*keys)[i].value);
+	}
+
+	free(*keys);
+	*keys = NULL;
+
+	return;
+}
+
 char * getStringField(field *f) {
 	char * ret = strdup(f->value.string ? f->value.string : "");
 	return ret;
@@ -124,11 +136,32 @@ int64_t getStringArrayField(field *f, char *** array) {
 	*array = malloc(sizeof(char *) * f->value.string_array.count);
 
 	for (i = 0; i < f->value.string_array.count; i++) {
-		char * string = f->value.string_array.strings[i];
-		(*array)[i] = strdup(string ? string : "");
+
+		if (f->value.string_array.strings[i])
+			(*array)[i] = strdup(f->value.string_array.strings[i]);
+		else
+			(*array)[i] = NULL;
 	}
 
 	return f->value.string_array.count;
+}
+
+int64_t getStringMapField(field *f, key_val_t ** array) {
+	int64_t i, key_count;
+	key_count = f->value.map.count;
+
+	*array = malloc(sizeof(key_val_t) * key_count);
+
+	for (i = 0; i < key_count; i++) {
+		(*array)[i].key = strdup(f->value.map.keys[i].key);
+
+		if (f->value.map.keys[i].value)
+			(*array)[i].value = strdup(f->value.map.keys[i].value);
+		else
+			(*array)[i].value = NULL;
+	}
+
+	return key_count;
 }
 
 static int fieldtonum(const char * in) {
@@ -237,14 +270,30 @@ static int load_fields(msg_t * msg) {
 
 					msg->items[item].fields[i].value.string_array.strings = malloc(sizeof(char *) * msg->items[item].fields[i].value.string_array.count);
 
-					int j;
-					for (j = 0; j < msg->items[item].fields[i].value.string_array.count; j++) {
+					for (int j = 0; j < msg->items[item].fields[i].value.string_array.count; j++) {
 						rc = respGetBlobString(&msg->reader, &msg->items[item].fields[i].value.string_array.strings[j], NULL);
 
 						if (rc)
 							break;
 					}
 
+					break;
+
+				case RESP_TYPE_MAP:
+					rc = respGetMap(&msg->reader, &msg->items[item].fields[i].value.map.count);
+
+					if (rc)
+						break;
+
+					msg->items[item].fields[i].value.map.keys = malloc(sizeof(key_val_t) * msg->items[item].fields[i].value.map.count);
+
+					for (int j = 0; j <msg->items[item].fields[i].value.map.count; j++) {
+						if ((rc = respGetBlobString(&msg->reader, &msg->items[item].fields[i].value.map.keys[j].key, NULL)))
+							break;
+
+						if ((rc = respGetBlobString(&msg->reader, &msg->items[item].fields[i].value.map.keys[j].value, NULL)))
+							break;
+					}
 					break;
 			}
 
@@ -265,6 +314,8 @@ void free_message(msg_t * msg, buff_t * buff) {
 		for (i = 0; i < msg->items[j].field_count; i++) {
 			if (fields[msg->items[j].fields[i].number].type == RESP_TYPE_ARRAY) {
 				free(msg->items[j].fields[i].value.string_array.strings);
+			} else if (fields[msg->items[j].fields[i].number].type == RESP_TYPE_MAP) {
+				free(msg->items[j].fields[i].value.map.keys);
 			}
 		}
 		free(msg->items[j].fields);
@@ -376,6 +427,18 @@ void addIntField(resp_t * r, int field_no, int64_t value) {
 void addStringField(resp_t * r, int field_no, char * value) {
 	respAddSimpleString(r, fields[field_no].name);
 	respAddBlobString(r, value, value ? strlen(value) : 0);
+}
+
+void addStringMapField(resp_t * r, int field_no, int count, key_val_t * keys) {
+	respAddSimpleString(r, fields[field_no].name);
+	respAddMap(r);
+	
+	for (int i = 0; i < count; i++) {
+		respAddBlobString(r, keys[i].key, strlen(keys[i].key));
+		respAddBlobString(r, keys[i].value, strlen(keys[i].value));
+	}
+
+	respCloseMap(r);
 }
 
 void addBoolField(resp_t * r, int field_no, char value) {

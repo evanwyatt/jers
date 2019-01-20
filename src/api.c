@@ -233,8 +233,10 @@ void jersFreeJobInfo (jersJobInfo * info) {
 
 		free(job->argv);
 
-		for (j = 0; j < job->tag_count; j++)
-			free(job->tags[j]);
+		for (j = 0; j < job->tag_count; j++) {
+			free(job->tags[j].key);
+			free(job->tags[j].value);
+		}
 
 		free(job->tags);
 
@@ -313,7 +315,7 @@ int deserialize_jersJob(msg_item * item, jersJob *j) {
 			case SUBMITTIME: j->submit_time = getNumberField(&item->fields[i]); break;
 			case STARTTIME : j->start_time = getNumberField(&item->fields[i]); break;
 			case FINISHTIME: j->finish_time = getNumberField(&item->fields[i]); break;
-			case TAGS      : j->tag_count = getStringArrayField(&item->fields[i], &j->tags); break;
+			case TAGS      : j->tag_count = getStringMapField(&item->fields[i], (key_val_t **)&j->tags); break;
 			case RESOURCES : j->res_count = getStringArrayField(&item->fields[i], &j->resources); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",item->fields[i].name); break;
@@ -354,7 +356,7 @@ int jersGetJob(jobid_t jobid, jersJobFilter * filter, jersJobInfo * job_info) {
 				addIntField(r, STATE, filter->filters.state);
 
 			if (filter->filter_fields & JERS_FILTER_TAGS)
-				addStringArrayField(r, TAGS, filter->filters.tag_count, filter->filters.tags);
+				addStringMapField(r, TAGS, filter->filters.tag_count, (key_val_t *)filter->filters.tags);
 
 			if (filter->filter_fields & JERS_FILTER_RESOURCES)
 				addStringArrayField(r, RESOURCES, filter->filters.res_count, filter->filters.resources);
@@ -508,7 +510,7 @@ jobid_t jersAddJob(jersJobAdd * j) {
 		addBoolField(r, HOLD, 1);
 
 	if (j->tag_count) {
-		addStringArrayField(r, TAGS, j->tag_count, j->tags);
+		addStringMapField(r, TAGS, j->tag_count, (key_val_t *)j->tags);
 	}
 
 	if (j->res_count) {
@@ -628,7 +630,7 @@ int jersModJob(jersJobMod *j) {
 		addStringArrayField(r, ENVS, j->env_count, j->envs);
 
 	if (j->tag_count)
-		addStringArrayField(r, TAGS, j->tag_count, j->tags);
+		addStringMapField(r, TAGS, j->tag_count, (key_val_t *)j->tags);
 
 	if (j->res_count)
 		addStringArrayField(r, RESOURCES, j->res_count, j->resources);

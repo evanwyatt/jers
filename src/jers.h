@@ -115,6 +115,10 @@ enum jers_error_codes {
 
 void error_die(char * msg, ...);
 
+typedef struct {
+	char * key;
+	char * value;
+} jers_tag_t;
 
 typedef struct jersJobAdd {
 	char * name;
@@ -143,7 +147,7 @@ typedef struct jersJobAdd {
 	char ** envs;
 
 	int64_t tag_count;
-	char ** tags;
+	jers_tag_t * tags;
 
 	int64_t res_count;
 	char ** resources;
@@ -166,7 +170,7 @@ typedef struct jersJobMod {
 	char ** envs;
 
 	int64_t tag_count;
-	char ** tags;
+	jers_tag_t * tags;
 
 	int64_t res_count;
 	char ** resources;
@@ -210,7 +214,7 @@ typedef struct jersJob {
 	time_t finish_time;
 
 	int tag_count;
-	char ** tags;
+	jers_tag_t * tags;
 
 	int res_count;
 	char ** resources;
@@ -234,7 +238,7 @@ typedef struct jersJobFilter {
 
 		int state;
 		int64_t tag_count;
-		char ** tags;
+		jers_tag_t * tags;
 
 		int64_t res_count;
 		char ** resources;
@@ -335,10 +339,10 @@ typedef struct jersQueueDel {
 typedef struct jersStats {
 	struct jobStats current;
 	struct {
-			int64_t submitted;
-			int64_t started;
-			int64_t completed;
-			int64_t exited;
+		int64_t submitted;
+		int64_t started;
+		int64_t completed;
+		int64_t exited;
 	} total;
 } jersStats;
 
@@ -358,6 +362,9 @@ int jersDelJob(jobid_t id);
 int jersRestartJob(jobid_t id);
 int jersSignalJob(jobid_t id, int signo);
 void jersFreeJobInfo (jersJobInfo *info);
+
+int jersSetTag(jobid_t id, char * key, char * value);
+int jersDelTag(jobid_t id, char * key);
 
 int jersAddQueue(jersQueueAdd *q);
 int jersModQueue(jersQueueMod *q);
