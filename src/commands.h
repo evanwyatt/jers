@@ -59,6 +59,9 @@ int command_get_resource(client *, void *);
 int command_mod_resource(client *, void *);
 int command_del_resource(client *, void *);
 
+int command_set_tag(client *, void *);
+int command_del_tag(client *, void *);
+
 void* deserialize_add_job(msg_t *);
 void* deserialize_get_job(msg_t *);
 void* deserialize_mod_job(msg_t *);
@@ -72,6 +75,8 @@ void* deserialize_add_resource(msg_t *);
 void* deserialize_get_resource(msg_t *);
 void* deserialize_mod_resource(msg_t *);
 void* deserialize_del_resource(msg_t *);
+void* deserialize_set_tag(msg_t *);
+void* deserialize_del_tag(msg_t *);
 
 void free_add_job(void *);
 void free_get_job(void *);
@@ -89,6 +94,9 @@ void free_get_resource(void *);
 void free_mod_resource(void *);
 void free_del_resource(void *);
 
+void free_set_tag(void *);
+void free_del_tag(void *);
+
 /* Magic values */
 
 #define JOBADD_MAGIC 0x4a4a414d
@@ -105,3 +113,25 @@ void free_del_resource(void *);
 #define RESGET_MAGIC 0x4a52474d
 #define RESMOD_MAGIC 0x4a524d4d
 #define RESDEL_MAGIC 0x4a52444d
+
+/* Internal command structures */
+
+typedef struct {
+	jobid_t jobid;
+	int signum;
+} jersJobSig;
+
+typedef struct {
+	jobid_t jobid;
+} jersJobDel;
+
+typedef struct {
+	jobid_t jobid;
+	char * key;
+	char * value;
+} jersTagSet;
+
+typedef struct {
+	jobid_t jobid;
+	char * key;
+} jersTagDel;

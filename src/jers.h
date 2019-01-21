@@ -176,15 +176,6 @@ typedef struct jersJobMod {
 	char ** resources;
 } jersJobMod;
 
-typedef struct jersJobDel {
-	jobid_t jobid;
-} jersJobDel;
-
-typedef struct {
-	jobid_t jobid;
-	int signum;
-} jersJobSig;
-
 typedef struct jersJob {
 	jobid_t jobid;
 	char * jobname;

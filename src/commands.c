@@ -54,6 +54,8 @@ command_t commands[] = {
 	{"GET_RESOURCE", PERM_READ,  command_get_resource, deserialize_get_resource, free_get_resource},
 	{"MOD_RESOURCE", PERM_WRITE, command_mod_resource, deserialize_mod_resource, free_mod_resource},
 	{"DEL_RESOURCE", PERM_WRITE, command_del_resource, deserialize_del_resource, free_del_resource},
+	{"SET_TAG",      PERM_WRITE, command_set_tag,      deserialize_set_tag, free_set_tag},
+	{"DEL_TAG",      PERM_WRITE, command_del_tag,      deserialize_del_tag, free_del_tag},
 	{"STATS",        PERM_READ,  command_stats,        NULL, NULL},
 };
 

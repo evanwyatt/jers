@@ -359,7 +359,7 @@ int stateSaveJob(struct job * j) {
 	if (j->tag_count) {
 		fprintf(f, "TAG_COUNT %d\n", j->tag_count);
 		for (i = 0; i < j->tag_count; i++)
-			fprintf(f, "TAG[%s] %s\n", j->tags[i].key, escapeString(j->tags[i].value, NULL));
+			fprintf(f, "TAG[%d] %s\t%s\n", i, j->tags[i].key, escapeString(j->tags[i].value, NULL));
 	}
 
 	if (j->uid)
@@ -661,10 +661,10 @@ int loadKeyValue (char * line, char **key, char ** value, int * index) {
 	/* Remove a trailing newline if present */
 	line[strcspn(line, "\n")] = '\0';
 
-	/* Remove any '#' comments from the line */
-	if ((comment = strchr(line, '#'))) {
-		*comment = '\0';
-	}
+	///* Remove any '#' comments from the line */
+	//if ((comment = strchr(line, '#'))) {
+	//	*comment = '\0';
+	//}
 
 	//removeWhitespace(line);
 
@@ -822,19 +822,21 @@ int stateLoadJob(char * fileName) {
 			j->envs[index] = strdup(value);
 		}else if (strcmp(key, "TAG_COUNT") == 0) {
 			j->tag_count = atoi(value);
-			j->tags = malloc (sizeof(char *) * j->tag_count);
+			j->tags = malloc (sizeof(key_val_t) * j->tag_count);
 		} else if (strcmp(key, "TAG") == 0) {
-			/* A tag itself is a key value pair */
+			/* A tag itself is a key value pair seperated by a tab*/
 			char * tag_key = value;
-			char * tag_value = strchr(value, '=');
-			if (tag_value == NULL)
-				error_die("Error loading job %d, TAG[%d] does not contain a value: %s\n", jobid, index, value);
-
-			*tag_value = '\0';
-			tag_value++;
+			char * tag_value = strchr(value, '\t');
+			if (tag_value != NULL) {
+				*tag_value = '\0';
+				tag_value++;
+				j->tags[index].value = strdup(tag_value);
+			} else {
+				j->tags[index].value = NULL;
+			}
 
 			j->tags[index].key = strdup(tag_key);
-			j->tags[index].value = strdup(tag_value);
+
 		}else if (strcmp(key, "UID") == 0) {
 			j->uid = atoi(value);
 		} else if (strcmp(key, "NICE") == 0) {

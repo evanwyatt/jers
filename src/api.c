@@ -1170,3 +1170,90 @@ int jersGetStats(jersStats * s) {
 
 	return 0;
 }
+
+int jersSetTag(jobid_t id, char * key, char * value) {
+	if (jersInitAPI(NULL)) {
+		setError(JERS_ERROR, NULL);
+		return 1;
+	}
+
+	/* Serialise the request */
+	resp_t * r = respNew();
+
+	respAddArray(r);
+	respAddSimpleString(r, "SET_TAG");
+	respAddInt(r, 1);
+	respAddMap(r);
+
+	addIntField(r, JOBID, id);
+	addStringField(r, TAG_KEY, key);
+
+	if (value)
+		addStringField(r, TAG_VALUE, value);
+
+	respCloseMap(r);
+	respCloseArray(r);
+
+	size_t req_len;
+	char * request = respFinish(r, &req_len);
+
+	if (sendRequest(request, req_len)) {
+		free(request);
+		return 0;
+	}
+
+	free(request);
+
+	if(readResponse())
+		return 0;
+
+	if (msg.error) {
+		setError(JERS_INVALID, msg.error);
+		free_message(&msg, NULL);
+		return 1;
+	}
+
+	return 0;
+}
+
+int jersDelTag(jobid_t id, char * key) {
+	if (jersInitAPI(NULL)) {
+		setError(JERS_ERROR, NULL);
+		return 1;
+	}
+
+	/* Serialise the request */
+	resp_t * r = respNew();
+
+	respAddArray(r);
+	respAddSimpleString(r, "DEL_TAG");
+	respAddInt(r, 1);
+	respAddMap(r);
+
+	addIntField(r, JOBID, id);
+	addStringField(r, TAG_KEY, key);
+
+	respCloseMap(r);
+	respCloseArray(r);
+
+	size_t req_len;
+	char * request = respFinish(r, &req_len);
+
+	if (sendRequest(request, req_len)) {
+		free(request);
+		return 0;
+	}
+
+	free(request);
+
+	if(readResponse())
+		return 0;
+
+	if (msg.error) {
+		setError(JERS_INVALID, msg.error);
+		free_message(&msg, NULL);
+		return 1;
+	}
+
+	return 0;
+}

@@ -83,6 +83,9 @@ field fields[] = {
 	{RESINUSE, RESP_TYPE_INT, "RESINUSE"},
 	{SIGNAL, RESP_TYPE_INT, "SIGNAL"},
 
+	{TAG_KEY,   RESP_TYPE_BLOBSTRING, "TAG_KEY"},
+	{TAG_VALUE, RESP_TYPE_BLOBSTRING, "TAG_VALUE"},
+
 	{ENDOFFIELDS, RESP_TYPE_INT, "ENDOFFIELDS"}
 };
 
@@ -432,10 +435,10 @@ void addStringField(resp_t * r, int field_no, char * value) {
 void addStringMapField(resp_t * r, int field_no, int count, key_val_t * keys) {
 	respAddSimpleString(r, fields[field_no].name);
 	respAddMap(r);
-	
+
 	for (int i = 0; i < count; i++) {
 		respAddBlobString(r, keys[i].key, strlen(keys[i].key));
-		respAddBlobString(r, keys[i].value, strlen(keys[i].value));
+		respAddString(r, keys[i].value);
 	}
 
 	respCloseMap(r);

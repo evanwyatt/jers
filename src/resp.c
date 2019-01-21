@@ -245,7 +245,10 @@ resp_t * respNew(void) {
 
 char *  respFinish(resp_t * r, size_t * len) {
 	char * buffer = r->items[0].string;
-	*len  = r->items[0].len;
+
+	if (len)
+		*len  = r->items[0].len;
+
 	free(r->items);
 	free(r);
 
@@ -349,7 +352,7 @@ int respAddBlobString(resp_t * r, const char * string, uint64_t len) {
 	struct buffer * b = &r->items[r->depth];
 	_resize(b, len + 32);
 
-	if (string == NULL || *string == '\0')
+	if (string == NULL)
 		return respAddNull(r);
 
 	b->string[b->len++] = '$';
@@ -364,7 +367,7 @@ int respAddBlobString(resp_t * r, const char * string, uint64_t len) {
 }
 
 int respAddString(resp_t * r, const char * string) {
-	if (string && *string != '\0')
+	if (string)
 		return respAddBlobString(r, string, strlen(string));
 	else
 		return respAddNull(r);
@@ -376,7 +379,6 @@ int respAddStringArray(resp_t * r, int count, char ** strings) {
 	respAddArray(r);
 
 	for(i = 0; i < count; i++) {
-		// Check for a newline in the string
 		respAddBlobString(r, strings[i], strlen(strings[i]));
 	}
 

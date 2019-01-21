@@ -206,6 +206,41 @@ void * deserialize_sig_job(msg_t * t) {
 	return js;
 }
 
+void * deserialize_set_tag(msg_t * t) {
+	jersTagSet * ts = calloc(sizeof(jersTagSet), 1);
+	msg_item * item = &t->items[0];
+	int i;
+
+	for (i = 0; i < item->field_count; i++) {
+		switch(item->fields[i].number) {
+			case JOBID    : ts->jobid = getNumberField(&item->fields[i]); break;
+			case TAG_KEY  : ts->key = getStringField(&item->fields[i]); break;
+			case TAG_VALUE: ts->value = getStringField(&item->fields[i]); break;
+
+			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",t->items[0].fields[i].name); break;
+		}
+	}
+
+	return ts;
+}
+
+void * deserialize_del_tag(msg_t * t) {
+	jersTagDel * td = calloc(sizeof(jersTagDel), 1);
+	msg_item * item = &t->items[0];
+	int i;
+
+	for (i = 0; i < item->field_count; i++) {
+		switch(item->fields[i].number) {
+			case JOBID    : td->jobid = getNumberField(&item->fields[i]); break;
+			case TAG_KEY  : td->key = getStringField(&item->fields[i]); break;
+
+			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",t->items[0].fields[i].name); break;
+		}
+	}
+
+	return td;
+}
+
 void serialize_jersJob(resp_t * r, struct job * j, int fields) {
 	respAddMap(r);
 
@@ -752,11 +787,96 @@ int command_sig_job(client * c, void * args) {
 	return 0;
 }
 
+int command_set_tag(client * c, void * args) {
+	jersTagSet * ts = args;
+	struct job * j = NULL;
+	resp_t * r = NULL;
+	int i;
+
+	HASH_FIND_INT(server.jobTable, &ts->jobid, j);
+
+	if (j == NULL) {
+		appendError(c, "-NOJOB Job does not exist\n");
+		return 0;
+	}
+
+	r = respNew();
+
+	/* Does it have that tag? */
+	for (i = 0; i < j->tag_count; i++) {
+		if (strcmp(j->tags[i].key, ts->key) == 0) {
+			/* Update the existing tag */
+			free(j->tags[i].value);
+			j->tags[i].value = ts->value;
+			break;
+		}
+	}
+
+	if (i == j->tag_count) {
+		/* Does not have the tag, need to add it */
+		j->tags = realloc(j->tags, ++j->tag_count * sizeof(key_val_t));
+		j->tags[i].key = ts->key;
+		j->tags[i].value = ts->value;
+	}
+
+	respAddSimpleString(r, "0");
+
+	size_t reply_length = 0;
+	char * reply = respFinish(r, &reply_length);
+	appendResponse(c, reply, reply_length);
+	free(reply);
+
+	return 0;
+}
+
+int command_del_tag(client * c, void * args) {
+	jersTagDel * td = args;
+	struct job * j = NULL;
+	resp_t * r = NULL;
+	int i;
+
+	HASH_FIND_INT(server.jobTable, &td->jobid, j);
+
+	if (j == NULL) {
+		appendError(c, "-NOJOB Job does not exist\n");
+		return 0;
+	}
+
+	r = respNew();
+
+	/* Does it have that tag? */
+	for (i = 0; i < j->tag_count; i++) {
+		if (strcmp(j->tags[i].key, td->key) == 0) {
+			free(j->tags[i].key);
+			free(j->tags[i].value);
+
+			memmove(&j->tags[i], &j->tags[i + 1], sizeof(key_val_t) * (j->tag_count - i - 1));
+			break;
+		}
+	}
+
+	if (i == j->tag_count) {
+		appendError(c, "-NOTAG Tag not found\n");
+		respFinish(r, NULL);
+		return 0;
+	}
+
+	j->tag_count--;
+
+	respAddSimpleString(r, "0");
+
+	size_t reply_length = 0;
+	char * reply = respFinish(r, &reply_length);
+	appendResponse(c, reply, reply_length);
+	free(reply);
+
+	return 0;
+}
+
 void free_add_job(void * args) {
 	jersJobAdd * ja = args;
 
 	freeStringArray(ja->res_count, &ja->resources);
-
 	free(ja);
 }
 
@@ -786,4 +906,15 @@ void free_del_job(void * args) {
 void free_sig_job(void * args) {
 	jersJobSig * js = args;
 	free(js);
+}
+
+void free_set_tag(void * args) {
+	jersTagSet * ts = args;
+	free(ts);
+}
+
+void free_del_tag(void * args) {
+	jersTagDel * td = args;
+	free(td->key);
+	free(td);
 }

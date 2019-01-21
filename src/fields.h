@@ -128,6 +128,8 @@ enum field_type {
 	COMMENT,
 	RESINUSE,
 	SIGNAL,
+	TAG_KEY,
+	TAG_VALUE,
 
 	ENDOFFIELDS
 };
