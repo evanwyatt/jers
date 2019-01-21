@@ -167,12 +167,38 @@ int64_t getStringMapField(field *f, key_val_t ** array) {
 	return key_count;
 }
 
+static int compfield(const void * _a, const void * _b) {
+	const field * a = _a;
+	const field * b = _b;
+
+	return strcmp(a->name, b->name);
+}
+
+field * sortedFields = NULL;
+
+void sortfields(void) {
+	int num_fields =  num_fields = sizeof(fields)/sizeof(field);
+	sortedFields = malloc(sizeof(field) * num_fields);
+
+	memcpy(sortedFields, fields, sizeof(field) * num_fields);
+
+	qsort(sortedFields, num_fields, sizeof(field), compfield);
+}
+
 static int fieldtonum(const char * in) {
 	int i;
-	int num_fields = sizeof(fields)/sizeof(field);
+	static int num_fields = sizeof(fields)/sizeof(field);
 
-	for (i = 0; i < num_fields; i++) {
-		if (strcmp(in, fields[i].name) == 0) return i;
+	if (sortedFields) {
+		field search = {0};
+		search.name = in;
+		field * found = bsearch(&search, sortedFields, num_fields, sizeof(field), compfield);
+
+		return found->number;
+	} else {
+		for (i = 0; i < num_fields; i++) {
+			if (strcmp(in, fields[i].name) == 0) return i;
+		}
 	}
 
 	return -1;

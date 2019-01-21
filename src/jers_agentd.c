@@ -1015,6 +1015,9 @@ int main (int argc, char * argv[]) {
 	buffNew(&agent.responses, 0);
 	agent.responses_sent = 0;
 
+	/* Sort the fields */
+	sortfields();
+
 	while(1) {
 		if (shutdown_requested) {
 			print_msg(JERS_LOG_INFO, "Shutdown has been requested");
