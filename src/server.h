@@ -195,6 +195,11 @@ struct job {
 	UT_hash_handle hh;
 };
 
+struct gid_array {
+	int count;
+	gid_t * groups;
+};
+
 struct jersServer {
 	int state_fd;
 	char * state_dir;
@@ -248,10 +253,10 @@ struct jersServer {
 
 	/* Describes the groups required to run commands */
 	struct {
-		gid_t read;
-		gid_t write;
-		gid_t setuid;
-		gid_t queue;
+		struct gid_array read;
+		struct gid_array write;
+		struct gid_array setuid;
+		struct gid_array queue;
 	} permissions;
 
 	int candidate_recalc;

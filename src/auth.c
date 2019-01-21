@@ -41,14 +41,33 @@ static void loadPermissions(struct user * u) {
 	for (int i = 0; i < u->group_count; i++) {
 		gid_t g = u->group_list[i];
 
-		if (g == server.permissions.read)
-			u->permissions |= PERM_READ;
-		if (g == server.permissions.write)
-			u->permissions |= PERM_WRITE;
-		if (g == server.permissions.setuid)
-			u->permissions |= PERM_SETUID;
-		if (g == server.permissions.queue)
-			u->permissions |= PERM_QUEUE;
+		for (int j = 0; j < server.permissions.read.count; j++) {
+			if (g == server.permissions.read.groups[j]) {
+				u->permissions |= PERM_READ;
+				break;
+			}
+		}
+
+		for (int j = 0; j < server.permissions.write.count; j++) {
+			if (g == server.permissions.write.groups[j]) {
+				u->permissions |= PERM_WRITE;
+				break;
+			}
+		}
+
+		for (int j = 0; j < server.permissions.setuid.count; j++) {
+			if (g == server.permissions.setuid.groups[j]) {
+				u->permissions |= PERM_SETUID;
+				break;
+			}
+		}
+
+		for (int j = 0; j < server.permissions.queue.count; j++) {
+			if (g == server.permissions.queue.groups[j]) {
+				u->permissions |= PERM_QUEUE;
+				break;
+			}
+		}
 	}
 }
 

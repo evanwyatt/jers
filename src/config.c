@@ -35,6 +35,8 @@
 #include <errno.h>
 #include <grp.h>
 
+#define GROUP_LIMIT 32
+
 static gid_t getGroup(char * name) {
 	struct group * g = getgrnam(name);
 
@@ -42,6 +44,33 @@ static gid_t getGroup(char * name) {
 		error_die("Invalid read_group specified: %s", strerror(errno));
 
 	return g->gr_gid;
+}
+/* Convert a space seperated list of groups into an array of gids
+ * Note: There is a hard limit of 32 groups per security. */
+
+void getGroups(char * groups, struct gid_array * array) {
+	int count = 0;
+	array->groups = malloc(sizeof(gid_t) * GROUP_LIMIT);
+
+	if (array->groups == NULL)
+		error_die("Failed to allocate space for security groups: %s", strerror(errno));
+
+	char * tok = strtok(groups, " ");
+
+	while (tok) {
+		if (*tok == '\0') {
+			tok = strtok(NULL, " ");
+			continue;
+		}
+
+		if (count + 1 > GROUP_LIMIT)
+			error_die("Too many groups specified for security group");
+
+		array->groups[count++] = getGroup(tok);
+		tok = strtok(NULL, " ");
+	}
+
+	array->count = count;
 }
 
 void loadConfig(char * config) {
@@ -79,12 +108,6 @@ void loadConfig(char * config) {
 
 	server.flush.defer = DEFAULT_CONFIG_FLUSHDEFER;
 	server.flush.defer_ms = DEFAULT_CONFIG_FLUSHDEFERMS;
-
-	/* Default permissions */
-	server.permissions.read = 0;
-	server.permissions.write = 0;
-	server.permissions.setuid = 0;
-	server.permissions.queue = 0;
 
 	server.logging_mode = JERS_LOG_DEBUG;
 
@@ -150,13 +173,13 @@ void loadConfig(char * config) {
 		} else if (strcmp(key, "logfile") == 0) {
 			server.logfile = strdup(value);
 		} else if (strcmp(key, "read_group") == 0) {
-			server.permissions.read = getGroup(value);
+			getGroups(value, &server.permissions.read);
 		} else if (strcmp(key, "write_group") == 0) {
-			server.permissions.write = getGroup(value);
+			getGroups(value, &server.permissions.write);
 		} else if (strcmp(key, "setuid_group") == 0) {
-			server.permissions.setuid = getGroup(value);
+			getGroups(value, &server.permissions.setuid);
 		} else if (strcmp(key, "queue_group") == 0) {
-			server.permissions.queue = getGroup(value);
+			getGroups(value, &server.permissions.queue);
 		} else {
 			print_msg(JERS_LOG_WARNING, "Skipping unknown config key: %s\n", key);
 			continue;
