@@ -41,22 +41,22 @@ void runSimpleCommand(client * c);
 void runComplexCommand(client * c);
 
 command_t commands[] = {
-	{"ADD_JOB",      PERM_WRITE, command_add_job,      deserialize_add_job, free_add_job},
-	{"GET_JOB",      PERM_READ,  command_get_job,      deserialize_get_job, free_get_job},
-	{"MOD_JOB",      PERM_WRITE, command_mod_job,      deserialize_mod_job, free_mod_job},
-	{"DEL_JOB",      PERM_WRITE, command_del_job,      deserialize_del_job, free_del_job},
-	{"SIG_JOB",      PERM_WRITE, command_sig_job,      deserialize_sig_job, free_sig_job},
-	{"ADD_QUEUE",    PERM_WRITE|PERM_QUEUE, command_add_queue,    deserialize_add_queue, free_add_queue},
-	{"GET_QUEUE",    PERM_READ,  command_get_queue,    deserialize_get_queue, free_get_queue},
-	{"MOD_QUEUE",    PERM_WRITE|PERM_QUEUE, command_mod_queue,    deserialize_mod_queue, free_mod_queue},
-	{"DEL_QUEUE",    PERM_WRITE|PERM_QUEUE, command_del_queue,    deserialize_del_queue, free_del_queue},
-	{"ADD_RESOURCE", PERM_WRITE, command_add_resource, deserialize_add_resource, free_add_resource},
-	{"GET_RESOURCE", PERM_READ,  command_get_resource, deserialize_get_resource, free_get_resource},
-	{"MOD_RESOURCE", PERM_WRITE, command_mod_resource, deserialize_mod_resource, free_mod_resource},
-	{"DEL_RESOURCE", PERM_WRITE, command_del_resource, deserialize_del_resource, free_del_resource},
-	{"SET_TAG",      PERM_WRITE, command_set_tag,      deserialize_set_tag, free_set_tag},
-	{"DEL_TAG",      PERM_WRITE, command_del_tag,      deserialize_del_tag, free_del_tag},
-	{"STATS",        PERM_READ,  command_stats,        NULL, NULL},
+	{"ADD_JOB",      PERM_WRITE,            CMD_REPLAY, command_add_job,      deserialize_add_job, free_add_job},
+	{"GET_JOB",      PERM_READ,             0,          command_get_job,      deserialize_get_job, free_get_job},
+	{"MOD_JOB",      PERM_WRITE,            CMD_REPLAY, command_mod_job,      deserialize_mod_job, free_mod_job},
+	{"DEL_JOB",      PERM_WRITE,            CMD_REPLAY, command_del_job,      deserialize_del_job, free_del_job},
+	{"SIG_JOB",      PERM_WRITE,            0,          command_sig_job,      deserialize_sig_job, free_sig_job},
+	{"ADD_QUEUE",    PERM_WRITE|PERM_QUEUE, CMD_REPLAY, command_add_queue,    deserialize_add_queue, free_add_queue},
+	{"GET_QUEUE",    PERM_READ,             0,          command_get_queue,    deserialize_get_queue, free_get_queue},
+	{"MOD_QUEUE",    PERM_WRITE|PERM_QUEUE, CMD_REPLAY, command_mod_queue,    deserialize_mod_queue, free_mod_queue},
+	{"DEL_QUEUE",    PERM_WRITE|PERM_QUEUE, CMD_REPLAY, command_del_queue,    deserialize_del_queue, free_del_queue},
+	{"ADD_RESOURCE", PERM_WRITE,            CMD_REPLAY, command_add_resource, deserialize_add_resource, free_add_resource},
+	{"GET_RESOURCE", PERM_READ,             0,          command_get_resource, deserialize_get_resource, free_get_resource},
+	{"MOD_RESOURCE", PERM_WRITE,            CMD_REPLAY, command_mod_resource, deserialize_mod_resource, free_mod_resource},
+	{"DEL_RESOURCE", PERM_WRITE,            CMD_REPLAY, command_del_resource, deserialize_del_resource, free_del_resource},
+	{"SET_TAG",      PERM_WRITE,            CMD_REPLAY, command_set_tag,      deserialize_set_tag, free_set_tag},
+	{"DEL_TAG",      PERM_WRITE,            CMD_REPLAY, command_del_tag,      deserialize_del_tag, free_del_tag},
+	{"STATS",        PERM_READ,             0,          command_stats,        NULL, NULL},
 };
 
 /* Append to or allocate a new reponse buffer */
@@ -105,10 +105,37 @@ void runSimpleCommand(client * c) {
 	free_message(&c->msg, NULL);
 }
 
+void replayCommand(msg_t * msg) {
+	static int cmd_count = sizeof(commands) / sizeof(command_t);
+
+	/* Match the command name */
+	for (int i = 0; i < cmd_count; i++) {
+		if (strcmp(msg->command, commands[i].name) == 0) {
+			void * args = NULL;
+
+			if ((commands[i].flags &CMD_REPLAY) == 0)
+				break;
+
+			if (commands[i].deserialize_func) {
+				args = commands[i].deserialize_func(msg);
+
+				if (!args)
+					error_die("Failed to deserialize %s args\n", msg->command);
+			}
+
+			if (commands[i].cmd_func(NULL, args) != 0)
+				error_die("Failed to replay command");
+
+			if (commands[i].free_func)
+				commands[i].free_func(args);
+
+			break;
+		}
+	}
+}
+
 void runComplexCommand(client * c) {
 	static int cmd_count = sizeof(commands) / sizeof(command_t);
-	int i;
-	int status;
 	uint64_t start, end;
 
 	start = getTimeMS();
@@ -119,7 +146,7 @@ void runComplexCommand(client * c) {
 	}
 
 	/* Match the command name */
-	for (i = 0; i < cmd_count; i++) {
+	for (int i = 0; i < cmd_count; i++) {
 		if (strcmp(c->msg.command, commands[i].name) == 0) {
 			void * args = NULL;
 
@@ -138,7 +165,7 @@ void runComplexCommand(client * c) {
 				}
 			}
 
-			status = commands[i].cmd_func(c, args);
+			int status = commands[i].cmd_func(c, args);
 
 			/* Write to the journal if the transaction was an update and successful */
 			if (commands[i].perm &PERM_WRITE && status == 0)

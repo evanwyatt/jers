@@ -30,6 +30,7 @@
 #include "server.h"
 #include "jers.h"
 #include "common.h"
+#include "commands.h"
 
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -254,6 +255,94 @@ int stateSaveCmd(uid_t uid, char * cmd, int64_t field_count, field fields[], int
 	return 0;
 }
 
+off_t checkForLastCommit(char * journal) {
+	FILE * f = NULL;
+	char * line = NULL;
+	size_t line_size = 0;
+	ssize_t len = 0;
+	off_t last_commit = -1;
+
+	print_msg(JERS_LOG_INFO, "Checking journal: %s", journal);
+
+	if ((f = fopen(journal, "r")) == NULL)
+		error_die("Failed to open journal %s: %s", journal, strerror(errno));
+	
+	while ((len = getline(&line, &line_size, f)) != -1) {
+		if (line[0] == '*') {
+			last_commit = ftell(f);
+
+			if (last_commit == -1)
+				error_die("Failed to get offset of last commit: %s", strerror(errno));
+		}
+	}
+
+	if (len == -1 && !feof(f))
+		error_die("Failed to read line from journal: %s", strerror(errno));
+
+	fclose(f);
+	free(line);
+
+	return last_commit;
+}
+
+void convertJournalEntry(msg_t * msg, char * entry) {
+
+}
+
+void replayTransaction(char * line) {
+	msg_t msg;
+
+	/* Remove the newline */
+	line[strcspn(line, "\n")] = 0;
+
+	/* End of journal marker, nothing to do here */
+	if (line[0] == '$')
+		return;
+
+	/* Load the fields into a msg_t and call the appropriate command handler */
+	print_msg(JERS_LOG_DEBUG, "replaying: %s\n", line);
+	convertJournalEntry(&msg, line);
+	replayCommand(&msg);
+
+	return;
+}
+
+/* Read and replay transactions from the journal.
+ * 'Offset' is provided for the first file, subsequent files have the offset passed in as
+ * a negative number. - All entries should be replayed for these files */ 
+
+void replayJournal(char * journal, off_t offset) {
+	FILE * f = NULL;
+	char * line = NULL;
+	size_t line_size = 0;
+	ssize_t len = 0;
+
+	print_msg(JERS_LOG_INFO, "Replaying journal %s", journal);
+
+	if (offset >= 0)
+		print_msg(JERS_LOG_DEBUG, "Using journal offset: %ld", offset);
+
+	if ((f = fopen(journal, "r")) == NULL)
+		error_die("Failed to open journal %s: %s", journal, strerror(errno));
+
+	if (offset >= 0 && fseek(f, offset, SEEK_SET) != 0)
+		error_die("Failed to offset into journal at offset %ld: %s", offset, strerror(errno));
+	
+	while ((len = getline(&line, &line_size, f)) != -1) {
+		replayTransaction(line);
+	}
+
+	if (len == -1 && !feof(f))
+		error_die("Failed to read line from journal: %s", strerror(errno));
+
+	fclose(f);
+	free(line);
+
+	print_msg(JERS_LOG_DEBUG, "Finished replaying journal %s", journal);
+
+	return;
+}
+
 /* After loading all the queues/jobs/resources from disk,
  * we need go through the journals on disk, checking what we need to replay.
  * When dirty objects are written to disk, the journal is marked with a '*' character
@@ -266,9 +355,10 @@ void stateReplayJournal(void) {
 	print_msg(JERS_LOG_INFO, "Recovering state from journal files");
 
 	int rc = 0;
-	size_t i;
+	int64_t i, j;
 	glob_t journalGlob;
 	char pattern[PATH_MAX];
+	off_t offset = -1;
 
 	sprintf(pattern, "%s/journal.*", server.state_dir);
 	print_msg(JERS_LOG_DEBUG, "Searching: %s", pattern);
@@ -285,15 +375,24 @@ void stateReplayJournal(void) {
 		error_die("Failed to glob() journal files %s : %s\n", pattern, strerror(errno));
 	}
 
-	for (i = 0; i < journalGlob.gl_pathc; i++) {
-		print_msg(JERS_LOG_DEBUG, "Checking journal: %s", journalGlob.gl_pathv[i]);
+	for (i = journalGlob.gl_pathc - 1; i >= 0 ; i--) {
+		if ((offset = checkForLastCommit(journalGlob.gl_pathv[i])) >= 0) {
+			break;
+		}
+	}
 
-
-
+	/* We know which journal to start from, start replaying */
+	if (i >= 0) {
+		for (; i < journalGlob.gl_pathc; i++)
+			replayJournal(journalGlob.gl_pathv[i], offset);
+			offset = -1;
 	}
 
 	globfree(&journalGlob);
 	print_msg(JERS_LOG_INFO, "Finished recovery from journal files");
+
+	/* Make sure have the latest journal open by writing a dummy command */
+	stateSaveCmd(getuid(), "REPLAY_COMPLETE", 0, NULL, 0, NULL);
 }
 
 int stateDelJob(struct job * j) {

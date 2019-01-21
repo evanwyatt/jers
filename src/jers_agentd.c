@@ -491,7 +491,7 @@ void jersRunJob(struct jersJobSpawn * j, int socket) {
 	dprintf(stdout_fd, " Exit Code    : %d\n", rc);
 
 	if (sig)
-		dprintf(stdout_fd, " Signal      : %d\n", sig);
+		dprintf(stdout_fd, " Signal       : %d\n", sig);
 
 	fdatasync(stdout_fd);
 	close(stdout_fd);

@@ -31,10 +31,12 @@
 
 void appendResponse(client * c, char * buffer, size_t length);
 void appendError(client * c, char * msg);
+void replayCommand(msg_t * msg);
 
 typedef struct command {
 	char * name;
-	int perm; // Bitmask of required permissions
+	int perm;     // Bitmask of required permissions
+	int flags;    // Bitmask of command flags
 	int (*cmd_func)(client * c, void *);
 	void * (*deserialize_func)(msg_t *);
 	void (*free_func)(void *);

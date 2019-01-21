@@ -411,6 +411,10 @@ int command_add_job(client * c, void * args) {
 	/* Add it to the hashtable */
 	addJob(j, state, 1);
 
+	/* Don't respond if we are replaying a command */
+	if (c == NULL)
+		return 0;
+
 	/* Return the jobid */
 	resp_t * response = respNew(); 
 
@@ -702,6 +706,10 @@ int command_mod_job(client *c, void *args) {
 
 	changeJobState(j, state, dirty);
 
+	/* Don't respond if we are replaying a command */
+	if (c == NULL)
+		return 0;
+
 	resp_t * r = respNew();
 	respAddSimpleString(r, "0");
 
@@ -728,6 +736,10 @@ int command_del_job(client * c, void * args) {
 
 	j->internal_state |= JERS_JOB_FLAG_DELETED;
 	changeJobState(j, 0, 0);
+
+	/* Don't respond if we are replaying a command */
+	if (c == NULL)
+		return 0;
 
 	r = respNew();
 	respAddSimpleString(r, "0");

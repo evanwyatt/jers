@@ -41,6 +41,8 @@
 
 #define PERM_NOTUSED 0x8000
 
+#define CMD_REPLAY 0x01
+
 struct user {
 	uid_t uid;
 	gid_t gid;

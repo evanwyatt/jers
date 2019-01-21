@@ -528,7 +528,7 @@ void setup_handlers(void(*shutdownHandler)(int)) {
     sigaction(SIGTERM, &sigact, NULL);
 	sigaction(SIGINT, &sigact, NULL);
 
-	/* Handler for SIGUSR1, which prompts us to drop our cached data */
+	/* SIGUSR1 - Drop any cached data */
     sigemptyset(&sigact.sa_mask);
     sigact.sa_flags = 0;
     sigact.sa_handler = clearCacheHandler;

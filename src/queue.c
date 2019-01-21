@@ -137,9 +137,6 @@ int addQueue(struct queue * q, int def, int dirty) {
 		server.dirty_queues++;
 	}
 
-	print_msg(JERS_LOG_DEBUG, "Added queue:%s desc:'%s' job_limit:%d priority:%d default:%d\n",
-	 	q->name, q->desc? q->desc:"", q->job_limit, q->priority, def? 1:0);
-
 	return 0;
 }
 
