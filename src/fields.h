@@ -134,10 +134,12 @@ enum field_type {
 
 	ENDOFFIELDS
 };
-
+void sortfields(void);
 int load_message(msg_t * msg, buff_t * buff);
 void free_message(msg_t * msg, buff_t * buff);
 int initMessage(resp_t * r, const char * resp_name, int version);
+
+int fieldtonum(const char * in);
 
 int isFieldSet(unsigned char * bitmap, int field_no);
 int setIntField(field * f, int field_no, int64_t value);

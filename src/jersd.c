@@ -165,6 +165,9 @@ int main (int argc, char * argv[]) {
 	server.agent_connection.socket = -1;
 	server.client_connection.socket = -1;
 
+	/* Sort the fields used for serialization/deserialization */
+	sortfields();
+
 	stateInit();
 
 	/* Load and initialise the queues */

@@ -512,7 +512,7 @@ void jersRunJob(struct jersJobSpawn * j, int socket) {
 	} while (status == -1 && errno == EINTR);
 
 	print_msg(JERS_LOG_DEBUG, "Job: %d finished: %d\n", j->jobid, job_completion.exitcode);
-
+	close(socket);
 	_exit(0);
 }
 
@@ -1035,6 +1035,9 @@ int main (int argc, char * argv[]) {
 	/* Buffer to store our responses */
 	buffNew(&agent.responses, 0);
 	agent.responses_sent = 0;
+
+	/* Sort the fields */
+	sortfields();
 
 	while(1) {
 		if (shutdown_requested) {
