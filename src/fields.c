@@ -177,7 +177,7 @@ static int compfield(const void * _a, const void * _b) {
 field * sortedFields = NULL;
 
 void sortfields(void) {
-	int num_fields =  num_fields = sizeof(fields)/sizeof(field);
+	int num_fields = sizeof(fields)/sizeof(field);
 	sortedFields = malloc(sizeof(field) * num_fields);
 
 	memcpy(sortedFields, fields, sizeof(field) * num_fields);
@@ -185,7 +185,7 @@ void sortfields(void) {
 	qsort(sortedFields, num_fields, sizeof(field), compfield);
 }
 
-static int fieldtonum(const char * in) {
+int fieldtonum(const char * in) {
 	int i;
 	static int num_fields = sizeof(fields)/sizeof(field);
 
@@ -193,6 +193,9 @@ static int fieldtonum(const char * in) {
 		field search = {0};
 		search.name = in;
 		field * found = bsearch(&search, sortedFields, num_fields, sizeof(field), compfield);
+
+		if (found == NULL)
+			return -1;
 
 		return found->number;
 	} else {
