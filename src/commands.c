@@ -205,6 +205,7 @@ int command_stats(client * c, void * args) {
 	addIntField(r, STATSTOTALSTARTED, server.stats.total.started);
 	addIntField(r, STATSTOTALCOMPLETED, server.stats.total.completed);
 	addIntField(r, STATSTOTALEXITED, server.stats.total.exited);
+	addIntField(r, STATSTOTALDELETED, server.stats.total.deleted);
 
 	respCloseMap(r);
 	respCloseArray(r);

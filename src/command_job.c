@@ -736,6 +736,7 @@ int command_del_job(client * c, void * args) {
 
 	j->internal_state |= JERS_JOB_FLAG_DELETED;
 	changeJobState(j, 0, 0);
+	server.stats.total.deleted++;
 
 	/* Don't respond if we are replaying a command */
 	if (c == NULL)
@@ -905,7 +906,7 @@ void free_get_job(void * args) {
 void free_mod_job(void * args) {
 	jersJobMod * jm = args;
 
-	freeStringArray(jm->res_count, &jm->resources);	
+	freeStringArray(jm->res_count, &jm->resources);
 	free(jm->queue);
 	free(jm);
 }

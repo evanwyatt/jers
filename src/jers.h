@@ -334,6 +334,7 @@ typedef struct jersStats {
 		int64_t started;
 		int64_t completed;
 		int64_t exited;
+		int64_t deleted;
 	} total;
 } jersStats;
 

@@ -1161,6 +1161,7 @@ int jersGetStats(jersStats * s) {
 			case STATSTOTALSTARTED   : s->total.started = getNumberField(&item->fields[i]); break;
 			case STATSTOTALCOMPLETED : s->total.completed = getNumberField(&item->fields[i]); break;
 			case STATSTOTALEXITED    : s->total.exited = getNumberField(&item->fields[i]); break;
+			case STATSTOTALDELETED   : s->total.deleted = getNumberField(&item->fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",item->fields[i].name); break;
 		}
