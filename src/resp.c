@@ -137,8 +137,7 @@ static int _respGetItem(resp_read_t * r, struct argItem * item) {
 	 * the same item, as we might have already consumed and populated the type */
 
 	if (item->type == 0) {
-		str = _respGetLine(r);
-		if (str == NULL)
+		if ((str = _respGetLine(r)) == NULL)
 			return RESP_INCOMP;
 
 		switch (*str) {
@@ -177,6 +176,7 @@ static int _respGetItem(resp_read_t * r, struct argItem * item) {
 				item->data.string.offset = str - r->string;
 				item->data.string.length = (r->string + r->pos) - str - 1;
 				*(str + item->data.string.length) = '\0'; // NULL terminate it
+				//r->pos += item->data.string.length;
 				return RESP_OK;
 
 			case RESP_TYPE_INT:
@@ -461,6 +461,12 @@ int respReadFree(resp_read_t * r) {
 		r->args = NULL;
 	}
 
+	r->currentItem = NULL;
+	r->string = NULL;
+	r->pos = 0;
+	r->length = 0;
+	r->ready = 0;
+
 	return RESP_OK;
 }
 
@@ -469,14 +475,15 @@ int respReadLoad(resp_read_t * r) {
 
 	if (r->args == NULL) {
 		r->args = calloc(sizeof(struct argItem), 1);
-		r->currentItem = r->args;
 	}
 
 	rc = _respGetItem(r, r->args);
 
 	if (rc == RESP_OK) {
-		r->ready = 1;
+		/* The request has been loaded, so point back to the first item,
+		 * so we are ready for processing */
 		r->currentItem = r->args;
+		r->ready = 1;
 	}
 
 	return rc;
@@ -500,7 +507,7 @@ void respReadShrink(resp_read_t *r) {
 	r->pos = 0;
 }
 
-/* If more data is avaliable, initalise the next request */
+/* Clear the previous data loaded, ready for the next message */
 int respReadReset(resp_read_t * r) {
 
 	/* Free the previous request items first */

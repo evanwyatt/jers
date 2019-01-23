@@ -611,8 +611,6 @@ int command_mod_job(client *c, void *args) {
 			appendError(c, "-NOQUEUE Invalid queue specified\n");
 			return 0;
 		}
-
-		free(mj->queue);
 	}
 
 	if (mj->name) {
@@ -820,6 +818,7 @@ int command_set_tag(client * c, void * args) {
 		if (strcmp(j->tags[i].key, ts->key) == 0) {
 			/* Update the existing tag */
 			free(j->tags[i].value);
+			free(ts->key);
 			j->tags[i].value = ts->value;
 			break;
 		}

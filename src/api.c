@@ -103,6 +103,7 @@ int jersInitAPI(char * custom_config) {
 		return 1;
 
 	buffNew(&response, 0);
+	respReadInit(&msg.reader, NULL, 0);
 
 	initalised = 1;
 
@@ -112,7 +113,8 @@ int jersInitAPI(char * custom_config) {
 void jersFinish(void) {
 	close(fd);
 	free_message(&msg, NULL);
-	memset(&msg, 0, sizeof(msg)); //HACK
+	respReadFree(&msg.reader);
+
 	buffFree(&response);
 
 	initalised = 0;
@@ -186,7 +188,6 @@ static int readResponse(void) {
 			fprintf(stderr, "disconnected from jer daemon\n");
 			return 1;
 		}
-
 		response.used += bytes_read;
 
 		/* Got a full response yet? */
@@ -401,7 +402,7 @@ int jersGetJob(jobid_t jobid, jersJobFilter * filter, jersJobInfo * job_info) {
 
 	job_info->count = msg.item_count;
 
-	free_message(&msg, &response);
+	free_message(&msg, NULL);
 
 	return 0;
 }
@@ -444,6 +445,8 @@ int jersDelJob(jobid_t jobid) {
 		free_message(&msg, NULL);
 		return 0;
 	}
+
+	free_message(&msg, NULL);
 
 	return 0;
 }
@@ -572,7 +575,7 @@ jobid_t jersAddJob(jersJobAdd * j) {
 
 	new_jobid = getNumberField(&msg.items[0].fields[0]);
 
-	free_message(&msg, &response);
+	free_message(&msg, NULL);
 	return new_jobid;
 }
 
@@ -657,7 +660,7 @@ int jersModJob(jersJobMod *j) {
 		return 1;
 	}
 
-	free_message(&msg, &response);
+	free_message(&msg, NULL);
 	return 0;
 }
 
@@ -710,7 +713,7 @@ int jersSignalJob(jobid_t id, int signum) {
 		return 1;
 	}
 
-	free_message(&msg, &response);
+	free_message(&msg, NULL);
 	return 0;
 }
 
@@ -788,7 +791,7 @@ int jersGetQueue(char * name, jersQueueFilter * filter, jersQueueInfo * info) {
 
 	info->count = msg.item_count;
 
-	free_message(&msg, &response);
+	free_message(&msg, NULL);
 
 	return 0;
 }
@@ -871,7 +874,7 @@ int jersAddQueue(jersQueueAdd *q) {
 		return 1;
 	}
 
-	free_message(&msg, &response);
+	free_message(&msg, NULL);
 
 	return 0;
 }
@@ -940,7 +943,7 @@ int jersModQueue(jersQueueMod *q) {
 		return 1;
 	}
 
-	free_message(&msg, &response);
+	free_message(&msg, NULL);
 
 	return 0;
 }
@@ -988,7 +991,7 @@ int jersAddResource(char *name, int count) {
 		return 1;
 	}
 
-	free_message(&msg, &response);
+	free_message(&msg, NULL);
 
 	return 0;
 }
@@ -1045,7 +1048,7 @@ int jersGetResource(char * name, jersResourceFilter *filter, jersResourceInfo *i
 
 	info->count = msg.item_count;
 
-	free_message(&msg, &response);
+	free_message(&msg, NULL);
 
 	return 0;
 }
@@ -1091,6 +1094,8 @@ int jersDelResource(char *name) {
 		free_message(&msg, NULL);
 		return 1;
 	}
+
+	free_message(&msg, NULL);
 
 	return 0;
 }
@@ -1214,6 +1219,8 @@ int jersSetTag(jobid_t id, char * key, char * value) {
 		return 1;
 	}
 
+	free_message(&msg, NULL);
+
 	return 0;
 }
 
@@ -1255,6 +1262,8 @@ int jersDelTag(jobid_t id, char * key) {
 		free_message(&msg, NULL);
 		return 1;
 	}
+
+	free_message(&msg, NULL);
 
 	return 0;
 }

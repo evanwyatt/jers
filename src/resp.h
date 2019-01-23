@@ -51,7 +51,13 @@ typedef struct _resp_read_t {
 	off_t length;
 	off_t pos;		// Current parsing postion
 	int ready;
+
+	/* Pointer to the current item being processed */
 	struct argItem * currentItem;
+
+	/* Linked list of data items allocated.
+	 * This list is simply used to track allocated items. The structure of a
+	 * message is tracked by the 'data' field. */
 	struct argItem * args;
 } resp_read_t;
 

@@ -366,6 +366,9 @@ int load_message(msg_t * msg, buff_t * buff) {
 	if (buff->used == 0)
 		return 1;
 
+	if (msg->reader.pos == msg->reader.length)
+		return 1;
+
 	int rc = respReadLoad(&msg->reader);
 
 	/* Not enough data to load this request */
@@ -392,6 +395,7 @@ int load_message(msg_t * msg, buff_t * buff) {
 		}
 	} else if (type == RESP_TYPE_ARRAY) {
 		int64_t count;
+
 		if (respGetArray(&msg->reader, &count)) {
 			respReadFree(&msg->reader);
 			return -1;

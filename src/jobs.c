@@ -62,7 +62,6 @@ jobid_t getNextJobID(void) {
 /* Free a struct job entry, freeing all associated memory */
 
 void freeJob (struct job * j) {
-
 	for (int i = 0; i < j->tag_count; i++) {
 		free(j->tags[i].key);
 		free(j->tags[i].value);
@@ -101,12 +100,12 @@ void freeJob (struct job * j) {
 
 int cleanupJobs(uint32_t max_clean) {
 	jobid_t cleaned_up = 0;
-	struct job * j;
+	struct job *j, *tmp;
 
 	if (max_clean == 0)
 		max_clean = 10;
 
-	for (j = server.jobTable; j != NULL; j = j->hh.next) {
+	HASH_ITER(hh, server.jobTable, j, tmp) {
 		if (!(j->internal_state &JERS_JOB_FLAG_DELETED))
 			continue;
 
@@ -117,6 +116,7 @@ int cleanupJobs(uint32_t max_clean) {
 		/* Got a job to remove */
 		stateDelJob(j);
 		HASH_DEL(server.jobTable, j);
+		freeJob(j);
 
 		if (++cleaned_up >= max_clean)
 			break;
