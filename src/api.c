@@ -714,7 +714,7 @@ int jersSignalJob(jobid_t id, int signum) {
 	}
 
 	free_message(&msg, NULL);
-	return 0;
+	return strcmp(msg.command, "0");
 }
 
 

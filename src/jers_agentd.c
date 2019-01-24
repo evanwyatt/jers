@@ -660,6 +660,16 @@ int send_login(void) {
 int get_job_completion(struct runningJob * j) {
 	int status;
 
+	/* Get the PID if we haven't already. */
+	if (j->job_pid == 0) {
+		do {
+			status = read(j->socket, &j->job_pid, sizeof(pid_t));
+		} while (status == -1 && errno == EINTR);
+
+		if (status == -1 && (errno != EAGAIN && errno != EWOULDBLOCK))
+			fprintf(stderr, "Failed to read pid from job %d\n", j->jobID);
+	}
+
 	/* Read in the completion details */
 	do {
 		status = read(j->socket, &j->job_completion, sizeof(struct jobCompletion));

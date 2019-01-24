@@ -9,13 +9,13 @@ License:	BSD-3-Clause
 URL:		https://github.com/evanwyatt/jers
 Source0:	%{name}-%{version}-%{rel}.tar.gz
 
-%description
-The Job Execution and Resource Scheduler
-
 %{?systemd_requires}
 BuildRequires: systemd
 Requires:   logrotate
 Requires:   sudo
+
+%description
+The Job Execution and Resource Scheduler
 
 %package devel
 Summary:	JERS development files
