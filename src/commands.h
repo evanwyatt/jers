@@ -27,11 +27,15 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <server.h>
+#include "server.h"
 
-void appendResponse(client * c, char * buffer, size_t length);
-void appendError(client * c, char * msg);
+int sendClientReturnCode(client * c, const char * ret);
+int sendClientMessage(client * c, resp_t *r);
+void sendAgentMessage(agent * a, resp_t * r);
+void sendError(client * c, int error, const char * msg);
+
 void replayCommand(msg_t * msg);
+
 
 typedef struct command {
 	char * name;

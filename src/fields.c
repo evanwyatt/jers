@@ -427,6 +427,19 @@ int load_message(msg_t * msg, buff_t * buff) {
 	return 0;
 }
 
+/* Initalise a new message */
+
+int initMessage(resp_t * r, const char * resp_name, int version) {
+	if (respNew(r) != 0)
+		return 1;
+
+	respAddArray(r);
+	respAddSimpleString(r, resp_name);
+	respAddInt(r, version);
+
+	return 0;
+}
+
 void addIntField(resp_t * r, int field_no, int64_t value) {
 	respAddSimpleString(r, fields[field_no].name);
 	respAddInt(r, value);

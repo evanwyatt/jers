@@ -18,6 +18,22 @@ extern volatile sig_atomic_t reopen_logfile;
 
 char * logfile_name = NULL;
 
+void error_die(char * msg, ...) {
+	va_list args;
+	char logMessage[1024];
+
+	va_start(args, msg);
+	vsnprintf(logMessage, sizeof(logMessage), msg, args);
+	va_end(args);
+
+	_logMessage(server_log, JERS_LOG_CRITICAL, logMessage);
+	_logMessage(server_log, JERS_LOG_CRITICAL, "**** Server fatal error - exiting ****");
+	fflush(stdout);
+	fflush(stderr);
+
+	exit(EXIT_FAILURE);
+}
+
 void setLogfileName(char * name) {
 	logfile_name = name;
 }

@@ -30,6 +30,7 @@
 #include <jers.h>
 #include <commands.h>
 #include <fields.h>
+#include <error.h>
 
 #include <time.h>
 #include <pwd.h>
@@ -331,7 +332,7 @@ int command_add_job(client * c, void * args) {
 		HASH_FIND_STR(server.queueTable, s->queue, q);
 
 		if (q == NULL) {
-			appendError(c, "-NOQUEUE Queue not found\n");
+			sendError(c, JERS_ERR_NOQUEUE, NULL);
 			return -1;
 		}
 
@@ -342,7 +343,7 @@ int command_add_job(client * c, void * args) {
 		s->uid = c->uid;
 
 	if (s->uid == 0) {
-		appendError(c, "-BADUSER Jobs not allowed to run as root\n");
+		sendError(c, JERS_ERR_INVARG, "Jobs not allowed to run as root");
 		return -1;
 	}
 
@@ -350,7 +351,7 @@ int command_add_job(client * c, void * args) {
 	 * under another uid */
 	if (c->uid != s->uid) {
 		if (c->user->permissions &PERM_SETUID == 0) {
-			appendError(c, "-NOPERM No setuid permissions\n");
+			sendError(c, JERS_ERR_NOPERM, NULL);
 			return -1;
 		}
 	}
@@ -358,7 +359,7 @@ int command_add_job(client * c, void * args) {
 	u = lookup_user(s->uid, 0);
 
 	if (u == NULL) {
-		appendError(c, "-NOUSER User not found\n");
+		sendError(c, JERS_ERR_INVARG, "User not valid");
 		return -1;
 	}
 
@@ -366,7 +367,7 @@ int command_add_job(client * c, void * args) {
 		resources = convertResourceStrings(s->res_count, s->resources);
 
 		if (resources == NULL) {
-			appendError(c, "-INVRES A requested resource does not exist\n");
+			sendError(c, JERS_ERR_NORES, NULL);
 			return -1;
 		}
 	}
@@ -416,20 +417,17 @@ int command_add_job(client * c, void * args) {
 		return 0;
 
 	/* Return the jobid */
-	resp_t * response = respNew(); 
+	resp_t response;
 
-	respAddArray(response);
-	respAddSimpleString(response, "RESP");
-	respAddInt(response, 1);
-	respAddMap(response);
-	addIntField(response, JOBID, j->jobid);
-	respCloseMap(response);
-	respCloseArray(response);
+	if (initMessage(&response, "RESP", 1) != 0)
+		return 0;
 
-	size_t buff_length = 0;
-	char * buff = respFinish(response, &buff_length);
-	appendResponse(c, buff, buff_length);
-	free(buff);
+	respAddMap(&response);
+	addIntField(&response, JOBID, j->jobid);
+	respCloseMap(&response);
+
+	if (sendClientMessage(c, &response) != 0)
+		return 0;
 
 	/* Populate the out jobid field */
 	c->msg.out_field_count = 1;
@@ -449,22 +447,19 @@ int command_get_job(client *c, void * args) {
 
 	int64_t count = 0;
 
-	resp_t * r = NULL;
+	resp_t r;
 
 	/* JobId? Just look it up and return the result */
 	if (s->jobid) {
 		HASH_FIND_INT(server.jobTable, &s->jobid, j);
 
 		if (j == NULL || (j->internal_state &JERS_JOB_FLAG_DELETED)) {
-			appendError(c, "-NOJOB Job not found\n");
+			sendError(c, JERS_ERR_NOJOB, NULL);
 			return 1;
 		}
 
-		r = respNew();
-		respAddArray(r);
-		respAddSimpleString(r, "RESP");
-		respAddInt(r, 1);
-		serialize_jersJob(r, j, 0);
+		initMessage(&r, "RESP", 1);
+		serialize_jersJob(&r, j, 0);
 		count = 1;
 
 	} else {
@@ -476,19 +471,15 @@ int command_get_job(client *c, void * args) {
 				HASH_FIND_STR(server.queueTable, s->filters.queue_name, q);
 
 				if (q == NULL) {
-					appendError(c, "-BADQUEUE Queue not found\n");
+					sendError(c, JERS_ERR_NOQUEUE, NULL);
 					return -1;
 				}
 			}
 		}
 
-		r = respNew();
-		respAddArray(r);
-		respAddSimpleString(r, "RESP");
-		respAddInt(r, 1);
+		initMessage(&r, "RESP", 1);
 
-		respAddArray(r);
-
+		respAddArray(&r);
 		/* Loop through all non-deleted jobs and match against the criteria provided
 		 * Add the jobs to the response as we go */
 
@@ -549,19 +540,13 @@ int command_get_job(client *c, void * args) {
 			}
 
 			/* Made it here, add it to our response */
-			serialize_jersJob(r, j, s->return_fields);
+			serialize_jersJob(&r, j, s->return_fields);
 			count++;
 		}
-
-		respCloseArray(r);
+		respCloseArray(&r);
 	}
 
-	respCloseArray(r);
-	size_t reply_length = 0;
-	char * reply = respFinish(r, &reply_length);
-	appendResponse(c, reply, reply_length);
-	free(reply);
-	return 0;
+	return sendClientMessage(c, &r);
 }
 
 int command_mod_job(client *c, void *args) {
@@ -573,14 +558,14 @@ int command_mod_job(client *c, void *args) {
 	int hold = 0;
 
 	if (mj->jobid == 0) {
-		appendError(c, "-NOJOB Job does not exist\n");
+		sendError(c, JERS_ERR_NOJOB, NULL);
 		return 0;
 	}
 
 	HASH_FIND_INT(server.jobTable, &mj->jobid, j);
 
 	if (j == NULL || j->internal_state &JERS_JOB_FLAG_DELETED) {
-		appendError(c, "-NOJOB Job does not exist\n");
+		sendError(c, JERS_ERR_NOJOB, NULL);
 		return 0;
 	}
 
@@ -588,18 +573,18 @@ int command_mod_job(client *c, void *args) {
 	hold = (j->state == JERS_JOB_HOLDING);
 
 	if ((j->state == JERS_JOB_COMPLETED || j->state == JERS_JOB_EXITED) && mj->restart != 1) {
-		appendError(c, "-INVARG Unable to modify a completed job without restart flag\n");
+		sendError(c, JERS_ERR_INVARG, "Unable to modify a completed job without restart flag");
 		return 0;
 	}
 
 	if (j->state == JERS_JOB_RUNNING || j->internal_state &JERS_JOB_FLAG_STARTED) {
-		appendError(c, "-INVARG Unable to modify a running job\n");
+		sendError(c, JERS_ERR_INVARG, "Unable to modify a running job");
 		return 0;
 	}
 
 	if (mj->priority != -1) {
 		if (mj->priority < JERS_JOB_MIN_PRIORITY || mj->priority > JERS_JOB_MAX_PRIORITY) {
-			appendError(c, "-INVARG Invalid priority specified\n");
+			sendError(c, JERS_ERR_INVARG, "Invalid priority specified");
 			return 0;
 		}
 	}
@@ -608,7 +593,7 @@ int command_mod_job(client *c, void *args) {
 		HASH_FIND_STR(server.queueTable, mj->queue, q);
 
 		if (q == NULL) {
-			appendError(c, "-NOQUEUE Invalid queue specified\n");
+			sendError(c, JERS_ERR_NOQUEUE, NULL);
 			return 0;
 		}
 	}
@@ -675,7 +660,7 @@ int command_mod_job(client *c, void *args) {
 		freeStringArray(mj->res_count, &mj->resources);
 
 		if (resources == NULL) {
-			appendError(c, "-INVRES A requested resource does not exist\n");
+			sendError(c, JERS_ERR_NORES, NULL);
 			return -1;
 		}
 
@@ -704,31 +689,17 @@ int command_mod_job(client *c, void *args) {
 
 	changeJobState(j, state, dirty);
 
-	/* Don't respond if we are replaying a command */
-	if (c == NULL)
-		return 0;
-
-	resp_t * r = respNew();
-	respAddSimpleString(r, "0");
-
-	size_t reply_length = 0;
-	char * reply = respFinish(r, &reply_length);
-	appendResponse(c, reply, reply_length);
-	free(reply);
-	return 0;
-
-	return 0;
+	return sendClientReturnCode(c, "0");
 }
 
 int command_del_job(client * c, void * args) {
 	jersJobDel * jd = args;
 	struct job * j = NULL;
-	resp_t * r = NULL;
 
 	HASH_FIND_INT(server.jobTable, &jd->jobid, j);
 
 	if (!j || j->internal_state &JERS_JOB_FLAG_DELETED) {
-		appendError(c, "-NOJOB Job does not exist\n");
+		sendError(c, JERS_ERR_NOJOB, NULL);
 		return 0;
 	}
 
@@ -736,82 +707,56 @@ int command_del_job(client * c, void * args) {
 	changeJobState(j, 0, 0);
 	server.stats.total.deleted++;
 
-	/* Don't respond if we are replaying a command */
-	if (c == NULL)
-		return 0;
-
-	r = respNew();
-	respAddSimpleString(r, "0");
-
-	size_t reply_length = 0;
-	char * reply = respFinish(r, &reply_length);
-	appendResponse(c, reply, reply_length);
-	free(reply);
-	return 0;
+	return sendClientReturnCode(c, "0");
 }
 
 int command_sig_job(client * c, void * args) {
 	jersJobSig * js = args;
 	struct job * j = NULL;
-	resp_t * r = NULL;
+	resp_t r;
+	int rc = 0;
 
 	HASH_FIND_INT(server.jobTable, &js->jobid, j);
 
 	if (!j || j->internal_state &JERS_JOB_FLAG_DELETED) {
-		appendError(c, "-NOJOB Job does not exist\n");
-		return 0;
+		sendError(c, JERS_ERR_NOJOB, NULL);
+		return 1;
 	}
 
-	r = respNew();
+	if (j->state != JERS_JOB_RUNNING) {
+		sendError(c, JERS_ERR_INVSTATE, "Job is not running");
+		return 1;
+	}
 
 	/* signo == 0 wants to just test the job is running */
-	if (js->signum == 0) {
-		respAddSimpleString(r, j->pid == 0 ? "1" : "0");
-	} else {
-		/* Send the requested signal to the job (via the agent) */
-		resp_t * sig_message = respNew();
-		size_t length;
+	if (js->signum == 0)
+		return sendClientReturnCode(c, j->pid == 0 ? "1" : "0");
+	
+	/* Send the requested signal to the job (via the agent) */
+	resp_t sig_message;
+	initMessage(&sig_message, "SIG_JOB", 1);
 
-		respAddArray(sig_message);
-		respAddSimpleString(sig_message, "SIG_JOB");
-		respAddInt(sig_message, 1);
-		respAddMap(sig_message);
+	respAddMap(&sig_message);
+	addIntField(&sig_message, JOBID, js->jobid);
+	addIntField(&sig_message, SIGNAL, js->signum);
+	respCloseMap(&sig_message);
 
-		addIntField(sig_message, JOBID, js->jobid);
-		addIntField(sig_message, SIGNAL, js->signum);
+	sendAgentMessage(j->queue->agent, &sig_message);
 
-		respCloseMap(sig_message);
-		respCloseArray(sig_message);
-
-		char * sig_cmd = respFinish(sig_message, &length);
-
-		sendAgentMessage(j->queue->agent, sig_cmd, length);
-		free(sig_cmd);
-
-		respAddSimpleString(r, "0");
-	}
-
-	size_t reply_length = 0;
-	char * reply = respFinish(r, &reply_length);
-	appendResponse(c, reply, reply_length);
-	free(reply);
-	return 0;
+	return sendClientReturnCode(c, "0");
 }
 
 int command_set_tag(client * c, void * args) {
 	jersTagSet * ts = args;
 	struct job * j = NULL;
-	resp_t * r = NULL;
 	int i;
 
 	HASH_FIND_INT(server.jobTable, &ts->jobid, j);
 
 	if (j == NULL) {
-		appendError(c, "-NOJOB Job does not exist\n");
-		return 0;
+		sendError(c, JERS_ERR_NOJOB, NULL);
+		return 1;
 	}
-
-	r = respNew();
 
 	/* Does it have that tag? */
 	for (i = 0; i < j->tag_count; i++) {
@@ -831,30 +776,20 @@ int command_set_tag(client * c, void * args) {
 		j->tags[i].value = ts->value;
 	}
 
-	respAddSimpleString(r, "0");
-
-	size_t reply_length = 0;
-	char * reply = respFinish(r, &reply_length);
-	appendResponse(c, reply, reply_length);
-	free(reply);
-
-	return 0;
+	return sendClientReturnCode(c, "0");
 }
 
 int command_del_tag(client * c, void * args) {
 	jersTagDel * td = args;
 	struct job * j = NULL;
-	resp_t * r = NULL;
 	int i;
 
 	HASH_FIND_INT(server.jobTable, &td->jobid, j);
 
 	if (j == NULL) {
-		appendError(c, "-NOJOB Job does not exist\n");
-		return 0;
+		sendError(c, JERS_ERR_NOJOB, NULL);
+		return 1;
 	}
-
-	r = respNew();
 
 	/* Does it have that tag? */
 	for (i = 0; i < j->tag_count; i++) {
@@ -868,21 +803,13 @@ int command_del_tag(client * c, void * args) {
 	}
 
 	if (i == j->tag_count) {
-		appendError(c, "-NOTAG Tag not found\n");
-		respFinish(r, NULL);
-		return 0;
+		sendError(c, JERS_ERR_NOTAG, NULL);
+		return 1;
 	}
 
 	j->tag_count--;
 
-	respAddSimpleString(r, "0");
-
-	size_t reply_length = 0;
-	char * reply = respFinish(r, &reply_length);
-	appendResponse(c, reply, reply_length);
-	free(reply);
-
-	return 0;
+	return sendClientReturnCode(c, "0");
 }
 
 void free_add_job(void * args) {

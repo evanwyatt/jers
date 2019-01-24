@@ -308,6 +308,8 @@ struct jersServer {
 
 extern struct jersServer server;
 
+void error_die(char *, ...);
+
 jobid_t getNextJobID(void);
 int addJob(struct job * j, int state, int dirty);
 void freeJob(struct job * j);
@@ -359,7 +361,5 @@ void handleWriteable(struct epoll_event * e);
 
 void handleClientDisconnect(client * c);
 void handleAgentDisconnect(agent * a);
-
-void sendAgentMessage(agent * a, char * message, int64_t length);
 
 #endif

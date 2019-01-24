@@ -45,31 +45,19 @@
 
 #define DEFAULT_CLIENT_TIMEOUT 60 // seconds
 
+extern int jers_errno;
+
 char * socket_path = NULL;
 int fd = -1;
 msg_t msg;
 buff_t response = {0};
 int initalised = 0;
 
+const char * getErrString(int);
+int getJersErrno(char *, char **);
+void setJersErrno(int err, char * msg);
 int deserialize_jerJob(msg_item * item, struct jersJob * job);
-
 static int jersConnect(void);
-
-const char * jers_error_str[] = {
-	"Ok",
-	"Unknown Error",
-	"Invalid argument",
-	NULL
-
-};
-
-static int apierror = 0;	      /* Last error code set by API function. Reset before every call */
-static const char * apierrorstring = NULL;  /* Custom error string populated by API functions */
-
-static void setError(int error, const char * errorString) {
-	apierror = error;
-	apierrorstring = errorString ? errorString : NULL;
-}
 
 static int customInit(char * custom_config) {
 	
@@ -86,7 +74,7 @@ int jersInitAPI(char * custom_config) {
 
 	/* We can be reinitalised by providing a config argument */
 	if (initalised && !custom_config) {
-		setError(JERS_OK, NULL);
+		setJersErrno(JERS_ERR_OK, NULL);
 		return 0;
 	}
 
@@ -96,11 +84,15 @@ int jersInitAPI(char * custom_config) {
 		rc = defaultInit();
 	}
 
-	if (rc)
+	if (rc) {
+		setJersErrno(JERS_ERR_INIT, "Init routine failed");
 		return rc;
+	}
 
-	if (jersConnect())
+	if (jersConnect()) {
+		setJersErrno(JERS_ERR_INIT, "Failed to connect");
 		return 1;
+	}
 
 	buffNew(&response, 0);
 	respReadInit(&msg.reader, NULL, 0);
@@ -119,6 +111,8 @@ void jersFinish(void) {
 
 	initalised = 0;
 	fd = -1;
+
+	setJersErrno(JERS_ERR_OK, NULL);
 }
 
 /* Establish a connection to the main daemon */
@@ -150,19 +144,47 @@ static int jersConnect(void) {
 }
 
 /* Block until the entire request is sent */
-static int sendRequest(char * request, size_t length) {
+static int sendRequest(resp_t * r) {
 	size_t total_sent = 0;
+	size_t length = 0;
+	char * request = NULL;
+
+        respCloseMap(r);
+        respCloseArray(r);
+
+        request = respFinish(r, &length);
+
+	if (request == NULL) {
+		return 1;
+	}
 
 	while (total_sent < length) {
 		ssize_t sent = send(fd, request + total_sent, length - total_sent, MSG_NOSIGNAL);
 
 		if (sent == -1 && errno != EINTR) {
+			setJersErrno(JERS_ERR_ESEND, strerror(errno));
 			fprintf(stderr, "send to jers daemon failed: %s\n", strerror(errno));
+			free(request);
 			return 1;
 		}
 
 		total_sent += sent;
 	}
+
+	free(request);
+
+	return 0;
+}
+
+/* Initalise a new request */
+
+static int initRequest(resp_t * r, char * cmd, int version) {
+	respNew(r);
+
+	respAddArray(r);
+	respAddSimpleString(r, cmd);
+	respAddInt(r, version);
+	respAddMap(r);
 
 	return 0;
 }
@@ -172,7 +194,8 @@ static int readResponse(void) {
 	while (1) {
 		/* Allocate more memory if we might need it */
 		if (buffResize(&response, 0) != 0) {
-			fprintf(stderr, "failed to resize response buffer\n");
+			setJersErrno(JERS_ERR_MEM, NULL);
+			fprintf(stderr, "failed to resize response buffer: %s\n", strerror(errno));
 			return 1;
 		}
 
@@ -182,10 +205,12 @@ static int readResponse(void) {
 			if (errno == EINTR)
 				continue;
 
-			fprintf(stderr, "read from jers daemon failed: %s\n", strerror(errno));
+			setJersErrno(JERS_ERR_ERECV, NULL);
+			fprintf(stderr, "Error receiving from jers daemon\n");
 			return 1;
 		} else if (bytes_read == 0) {
-			fprintf(stderr, "disconnected from jer daemon\n");
+			setJersErrno(JERS_ERR_DISCONNECT, NULL);
+			fprintf(stderr, "Disconnected from jers daemon\n");
 			return 1;
 		}
 		response.used += bytes_read;
@@ -197,22 +222,31 @@ static int readResponse(void) {
 			continue;
 
 		if (rc < 0) {
+			setJersErrno(JERS_ERR_INVRESP, NULL);
 			fprintf(stderr, "Failed to parse response from jers daemon\n");
+			free_message(&msg, NULL);
 			return 1;
 		}
 
 		break;
 	}
 
+	/* Check for an error in the response */
+	if (msg.error) {
+		char * err_msg = NULL;
+		int err = getJersErrno(msg.error, &err_msg);
+
+		setJersErrno(err, err_msg);
+		free_message(&msg, NULL);
+		free(err_msg);
+		return 1;
+	}
+
 	return 0;
 }
 
-int jersGetErrno(void) {
-	return apierror;
-}
-
-const char * jersGetErrStr(int apierror) {
-	return apierrorstring ? apierrorstring : jers_error_str[apierror];
+const char * jersGetErrStr(int jers_error) {
+	return getErrString(jers_error);
 }
 
 void jersFreeJobInfo (jersJobInfo * info) {
@@ -327,70 +361,49 @@ int deserialize_jersJob(msg_item * item, jersJob *j) {
 }
 
 int jersGetJob(jobid_t jobid, jersJobFilter * filter, jersJobInfo * job_info) {
-	if (jersInitAPI(NULL)) {
-		setError(JERS_ERROR, NULL);
-		return 0;
-	}
+	if (jersInitAPI(NULL))
+		return 1;
 
 	job_info->count = 0;
 	job_info->jobs = NULL;
 
-	resp_t * r = respNew();
+	resp_t r;
 
-	respAddArray(r);
-	respAddSimpleString(r, "GET_JOB");
-	respAddInt(r, 1); // Version
-	respAddMap(r);
+	initRequest(&r, "GET_JOB", 1);
 
 	if (jobid) {
-		addIntField(r, JOBID, jobid);
+		addIntField(&r, JOBID, jobid);
 	} else if (filter) {
 		if (filter->filter_fields) {
 
 			if (filter->filter_fields & JERS_FILTER_JOBNAME)
-				addStringField(r, JOBNAME, filter->filters.job_name);
+				addStringField(&r, JOBNAME, filter->filters.job_name);
 
 			if (filter->filter_fields & JERS_FILTER_QUEUE)
-				addStringField(r, QUEUENAME, filter->filters.queue_name);
+				addStringField(&r, QUEUENAME, filter->filters.queue_name);
 
 			if (filter->filter_fields & JERS_FILTER_STATE)
-				addIntField(r, STATE, filter->filters.state);
+				addIntField(&r, STATE, filter->filters.state);
 
 			if (filter->filter_fields & JERS_FILTER_TAGS)
-				addStringMapField(r, TAGS, filter->filters.tag_count, (key_val_t *)filter->filters.tags);
+				addStringMapField(&r, TAGS, filter->filters.tag_count, (key_val_t *)filter->filters.tags);
 
 			if (filter->filter_fields & JERS_FILTER_RESOURCES)
-				addStringArrayField(r, RESOURCES, filter->filters.res_count, filter->filters.resources);
+				addStringArrayField(&r, RESOURCES, filter->filters.res_count, filter->filters.resources);
 
 			if (filter->filter_fields & JERS_FILTER_UID)
-				addIntField(r, UID, filter->filters.uid);
+				addIntField(&r, UID, filter->filters.uid);
 		}
 
 		if (filter->return_fields)
-			addIntField(r, RETFIELDS, filter->return_fields);
+			addIntField(&r, RETFIELDS, filter->return_fields);
 	}
 
-	respCloseMap(r);
-	respCloseArray(r);
-
-	size_t req_len;
-	char * request = respFinish(r, &req_len);
-
-	if (sendRequest(request, req_len)) {
-		free(request);
-		return 1;
-	}
-
-	free(request);
-
-	if(readResponse())
+	if (sendRequest(&r))
 		return 1;
 
-	if (msg.error) {
-		setError(JERS_INVALID, msg.error);
-		free_message(&msg, NULL);
+	if (readResponse())
 		return 1;
-	}
 
 	int64_t i;
 
@@ -409,42 +422,20 @@ int jersGetJob(jobid_t jobid, jersJobFilter * filter, jersJobInfo * job_info) {
 
 
 int jersDelJob(jobid_t jobid) {
-	if (jersInitAPI(NULL)) {
-		setError(JERS_ERROR, NULL);
-		return 0;
-	}
+	if (jersInitAPI(NULL))
+		return 1;
 
-	/* Serialise the request */
-	resp_t * r = respNew();
+	resp_t r;
 
-	respAddArray(r);
-	respAddSimpleString(r, "DEL_JOB");
-	respAddInt(r, 1);
-	respAddMap(r);
+	initRequest(&r, "DEL_JOB", 1);
 
-	addIntField(r, JOBID, jobid);
+	addIntField(&r, JOBID, jobid);
 
-	respCloseMap(r);
-	respCloseArray(r);
+	if (sendRequest(&r))
+		return 1;
 
-	size_t req_len;
-	char * request = respFinish(r, &req_len);
-
-	if (sendRequest(request, req_len)) {
-		free(request);
-		return 0;
-	}
-
-	free(request);
-
-	if(readResponse())
-		return 0;
-
-	if (msg.error) {
-		setError(JERS_INVALID, msg.error);
-		free_message(&msg, NULL);
-		return 0;
-	}
+	if (readResponse())
+		return 1;
 
 	free_message(&msg, NULL);
 
@@ -460,116 +451,94 @@ void jersInitJobAdd(jersJobAdd * j) {
 jobid_t jersAddJob(jersJobAdd * j) {
 	jobid_t new_jobid = 0;
 
-	if (jersInitAPI(NULL)) {
-		setError(JERS_ERROR, NULL);
+	if (jersInitAPI(NULL))
 		return 0;
-	}
 
 	/* Sanity Checks */
 	if (!j) {
-		setError(JERS_INVALID, NULL);
+		setJersErrno(JERS_ERR_INVARG, NULL);
 		return 0;
 	}
 
 	if (!j->name) {
-		setError(JERS_INVALID, "Job name must be provided");
+		setJersErrno(JERS_ERR_INVARG, "Job name must be provided");
 		return 0;
 	}
 
 	if (j->argc <=0 || j->argv == NULL) {
-		setError(JERS_INVALID, "argc/argv must be populated");
+		setJersErrno(JERS_ERR_INVARG, "argc/argv must be populated");
 		return 0;
 	}
 
 	if (j->env_count > 0 && j->envs == NULL) {
-		setError(JERS_INVALID, "env_count populated, but env not passed");
+		setJersErrno(JERS_ERR_INVARG, "env_count populated, but env not passed");
 		return 0;
 	}
 
-	/* Serialise the request */
-	resp_t * r = respNew();
+	resp_t r;
+	initRequest(&r, "ADD_JOB", 1);
 
-	respAddArray(r);
-	respAddSimpleString(r, "ADD_JOB");
-	respAddInt(r, 1);
-	respAddMap(r);
-
-	addStringField(r, JOBNAME, j->name);
-	addStringArrayField(r, ARGS, j->argc, j->argv);
+	addStringField(&r, JOBNAME, j->name);
+	addStringArrayField(&r, ARGS, j->argc, j->argv);
 
 	if (j->queue)
-		addStringField(r, QUEUENAME, j->queue);
+		addStringField(&r, QUEUENAME, j->queue);
 
 	if (j->uid > 0)
-		addIntField(r, UID, j->uid);
+		addIntField(&r, UID, j->uid);
 
 	if (j->shell)
-		addStringField(r, SHELL, j->shell);
+		addStringField(&r, SHELL, j->shell);
 
 	if (j->priority >= 0)
-		addIntField(r, PRIORITY, j->priority);
+		addIntField(&r, PRIORITY, j->priority);
 
 	if (j->hold)
-		addBoolField(r, HOLD, 1);
+		addBoolField(&r, HOLD, 1);
 
 	if (j->tag_count) {
-		addStringMapField(r, TAGS, j->tag_count, (key_val_t *)j->tags);
+		addStringMapField(&r, TAGS, j->tag_count, (key_val_t *)j->tags);
 	}
 
 	if (j->res_count) {
-		addStringArrayField(r, RESOURCES, j->res_count, j->resources);
+		addStringArrayField(&r, RESOURCES, j->res_count, j->resources);
 	}
 
 	if (j->env_count) {
-		addStringArrayField(r, ENVS, j->env_count, j->envs);
+		addStringArrayField(&r, ENVS, j->env_count, j->envs);
 	}
 
 	if (j->wrapper) {
-		addStringField(r, WRAPPER, j->wrapper);
+		addStringField(&r, WRAPPER, j->wrapper);
 	} else {
 		if (j->pre_cmd) {
-			addStringField(r, PRECMD, j->pre_cmd);
+			addStringField(&r, PRECMD, j->pre_cmd);
 		}
 
 		if (j->post_cmd) {
-			addStringField(r, POSTCMD, j->post_cmd);
+			addStringField(&r, POSTCMD, j->post_cmd);
 		}
 	}
 
 	if (j->stdout)
-		addStringField(r, STDOUT, j->stdout);
+		addStringField(&r, STDOUT, j->stdout);
 
 	if (j->stderr)
-		addStringField(r, STDERR, j->stderr);
+		addStringField(&r, STDERR, j->stderr);
 
 	if (j->defer_time != -1)
-		addIntField(r, DEFERTIME, j->defer_time);
+		addIntField(&r, DEFERTIME, j->defer_time);
 
-	respCloseMap(r);
-	respCloseArray(r);
-
-	size_t req_len;
-	char * request = respFinish(r, &req_len);
-
-	if (sendRequest(request, req_len)) {
-		free(request);
+	if (sendRequest(&r)) {
 		return 0;
 	}
-
-	free(request);
 
 	if(readResponse())
 		return 0;
 
-	if (msg.error) {
-		setError(JERS_INVALID, msg.error);
-		free_message(&msg, NULL);
-		return 0;
-	}
-
 	/* Should just have a single JOBID field returned */
 	if (msg.item_count != 1 || msg.items[0].field_count != 1 || msg.items[0].fields[0].type != RESP_TYPE_INT) {
-		setError(JERS_INVALID, "Got invalid response from jers daemon");
+		setJersErrno(JERS_ERR_INVRESP, NULL);
 		return 0;
 	}
 
@@ -588,133 +557,97 @@ void jersInitJobMod(jersJobMod *j) {
 }
 
 int jersModJob(jersJobMod *j) {
-	if (jersInitAPI(NULL)) {
-		setError(JERS_ERROR, NULL);
+	if (jersInitAPI(NULL))
 		return 1;
-	}
 
 	if (j->jobid == 0 ) {
-		setError(JERS_INVALID, "No jobid provided");
+		setJersErrno(JERS_ERR_INVARG, "No jobid provided");
 		return 1;
 	}
 
-	/* Serialise the request */
-	resp_t * r = respNew();
+	resp_t r;
 
-	respAddArray(r);
-	respAddSimpleString(r, "MOD_JOB");
-	respAddInt(r, 1);
-	respAddMap(r);
+	initRequest(&r, "MOD_JOB", 1);
 
-	addIntField(r, JOBID, j->jobid);
+	addIntField(&r, JOBID, j->jobid);
 
 	if (j->name)
-		addStringField(r, JOBNAME, j->name);
+		addStringField(&r, JOBNAME, j->name);
 
 	if (j->queue)
-		addStringField(r, QUEUENAME, j->queue);
+		addStringField(&r, QUEUENAME, j->queue);
 
 	if (j->defer_time != -1)
-		addIntField(r, DEFERTIME, j->defer_time);
+		addIntField(&r, DEFERTIME, j->defer_time);
 
 	if (j->restart)
-		addBoolField(r, RESTART, 1);
+		addBoolField(&r, RESTART, 1);
 
 	if (j->nice != -1)
-		addIntField(r, NICE, j->nice);
+		addIntField(&r, NICE, j->nice);
 
 	if (j->priority != -1)
-		addIntField(r, PRIORITY, j->priority);
+		addIntField(&r, PRIORITY, j->priority);
 
 	if (j->hold != -1)
-		addBoolField(r, HOLD, j->hold);
+		addBoolField(&r, HOLD, j->hold);
 
 	if (j->env_count)
-		addStringArrayField(r, ENVS, j->env_count, j->envs);
+		addStringArrayField(&r, ENVS, j->env_count, j->envs);
 
 	if (j->tag_count)
-		addStringMapField(r, TAGS, j->tag_count, (key_val_t *)j->tags);
+		addStringMapField(&r, TAGS, j->tag_count, (key_val_t *)j->tags);
 
 	if (j->res_count)
-		addStringArrayField(r, RESOURCES, j->res_count, j->resources);
+		addStringArrayField(&r, RESOURCES, j->res_count, j->resources);
 
-	respCloseMap(r);
-	respCloseArray(r);
-
-	size_t req_len;
-	char * request = respFinish(r, &req_len);
-
-	if (sendRequest(request, req_len)) {
-		free(request);
+	if (sendRequest(&r)) {
 		return 1;
 	}
-
-	free(request);
 
 	if(readResponse())
 		return 1;
-
-	if (msg.error) {
-		setError(JERS_INVALID, "Error modifying job");
-		free_message(&msg, NULL);
-		return 1;
-	}
 
 	free_message(&msg, NULL);
 	return 0;
 }
 
 int jersSignalJob(jobid_t id, int signum) {
-	if (jersInitAPI(NULL)) {
-		setError(JERS_ERROR, NULL);
+	int status = 1;
+
+	if (jersInitAPI(NULL))
 		return 1;
-	}
 
 	if (id == 0 ) {
-		setError(JERS_INVALID, "No jobid provided");
+		setJersErrno(JERS_ERR_INVARG, "No jobid provided");
 		return 1;
 	}
 
 	if (signum < 0 || signum >= SIGRTMAX) {
-		setError(JERS_INVALID, "Invalid signum provided");
+		setJersErrno(JERS_ERR_INVARG, "Invalid signum provided");
 		return 1;
 	}
 
 	/* Serialise the request */
-	resp_t * r = respNew();
+	resp_t r;
 
-	respAddArray(r);
-	respAddSimpleString(r, "SIG_JOB");
-	respAddInt(r, 1);
-	respAddMap(r);
+	initRequest(&r, "SIG_JOB", 1);
 
-	addIntField(r, JOBID, id);
-	addIntField(r, SIGNAL, signum);
+	addIntField(&r, JOBID, id);
+	addIntField(&r, SIGNAL, signum);
 
-	respCloseMap(r);
-	respCloseArray(r);
-
-	size_t req_len;
-	char * request = respFinish(r, &req_len);
-
-	if (sendRequest(request, req_len)) {
-		free(request);
+	if (sendRequest(&r))
 		return 1;
-	}
-
-	free(request);
 
 	if(readResponse())
 		return 1;
 
-	if (msg.error) {
-		setError(JERS_INVALID, "Error signaling job");
-		free_message(&msg, NULL);
-		return 1;
-	}
+	if (msg.command && strcmp(msg.command, "0") == 0)
+		status = 0;
 
 	free_message(&msg, NULL);
-	return strcmp(msg.command, "0");
+
+	return status;
 }
 
 
@@ -739,47 +672,26 @@ void jersInitQueueAdd(jersQueueAdd *q) {
 /* Note: filter is currently not used for queues */
 
 int jersGetQueue(char * name, jersQueueFilter * filter, jersQueueInfo * info) {
-	if (jersInitAPI(NULL)) {
-		setError(JERS_ERROR, NULL);
+	if (jersInitAPI(NULL)) 
 		return 0;
-	}
 
 	info->count = 0;
 	info->queues = NULL;
 
-	resp_t * r = respNew();
+	resp_t r;
 
-	respAddArray(r);
-	respAddSimpleString(r, "GET_QUEUE");
-	respAddInt(r, 1); // Version
-	respAddMap(r);
+	initRequest(&r, "GET_QUEUE", 1);
 
 	if (name)
-		addStringField(r, QUEUENAME, name);
+		addStringField(&r, QUEUENAME, name);
 	else
-		addStringField(r, QUEUENAME, "*");
+		addStringField(&r, QUEUENAME, "*");
 
-	respCloseMap(r);
-	respCloseArray(r);
-
-	size_t req_len;
-	char * request = respFinish(r, &req_len);
-
-	if (sendRequest(request, req_len)) {
-		free(request);
+	if (sendRequest(&r))
 		return 1;
-	}
-
-	free(request);
 
 	if(readResponse())
 		return 1;
-
-	if (msg.error) {
-		setError(JERS_INVALID, msg.error);
-		free_message(&msg, NULL);
-		return 1;
-	}
 
 	int64_t i;
 
@@ -813,66 +725,43 @@ void jersFreeQueueInfo(jersQueueInfo * info) {
 
 int jersAddQueue(jersQueueAdd *q) {
 
-	if (jersInitAPI(NULL)) {
-		setError(JERS_ERROR, NULL);
+	if (jersInitAPI(NULL))
 		return 1;
-	}
 
 	if (q->name == NULL) {
-		setError(JERS_INVALID, "No queue name provided");
+		setJersErrno(JERS_ERR_INVARG, "No queue name provided");
 		return 1;
 	}
 
 	if (q->node == NULL) {
-		setError(JERS_INVALID, "No node provided");
+		setJersErrno(JERS_ERR_INVARG, "No node provided");
 		return 1;
 	}
 
+	resp_t r;
 
-	/* Serialise the request */
-	resp_t * r = respNew();
+	initRequest(&r, "ADD_QUEUE", 1);
 
-	respAddArray(r);
-	respAddSimpleString(r, "ADD_QUEUE");
-	respAddInt(r, 1);
-	respAddMap(r);
-
-	addStringField(r, QUEUENAME, q->name);
-	addStringField(r, NODE, q->node);
+	addStringField(&r, QUEUENAME, q->name);
+	addStringField(&r, NODE, q->node);
 
 	if (q->desc)
-		addStringField(r, DESC, q->desc);
+		addStringField(&r, DESC, q->desc);
 
 	if (q->job_limit != -1)
-		addIntField(r, JOBLIMIT, q->job_limit);
+		addIntField(&r, JOBLIMIT, q->job_limit);
 
 	if (q->priority != -1)
-		addIntField(r, PRIORITY, q->priority);
+		addIntField(&r, PRIORITY, q->priority);
 
 	if (q->state != -1)
-		addIntField(r, STATE, q->state);
+		addIntField(&r, STATE, q->state);
 
-	respCloseMap(r);
-	respCloseArray(r);
-
-	size_t req_len;
-	char * request = respFinish(r, &req_len);
-
-	if (sendRequest(request, req_len)) {
-		free(request);
+	if (sendRequest(&r))
 		return 1;
-	}
-
-	free(request);
 
 	if(readResponse())
 		return 1;
-
-	if (msg.error) {
-		setError(JERS_INVALID, "Error adding queue");
-		free_message(&msg, NULL);
-		return 1;
-	}
 
 	free_message(&msg, NULL);
 
@@ -880,68 +769,45 @@ int jersAddQueue(jersQueueAdd *q) {
 }
 
 int jersModQueue(jersQueueMod *q) {
-	if (jersInitAPI(NULL)) {
-		setError(JERS_ERROR, NULL);
+	if (jersInitAPI(NULL))
 		return 1;
-	}
 
 	if (q->name == NULL) {
-		setError(JERS_INVALID, "No queue name provided");
+		setJersErrno(JERS_ERR_INVARG, "No queue name provided");
 		return 1;
 	}
 
 	if (q->desc == NULL && q->node == NULL && q->job_limit == -1 && q->priority == -1 && q->state == -1) {
-		setError(JERS_INVALID, "Nothing to update");
+		setJersErrno(JERS_ERR_NOCHANGE, NULL);
 		return 1;
 	}
 
+	resp_t r;
 
-	/* Serialise the request */
-	resp_t * r = respNew();
+	initRequest(&r, "MOD_QUEUE", 1);
 
-	respAddArray(r);
-	respAddSimpleString(r, "MOD_QUEUE");
-	respAddInt(r, 1);
-	respAddMap(r);
-
-	addStringField(r, QUEUENAME, q->name);
+	addStringField(&r, QUEUENAME, q->name);
 
 	if (q->node)
-		addStringField(r, NODE, q->node);
+		addStringField(&r, NODE, q->node);
 
 	if (q->desc)
-		addStringField(r, DESC, q->desc);
+		addStringField(&r, DESC, q->desc);
 
 	if (q->job_limit != -1)
-		addIntField(r, JOBLIMIT, q->job_limit);
+		addIntField(&r, JOBLIMIT, q->job_limit);
 
 	if (q->priority != -1)
-		addIntField(r, PRIORITY, q->priority);
+		addIntField(&r, PRIORITY, q->priority);
 
 	if (q->state != -1)
-		addIntField(r, STATE, q->state);
+		addIntField(&r, STATE, q->state);
 
-	respCloseMap(r);
-	respCloseArray(r);
-
-	size_t req_len;
-	char * request = respFinish(r, &req_len);
-
-	if (sendRequest(request, req_len)) {
-		free(request);
+	if (sendRequest(&r))
 		return 1;
-	}
-
-	free(request);
 
 	if(readResponse())
 		return 1;
-
-	if (msg.error) {
-		setError(JERS_INVALID, "Error modifying queue");
-		free_message(&msg, NULL);
-		return 1;
-	}
 
 	free_message(&msg, NULL);
 
@@ -949,94 +815,54 @@ int jersModQueue(jersQueueMod *q) {
 }
 
 int jersAddResource(char *name, int count) {
-	if (jersInitAPI(NULL)) {
-		setError(JERS_ERROR, NULL);
+	if (jersInitAPI(NULL))
+		return 1;
+
+	if (name == NULL) {
+		setJersErrno(JERS_ERR_INVARG, NULL);
 		return 1;
 	}
 
-	if (name == NULL)
-		return 1;
+	resp_t r;
+	
+	initRequest(&r, "ADD_RESOURCE", 1);
 
-	resp_t * r = respNew();
-
-	respAddArray(r);
-	respAddSimpleString(r, "ADD_RESOURCE");
-	respAddInt(r, 1);
-	respAddMap(r);
-
-	addStringField(r, RESNAME, name);
+	addStringField(&r, RESNAME, name);
 
 	if (count)
-		addIntField(r, RESCOUNT, count);
+		addIntField(&r, RESCOUNT, count);
 
-	respCloseMap(r);
-	respCloseArray(r);
-
-	size_t req_len;
-	char * request = respFinish(r, &req_len);
-
-	if (sendRequest(request, req_len)) {
-		free(request);
+	if (sendRequest(&r))
 		return 1;
-	}
-
-	free(request);
 
 	if (readResponse())
 		return 1;
-
-	if (msg.error) {
-		setError(JERS_INVALID, "Error adding resource");
-		free_message(&msg, NULL);
-		return 1;
-	}
 
 	free_message(&msg, NULL);
 
 	return 0;
 }
 int jersGetResource(char * name, jersResourceFilter *filter, jersResourceInfo *info) {
-	if (jersInitAPI(NULL)) {
-		setError(JERS_ERROR, NULL);
-		return 0;
-	}
+	if (jersInitAPI(NULL))
+		return 1;
 
 	info->count = 0;
 	info->resources = NULL;
 
-	resp_t * r = respNew();
+	resp_t r;
 
-	respAddArray(r);
-	respAddSimpleString(r, "GET_RESOURCE");
-	respAddInt(r, 1); // Version
-	respAddMap(r);
+	initRequest(&r, "GET_RESOURCE", 1);
 
 	if (name)
-		addStringField(r, RESNAME, name);
+		addStringField(&r, RESNAME, name);
 	else
-		addStringField(r, RESNAME, "*");
+		addStringField(&r, RESNAME, "*");
 
-	respCloseMap(r);
-	respCloseArray(r);
-
-	size_t req_len;
-	char * request = respFinish(r, &req_len);
-
-	if (sendRequest(request, req_len)) {
-		free(request);
+	if (sendRequest(&r))
 		return 1;
-	}
-
-	free(request);
 
 	if(readResponse())
 		return 1;
-
-	if (msg.error) {
-		setError(JERS_INVALID, msg.error);
-		free_message(&msg, NULL);
-		return 1;
-	}
 
 	int64_t i;
 
@@ -1058,42 +884,20 @@ int jersModResource(char *name, int new_count) {
 }
 
 int jersDelResource(char *name) {
-	if (jersInitAPI(NULL)) {
-		setError(JERS_ERROR, NULL);
-		return 0;
-	}
-
-	/* Serialise the request */
-	resp_t * r = respNew();
-
-	respAddArray(r);
-	respAddSimpleString(r, "DEL_RESOURCE");
-	respAddInt(r, 1);
-	respAddMap(r);
-
-	addStringField(r, RESNAME, name);
-
-	respCloseMap(r);
-	respCloseArray(r);
-
-	size_t req_len;
-	char * request = respFinish(r, &req_len);
-
-	if (sendRequest(request, req_len)) {
-		free(request);
-		return 0;
-	}
-
-	free(request);
-
-	if(readResponse())
-		return 0;
-
-	if (msg.error) {
-		setError(JERS_INVALID, msg.error);
-		free_message(&msg, NULL);
+	if (jersInitAPI(NULL))
 		return 1;
-	}
+
+	resp_t r;
+
+	initRequest(&r, "DEL_RESOURCE", 1);
+
+	addStringField(&r, RESNAME, name);
+
+	if (sendRequest(&r))
+		return 1;
+
+	if (readResponse())
+		return 1;
 
 	free_message(&msg, NULL);
 
@@ -1114,42 +918,22 @@ void jersFreeResourceInfo(jersResourceInfo *info) {
 int jersGetStats(jersStats * s) {
 	int i;
 
-	if (jersInitAPI(NULL)) {
-		setError(JERS_ERROR, NULL);
+	if (jersInitAPI(NULL))
 		return 1;
-	}
 
 	memset(s, 0, sizeof(jersStats));
 
-	resp_t * r = respNew();
-	respAddArray(r);
-	respAddSimpleString(r, "STATS");
-	respAddInt(r, 1);
-	respAddMap(r);
-	addIntField(r, JOBID, 0); // Dummy field
-	respCloseMap(r);
-	respCloseArray(r);
+	resp_t r;
 
-	size_t req_len;
-	char * request = respFinish(r, &req_len);
+	initRequest(&r, "STATS", 1);
 
-	if (sendRequest(request, req_len)) {
-		free(request);
+	addIntField(&r, JOBID, 0); // Dummy field
+
+	if (sendRequest(&r))
 		return 1;
-	}
 
-	free(request);
-
-	if (readResponse()) {
-		free_message(&msg, NULL);
+	if (readResponse())
 		return 1;
-	}
-
-	if (msg.error) {
-		setError(JERS_INVALID, "Error getting stats");
-		free_message(&msg, NULL);
-		return 1;
-	}
 
 	msg_item * item = &msg.items[0];
 
@@ -1178,46 +962,24 @@ int jersGetStats(jersStats * s) {
 }
 
 int jersSetTag(jobid_t id, char * key, char * value) {
-	if (jersInitAPI(NULL)) {
-		setError(JERS_ERROR, NULL);
+	if (jersInitAPI(NULL))
 		return 1;
-	}
 
-	/* Serialise the request */
-	resp_t * r = respNew();
+	resp_t r;
 
-	respAddArray(r);
-	respAddSimpleString(r, "SET_TAG");
-	respAddInt(r, 1);
-	respAddMap(r);
+	initRequest(&r, "SET_TAG", 1);
 
-	addIntField(r, JOBID, id);
-	addStringField(r, TAG_KEY, key);
+	addIntField(&r, JOBID, id);
+	addStringField(&r, TAG_KEY, key);
 
 	if (value)
-		addStringField(r, TAG_VALUE, value);
+		addStringField(&r, TAG_VALUE, value);
 
-	respCloseMap(r);
-	respCloseArray(r);
-
-	size_t req_len;
-	char * request = respFinish(r, &req_len);
-
-	if (sendRequest(request, req_len)) {
-		free(request);
-		return 0;
-	}
-
-	free(request);
+	if (sendRequest(&r))
+		return 1;
 
 	if(readResponse())
-		return 0;
-
-	if (msg.error) {
-		setError(JERS_INVALID, msg.error);
-		free_message(&msg, NULL);
 		return 1;
-	}
 
 	free_message(&msg, NULL);
 
@@ -1225,43 +987,22 @@ int jersSetTag(jobid_t id, char * key, char * value) {
 }
 
 int jersDelTag(jobid_t id, char * key) {
-	if (jersInitAPI(NULL)) {
-		setError(JERS_ERROR, NULL);
+	if (jersInitAPI(NULL))
+		return 1;
+
+	resp_t r;
+
+	initRequest(&r, "DEL_TAG", 1);
+
+	addIntField(&r, JOBID, id);
+	addStringField(&r, TAG_KEY, key);
+
+	if (sendRequest(&r)) {
 		return 1;
 	}
 
-	/* Serialise the request */
-	resp_t * r = respNew();
-
-	respAddArray(r);
-	respAddSimpleString(r, "DEL_TAG");
-	respAddInt(r, 1);
-	respAddMap(r);
-
-	addIntField(r, JOBID, id);
-	addStringField(r, TAG_KEY, key);
-
-	respCloseMap(r);
-	respCloseArray(r);
-
-	size_t req_len;
-	char * request = respFinish(r, &req_len);
-
-	if (sendRequest(request, req_len)) {
-		free(request);
-		return 0;
-	}
-
-	free(request);
-
-	if(readResponse())
-		return 0;
-
-	if (msg.error) {
-		setError(JERS_INVALID, msg.error);
-		free_message(&msg, NULL);
+	if (readResponse())
 		return 1;
-	}
 
 	free_message(&msg, NULL);
 

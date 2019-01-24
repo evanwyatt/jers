@@ -57,6 +57,9 @@
 #define REQUESTS_THRESHOLD 0x010000
 #define DEFAULT_DIR "/tmp"
 
+int initMessage(resp_t * r, const char * resp_name, int version);
+void error_die(char *, ...);
+
 char * server_log = "jers_agentd";
 int server_log_mode = JERS_LOG_DEBUG;
 
@@ -561,6 +564,8 @@ void send_msg(resp_t * r) {
 		add_epoll = 1;
 
 
+	respCloseArray(r);
+
 	buffer = respFinish(r, &length);
 	buffAdd(&agent.responses, buffer, length);
 
@@ -578,26 +583,24 @@ void send_msg(resp_t * r) {
 	}
 }
 int send_start(struct runningJob * j) {
-	resp_t * r = respNew();
+	resp_t r;
 	print_msg(JERS_LOG_INFO, "Job started: JOBID:%d PID:%d", j->jobID, j->pid);
 
-	respAddArray(r);
-	respAddSimpleString(r, "JOB_STARTED");
-	respAddInt(r, 1);
-	respAddMap(r);
-	addIntField(r, JOBID, j->jobID);
-	addIntField(r, JOBPID, j->pid);
-	addIntField(r, STARTTIME, j->start_time);
-	respCloseMap(r);
-	respCloseArray(r);
+	initMessage(&r, "JOB_STARTED", 1);
 
-	send_msg(r);
+	respAddMap(&r);
+	addIntField(&r, JOBID, j->jobID);
+	addIntField(&r, JOBPID, j->pid);
+	addIntField(&r, STARTTIME, j->start_time);
+	respCloseMap(&r);
+
+	send_msg(&r);
 
 	return 0;
 }
 
 int send_completion(struct runningJob * j) {
-	resp_t * r = NULL;
+	resp_t r;
 
 	/* Only send the completion if we are connected to the main daemon process */
 	if (agent.daemon_fd == -1) {
@@ -605,16 +608,14 @@ int send_completion(struct runningJob * j) {
 		return 0;
 	}
 
+	initMessage(&r, "JOB_COMPLETED", 1);
+
 	print_msg(JERS_LOG_INFO, "Job complete: JOBID:%d PID:%d RC:%d\n", j->jobID, j->pid, j->job_completion.exitcode);
 
-	r = respNew();
-	respAddArray(r);
-	respAddSimpleString(r, "JOB_COMPLETED");
-	respAddInt(r, 1);
-	respAddMap(r);
-	addIntField(r, JOBID, j->jobID);
-	addIntField(r, EXITCODE, j->job_completion.exitcode);
-	addIntField(r, FINISHTIME, j->job_completion.finish_time);
+	respAddMap(&r);
+	addIntField(&r, JOBID, j->jobID);
+	addIntField(&r, EXITCODE, j->job_completion.exitcode);
+	addIntField(&r, FINISHTIME, j->job_completion.finish_time);
 
 	/* Usage info */
 	//TODO:
@@ -623,10 +624,9 @@ int send_completion(struct runningJob * j) {
 	//respAddInt(r, j->rusage.ru_stime.tv_sec);
 	//respAddInt(r, j->rusage.ru_stime.tv_usec);
 
-	respCloseMap(r);
-	respCloseArray(r);
+	respCloseMap(&r);
 
-	send_msg(r);
+	send_msg(&r);
 
 	close(j->socket);
 
@@ -638,22 +638,20 @@ int send_completion(struct runningJob * j) {
 /* Sent upon connection to confirm who we are */
 
 int send_login(void) {
-	resp_t * r = respNew();
+	resp_t r;
 	char host[256];
 
 	gethostname(host, sizeof(host) - 1);
 	host[sizeof(host) - 1] = '\0';
 
-	respAddArray(r);
-	respAddSimpleString(r, "AGENT_LOGIN");
-	respAddInt(r, 1);
-	respAddMap(r);
-	addStringField(r, NODE, host);
-	respCloseMap(r);
-	respCloseArray(r);
+	initMessage(&r, "AGENT_LOGIN", 1);
+
+	respAddMap(&r);
+	addStringField(&r, NODE, host);
+	respCloseMap(&r);
 
 	print_msg(JERS_LOG_INFO, "Sending login");
-	send_msg(r);
+	send_msg(&r);
 	return 0;
 }
 

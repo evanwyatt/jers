@@ -36,6 +36,9 @@
 #include <comms.h>
 #include <commands.h>
 #include <fields.h>
+#include <error.h>
+
+const char * getErrType(int jers_error);
 
 void runSimpleCommand(client * c);
 void runComplexCommand(client * c);
@@ -59,16 +62,54 @@ command_t commands[] = {
 	{"STATS",        PERM_READ,             0,          command_stats,        NULL, NULL},
 };
 
-/* Append to or allocate a new reponse buffer */
+static int _sendMessage(struct connectionType * connection, buff_t * b, resp_t * r) {
+	size_t buff_length = 0;
+	char * buff = respFinish(r, &buff_length);
 
-void appendResponse(client * c, char * buffer, size_t length) {
-	buffAdd(&c->response, buffer, length);
-	setWritable(&c->connection);
+	if (buff == NULL)
+		return 1;
+
+	buffAdd(b, buff, buff_length);
+	setWritable(connection);
+	free(buff);
+
+	return 0;
 }
 
-//TODO: Update this function to accept a error type + string and ensure it has a newline.
-void appendError(client * c, char * msg) {
-	appendResponse(c, msg, strlen(msg));
+void sendError(client * c, int error, const char * err_msg) {
+	resp_t response;
+	char str[1024];
+	const char * error_type = getErrType(error);
+
+	respNew(&response);
+
+	snprintf(str, sizeof(str), "%s %s", error_type, err_msg ? err_msg : "");
+
+	respAddSimpleError(&response, str);
+
+	_sendMessage(&c->connection, &c->response, &response);
+}
+
+int sendClientReturnCode(client * c, const char * ret) {
+	resp_t r;
+
+	respNew(&r);
+	respAddSimpleString(&r, ret);
+
+	return _sendMessage(&c->connection, &c->response, &r);
+}
+
+int sendClientMessage(client * c, resp_t * r) {
+	respCloseArray(r);
+
+	return _sendMessage(&c->connection, &c->response, r);
+}
+
+void sendAgentMessage(agent * a, resp_t * r) {
+	respCloseArray(r);
+
+	_sendMessage(&a->connection, &a->responses, r);
+	return;
 }
 
 /* Run either a simple or complex command, which will
@@ -85,23 +126,17 @@ int runCommand(client * c) {
 }
 
 void runSimpleCommand(client * c) {
-	resp_t * response = NULL;
+	resp_t response;
 
 	 if (strcmp(c->msg.command, "PING") == 0) {
-		response = respNew();
-		respAddSimpleString(response, "PONG");
+		respNew(&response);
+		respAddSimpleString(&response, "PONG");
 	} else {
 		fprintf(stderr, "Unknown command passed: %s\n", c->msg.command);
 		return;
 	}
 
-	if (response) {
-		size_t length = 0;
-		char * str =  respFinish(response, &length);
-		appendResponse(c, str, length);
-		free(str);
-	}
-
+	_sendMessage(&c->connection, &c->response, &response);
 	free_message(&c->msg, NULL);
 }
 
@@ -151,7 +186,7 @@ void runComplexCommand(client * c) {
 			void * args = NULL;
 
 			if (validateUserAction(c, commands[i].perm) != 0) {
-				appendError(c, "-NOPERM Permission denied\n");
+				sendError(c, JERS_ERR_NOPERM, NULL);
 				print_msg(JERS_LOG_DEBUG, "User %d not authorized to run %s", c->uid, c->msg.command);
 				break;
 			}
@@ -187,35 +222,28 @@ void runComplexCommand(client * c) {
 
 int command_stats(client * c, void * args) {
 	UNUSED(args);
+	resp_t r;
 
-	resp_t * r = respNew();
-	respAddArray(r);
-	respAddSimpleString(r, "RESP");
-	respAddInt(r, 1);
-	respAddMap(r);
+	initMessage(&r, "RESP", 1);
 
-	addIntField(r, STATSRUNNING, server.stats.jobs.running);
-	addIntField(r, STATSPENDING, server.stats.jobs.pending);
-	addIntField(r, STATSDEFERRED, server.stats.jobs.deferred);
-	addIntField(r, STATSHOLDING, server.stats.jobs.holding);
-	addIntField(r, STATSCOMPLETED, server.stats.jobs.completed);
-	addIntField(r, STATSEXITED, server.stats.jobs.exited);
+	respAddMap(&r);
 
-	addIntField(r, STATSTOTALSUBMITTED, server.stats.total.submitted);
-	addIntField(r, STATSTOTALSTARTED, server.stats.total.started);
-	addIntField(r, STATSTOTALCOMPLETED, server.stats.total.completed);
-	addIntField(r, STATSTOTALEXITED, server.stats.total.exited);
-	addIntField(r, STATSTOTALDELETED, server.stats.total.deleted);
+	addIntField(&r, STATSRUNNING, server.stats.jobs.running);
+	addIntField(&r, STATSPENDING, server.stats.jobs.pending);
+	addIntField(&r, STATSDEFERRED, server.stats.jobs.deferred);
+	addIntField(&r, STATSHOLDING, server.stats.jobs.holding);
+	addIntField(&r, STATSCOMPLETED, server.stats.jobs.completed);
+	addIntField(&r, STATSEXITED, server.stats.jobs.exited);
 
-	respCloseMap(r);
-	respCloseArray(r);
+	addIntField(&r, STATSTOTALSUBMITTED, server.stats.total.submitted);
+	addIntField(&r, STATSTOTALSTARTED, server.stats.total.started);
+	addIntField(&r, STATSTOTALCOMPLETED, server.stats.total.completed);
+	addIntField(&r, STATSTOTALEXITED, server.stats.total.exited);
+	addIntField(&r, STATSTOTALDELETED, server.stats.total.deleted);
 
-	size_t reply_length = 0;
-	char * reply = respFinish(r, &reply_length);
-	appendResponse(c, reply, reply_length);
-	free(reply);
+	respCloseMap(&r);
 
-	return 0;
+	return sendClientMessage(c, &r);
 }
 
 void command_agent_login(agent * a) {
