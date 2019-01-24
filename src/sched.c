@@ -30,7 +30,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <time.h>
-
+#include <commands.h>
 
 int __comp(const void * a_, const void * b_) {
 	const struct job * a = *((struct job **) a_);
@@ -46,53 +46,45 @@ int __comp(const void * a_, const void * b_) {
 }
 
 void sendStartCmd(struct job * j) {
-	resp_t * r = respNew();
+	resp_t r;
 	size_t length;
 
 	print_msg(JERS_LOG_INFO, "Sending start message for JobID:%-7d Queue:%s QueuePriority:%d Priority:%d", j->jobid, j->queue->name, j->queue->priority, j->priority);
 
-	respAddArray(r);
-	respAddSimpleString(r, "START_JOB");
-	respAddInt(r, 1);
-	respAddMap(r);
-	addIntField(r, JOBID, j->jobid);
-	addStringField(r, JOBNAME, j->jobname);
-	addStringField(r, QUEUENAME, j->queue->name);
-	addIntField(r, UID, j->uid);
-	addIntField(r, NICE, j->nice);
+	initMessage(&r, "START_JOB", 1);
+
+	respAddMap(&r);
+	addIntField(&r, JOBID, j->jobid);
+	addStringField(&r, JOBNAME, j->jobname);
+	addStringField(&r, QUEUENAME, j->queue->name);
+	addIntField(&r, UID, j->uid);
+	addIntField(&r, NICE, j->nice);
 
 	if (j->shell)
-		addStringField(r, SHELL, j->shell);
+		addStringField(&r, SHELL, j->shell);
 
 	if (j->wrapper) {
-		addStringField(r, WRAPPER, j->wrapper);
+		addStringField(&r, WRAPPER, j->wrapper);
 	} else {
 		if (j->pre_cmd)
-			addStringField(r, PRECMD, j->pre_cmd);
+			addStringField(&r, PRECMD, j->pre_cmd);
 
 		if (j->post_cmd)
-			addStringField(r, POSTCMD, j->post_cmd);
+			addStringField(&r, POSTCMD, j->post_cmd);
 	}
 
-	addStringArrayField(r, ARGS, j->argc, j->argv);
+	addStringArrayField(&r, ARGS, j->argc, j->argv);
 
 	if (j->env_count)
-		addStringArrayField(r, ENVS, j->env_count, j->envs);
+		addStringArrayField(&r, ENVS, j->env_count, j->envs);
 
 	if (j->stdout)
-		addStringField(r, STDOUT, j->stdout);
+		addStringField(&r, STDOUT, j->stdout);
 	if (j->stderr)
-		addStringField(r, STDERR, j->stderr);
+		addStringField(&r, STDERR, j->stderr);
 
-	respCloseMap(r);
-	respCloseArray(r);
-
-	char * start_cmd = respFinish(r, &length);
-
-	sendAgentMessage(j->queue->agent, start_cmd, length);
-
-	free(start_cmd);
-
+	respCloseMap(&r);
+	sendAgentMessage(j->queue->agent, &r);
 	return;
 }
 

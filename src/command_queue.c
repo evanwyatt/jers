@@ -31,6 +31,7 @@
 #include <jers.h>
 #include <commands.h>
 #include <fields.h>
+#include <error.h>
 
 void * deserialize_add_queue(msg_t * msg) {
 	jersQueueAdd *q = calloc(sizeof(jersQueueAdd), 1);
@@ -117,16 +118,13 @@ void * deserialize_del_queue(msg_t * msg) {
 int command_add_queue(client * c, void * args) {
 	jersQueueAdd * qa = args;
 	struct queue * q = NULL;
-	resp_t * response = NULL;
-	char * buff = NULL;
-	size_t buff_length = 0;
 
 	lowercasestring(qa->name);
 
 	HASH_FIND_STR(server.queueTable, qa->name, q);
 
 	if (q != NULL) {
-		appendError(c, "-QUEUEEXISTS Queue already exists\n");
+		sendError(c, JERS_ERR_QUEUEEXISTS, NULL);
 		return 1;
 	}
 
@@ -160,13 +158,7 @@ int command_add_queue(client * c, void * args) {
 		}
 	}
 
-	response = respNew();
-	respAddSimpleString(response, "0");
-	buff = respFinish(response, &buff_length);
-	appendResponse(c, buff, buff_length);
-	free(buff);
-
-	return 0;
+	return sendClientReturnCode(c, "0");
 }
 
 void serialize_jersQueue(resp_t * r, struct queue * q) {
@@ -195,14 +187,11 @@ int command_get_queue(client *c, void *args) {
 	int all = 0;
 	int64_t count = 0;
 
-	resp_t * r = NULL;
+	resp_t r;
 
-	r = respNew();
-	respAddArray(r);
-	respAddSimpleString(r, "RESP");
-	respAddInt(r, 1);
+	initMessage(&r, "RESP", 1);
 
-	respAddArray(r);
+	respAddArray(&r);
 
 	if (qf->filters.name == NULL || strcmp(qf->filters.name, "*") == 0)
 		all = 1;
@@ -212,37 +201,28 @@ int command_get_queue(client *c, void *args) {
 			continue;
 
 		/* Made it here, add it to our response */
-		serialize_jersQueue(r, q);
+		serialize_jersQueue(&r, q);
 		count++;
 	}
 
-	respCloseArray(r);
-	respCloseArray(r);
+	respCloseArray(&r);
 
-	size_t reply_length = 0;
-	char * reply = respFinish(r, &reply_length);
-	appendResponse(c, reply, reply_length);
-	free(reply);
-
-	return 0;
+	return sendClientMessage(c, &r);
 }
 
 int command_mod_queue(client *c, void * args) {
 	jersQueueMod * qm = args;
 	struct queue * q = NULL;
-	resp_t * response = NULL;
-	char * buff = NULL;
-	size_t buff_length = 0;
 
 	if (qm->name == NULL) {
-		appendError(c, "-NOQUEUE Queue does not exists");
+		sendError(c, JERS_ERR_INVARG, "No queue provided");
 		return 1;
 	}
 
 	HASH_FIND_STR(server.queueTable, qm->name, q);
 
 	if (q == NULL) {
-		appendError(c, "-NOQUEUE Queue does not exists");
+		sendError(c, JERS_ERR_NOQUEUE, NULL);
 		return 1;
 	}
 
@@ -269,13 +249,7 @@ int command_mod_queue(client *c, void * args) {
 
 	server.dirty_queues = 1;
 
-	response = respNew();
-	respAddSimpleString(response, "0");
-	buff = respFinish(response, &buff_length);
-	appendResponse(c, buff, buff_length);
-	free(buff);
-
-	return 0;
+	return sendClientReturnCode(c, "0");
 }
 
 int command_del_queue(client *c, void *args) {
@@ -284,14 +258,14 @@ int command_del_queue(client *c, void *args) {
 	struct job *j = NULL;
 
 	if (qd->name == NULL) {
-		appendError(c, "-NOQUEUE No queue specified");
+		sendError(c, JERS_ERR_INVARG, "No queue provided");
 		return 1;
 	}
 
 	HASH_FIND_STR(server.queueTable, qd->name, q);
 
 	if (q == NULL) {
-		appendError(c, "-NOQUEUE Queue does not exists");
+		sendError(c, JERS_ERR_NOQUEUE, NULL);
 		return 1;
 	}
 
@@ -304,7 +278,7 @@ int command_del_queue(client *c, void *args) {
 	}
 
 	if (j != NULL) {
-		appendError(c, "-NOTEMPTY Queue has active jobs on it");
+		sendError(c, JERS_ERR_NOTEMPTY, NULL);
 		return 1;
 	}
 
@@ -313,7 +287,7 @@ int command_del_queue(client *c, void *args) {
 	//TODO: Delete the queue
 
 
-	return 0;
+	return sendClientReturnCode(c, "0");
 }
 
 void free_add_queue(void * args) {

@@ -101,19 +101,30 @@ typedef uint32_t jobid_t;
 #define JERS_RET_ARGS       0x040000
 #define JERS_RET_SHELL      0x080000
 
-#define JERS_QUEUE_
+extern int jers_errno;
 
 enum jers_error_codes {
-        JERS_OK = 0,
-        JERS_ERROR,
-        JERS_INVALID
+	JERS_ERR_OK = 0,
+	JERS_ERR_NOJOB,
+        JERS_ERR_NOPERM,
+        JERS_ERR_NOQUEUE,
+        JERS_ERR_INVARG,
+        JERS_ERR_NOTAG,
+	JERS_ERR_JOBEXISTS,
+	JERS_ERR_RESEXISTS,
+        JERS_ERR_QUEUEEXISTS,
+        JERS_ERR_NOTEMPTY,
+        JERS_ERR_NORES,
+	JERS_ERR_INIT,
+	JERS_ERR_NOCHANGE,
+	JERS_ERR_MEM,
+	JERS_ERR_INVRESP,
+	JERS_ERR_ERECV,
+	JERS_ERR_ESEND,
+	JERS_ERR_DISCONNECT,
 
+	JERS_ERR_UNKNOWN
 };
-
-
-//TODO: Add compiler asserts to ensure code + string match lengths
-
-void error_die(char * msg, ...);
 
 typedef struct {
 	char * key;

@@ -227,17 +227,21 @@ static int _respGetItem(resp_read_t * r, struct argItem * item) {
 }
 
 
-resp_t * respNew(void) {
-	resp_t *  r = calloc(sizeof(resp_t), 1);
-
+int respNew(resp_t * r) {
 	r->items = malloc(sizeof(struct buffer) * INIT_SIZE);
+
+	if (r->items == NULL)
+		return 1;
+
 	r->size = INIT_SIZE;
+	r->depth = 0;
+
 	r->items->len = 0;
 	r->items->count = 0;
 	r->items->string = NULL;
 	r->items->size = 0;
 
-	return r;
+	return 0;
 }
 
 /* Return the completed buffer, and the length.

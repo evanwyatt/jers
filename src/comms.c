@@ -470,9 +470,3 @@ void handleWriteable(struct epoll_event * e) {
 
 	return;
 }
-
-void sendAgentMessage(agent * a, char * message, int64_t length) {
-	buffAdd(&a->responses, message, length);
-	setWritable(&a->connection);
-	return;
-}

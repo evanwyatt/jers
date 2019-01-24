@@ -105,7 +105,7 @@ enum resp_types {
 	RESP_TYPE_MAP
 };
 
-resp_t * respNew(void);
+int respNew(resp_t * r);
 char * respFinish(resp_t * r, size_t * len);
 
 int respAddArray(resp_t * r);

@@ -109,14 +109,14 @@ int command_add_resource(client *c, void *args) {
 	struct resource * r = NULL;
 
 	if (ra->name == NULL) {
-		appendError(c, "-INVARG Invalid name\n");
+		sendError(c, JERS_ERR_INVARG, "No resource name provided");
 		return 1;
 	}
 
 	HASH_FIND_STR(server.resTable, ra->name, r);
 
 	if (r != NULL) {
-		appendError(c, "-INVARG Resource already exists\n");
+		sendError(c, JERS_ERR_RESEXISTS, NULL);
 		return 1;
 	}
 
@@ -127,70 +127,51 @@ int command_add_resource(client *c, void *args) {
 
 	addRes(r, 1);
 
-	resp_t * response = respNew();
-
-	respAddSimpleString(response, "0");
-
-	size_t reply_length = 0;
-	char * reply = respFinish(response, &reply_length);
-	appendResponse(c, reply, reply_length);
-	free(reply);
-
-	return 0;
+	return sendClientReturnCode(c, "0");
 }
 
 int command_get_resource(client *c, void *args) {
 	jersResourceFilter * rf = args;
 	struct resource * r = NULL;
 	int wildcard = 0;
-	resp_t * response = NULL;
+	resp_t response;
 
 	if (rf->filters.name == NULL) {
-		appendError(c, "-INVARG No name filter provided\n");
+		sendError(c, JERS_ERR_INVARG, "No name filter provided");
 		return 1;
 	}
 
-	response = respNew();
-	respAddArray(response);
-	respAddSimpleString(response, "RESP");
-	respAddInt(response, 1);
+	initMessage(&response, "RESP", 1);
 
 	wildcard = ((strchr(rf->filters.name, '*')) || (strchr(rf->filters.name, '?')));
 
 	if (wildcard) {
-		respAddArray(response);
+		respAddArray(&response);
 
 		for (r = server.resTable; r != NULL; r = r->hh.next) {
 			if (matches(rf->filters.name, r->name) == 0) {
-				respAddMap(response);
-				addStringField(response, RESNAME, r->name);
-				addIntField(response, RESCOUNT, r->count);
-				addIntField(response, RESINUSE, r->in_use);
-				respCloseMap(response);	
+				respAddMap(&response);
+				addStringField(&response, RESNAME, r->name);
+				addIntField(&response, RESCOUNT, r->count);
+				addIntField(&response, RESINUSE, r->in_use);
+				respCloseMap(&response);	
 			} 
 		}
 
-		respCloseArray(response);
+		respCloseArray(&response);
 	} else {
 		HASH_FIND_STR(server.resTable, rf->filters.name, r);
 
 		if (r) {
-			respAddMap(response);
-			addStringField(response, RESNAME, r->name);
-			addIntField(response, RESCOUNT, r->count);
-			addIntField(response, RESINUSE, r->in_use);
-			respCloseMap(response);
+			respAddMap(&response);
+			addStringField(&response, RESNAME, r->name);
+			addIntField(&response, RESCOUNT, r->count);
+			addIntField(&response, RESINUSE, r->in_use);
+			respCloseMap(&response);
 		}
 	}
-	
-	respCloseArray(response);
 
-	size_t reply_length = 0;
-	char * reply = respFinish(response, &reply_length);
-	appendResponse(c, reply, reply_length);
-	free(reply);
-
-	return 0;
+	return sendClientMessage(c, &response);	
 }
 
 int command_mod_resource(client *c, void *args) {
@@ -198,31 +179,26 @@ int command_mod_resource(client *c, void *args) {
 	struct resource * r = NULL;
 
 	if (rm->name == NULL) {
-		appendError(c, "-INVARG Resource name not provided\n");
+		sendError(c, JERS_ERR_INVARG, "Resource name not provided");
 		return 1;
 	}
 
 	HASH_FIND_STR(server.resTable, rm->name , r);
 
 	if (r == NULL) {
-		appendError(c, "-INVARG Resource not found\n");
+		sendError(c, JERS_ERR_NORES, NULL);
 		return 1;
 	}
 
 	r->count = rm->count;
 
-	resp_t * response = respNew();
-	respAddSimpleString(response, "0");
-	size_t reply_length = 0;
-	char * reply = respFinish(response, &reply_length);
-	appendResponse(c, reply, reply_length);
-	free(reply);
-
-	return 0;
+	return sendClientReturnCode(c, "0");
 }
 
 int command_del_resource(client *c, void *args) {
-	return 0;
+	//TODO: Implement
+	
+	return 1;
 }
 
 void free_add_resource(void * args) {
