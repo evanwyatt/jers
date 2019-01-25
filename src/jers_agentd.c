@@ -79,6 +79,7 @@ struct runningJob {
 	pid_t job_pid;
 	jobid_t jobID;
 	time_t start_time;
+	int kill;
 	int socket;
 	struct jobCompletion job_completion;
 
@@ -459,7 +460,7 @@ void jersRunJob(struct jersJobSpawn * j, int socket) {
 		if (errno == EINTR)
 			continue;
 
-		fprintf(stderr, "wait4() failed? %s\n", strerror(errno));
+		fprintf(stderr, "wait4() failed pid:%d? %s\n", jobPid, strerror(errno));
 		_exit(1);
 	}
 
@@ -481,7 +482,8 @@ void jersRunJob(struct jersJobSpawn * j, int socket) {
 
 	job_completion.finish_time = end.tv_sec;	
 
-	/* Write a summary to the log file and flush it */
+	/* Write a summary to the log file and flush it to disk */
+	lseek(stdout_fd, 0, SEEK_END);
 	dprintf(stdout_fd, "\n========= Job Summary =========\n");
 	dprintf(stdout_fd, " Elapsed Time : %s\n", print_time(&elapsed, 1));
 	dprintf(stdout_fd, " Start time   : %s\n", print_time(&start, 0));
@@ -698,7 +700,7 @@ void check_children(void) {
 
 	j = agent.jobs;
 
-	while (j != NULL){
+	while (j != NULL) {
 		if (j->job_pid == 0) {	
 			do {
 				status = read(j->socket, &j->job_pid, sizeof(pid_t));
@@ -706,6 +708,15 @@ void check_children(void) {
 
 			if (status == -1 && (errno != EAGAIN && errno != EWOULDBLOCK))
 				fprintf(stderr, "Failed to read pid from job %d\n", j->jobID);
+
+			if (j->job_pid && j->kill) {
+				/* Send the saved signal to the job */
+				print_msg(JERS_LOG_DEBUG, "Sending delayed signal to job:%d siugnum:%d\n", j->jobID, j->kill);
+
+				if (kill(-j->job_pid, j->kill)) {
+					print_msg(JERS_LOG_WARNING, "Failed to signal JOBID:%d with SIGNUM:%d", j->jobID, j->kill);
+				}
+			}
 		}
 
 		/* Check for any children we have cleaned up, but didn't get the completion infomation from */
@@ -878,10 +889,12 @@ void signal_command(msg_t * m) {
 
 	if (j->job_pid == 0) {
 		fprintf(stderr, "Got request to signal job %d, but it hasn't sent us its PID yet...\n", j->jobID);
+		/* Set a flag so its killed as soon as we get the PID */
+		j->kill = signum;
 		return;
 	}
 
-	if (kill(j->job_pid, signum) != 0)
+	if (kill(-j->job_pid, signum) != 0)
 		print_msg(JERS_LOG_WARNING, "Failed to signal JOBID:%d with SIGNUM:%d", id, signum);
 
 	return;
