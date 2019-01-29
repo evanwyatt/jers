@@ -79,6 +79,7 @@ typedef uint32_t jobid_t;
 #define JERS_FILTER_RESOURCES 0x10
 #define JERS_FILTER_UID       0x20
 #define JERS_FILTER_RESNAME   0x40
+#define JERS_FILTER_NODE      0x80
 
 #define JERS_RET_JOBID      0x01
 #define JERS_RET_QUEUE      0x02
@@ -100,6 +101,7 @@ typedef uint32_t jobid_t;
 #define JERS_RET_POSTCMD    0x020000
 #define JERS_RET_ARGS       0x040000
 #define JERS_RET_SHELL      0x080000
+#define JERS_RET_NODE       0x100000
 
 extern int jers_errno;
 
@@ -211,6 +213,8 @@ typedef struct jersJob {
 	int argc;
 	char ** argv;
 
+	char * node;
+
 	time_t submit_time;
 	time_t defer_time;
 	time_t start_time;
@@ -221,7 +225,6 @@ typedef struct jersJob {
 
 	int res_count;
 	char ** resources;
-
 } jersJob;
 
 typedef struct jersJobInfo {
@@ -238,6 +241,8 @@ typedef struct jersJobFilter {
 	struct {
 		char * job_name;
 		char * queue_name;
+
+		char * node;
 
 		int state;
 		int64_t tag_count;

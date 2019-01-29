@@ -352,6 +352,7 @@ int deserialize_jersJob(msg_item * item, jersJob *j) {
 			case FINISHTIME: j->finish_time = getNumberField(&item->fields[i]); break;
 			case TAGS      : j->tag_count = getStringMapField(&item->fields[i], (key_val_t **)&j->tags); break;
 			case RESOURCES : j->res_count = getStringArrayField(&item->fields[i], &j->resources); break;
+			case NODE      : j->node = getStringField(&item->fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",item->fields[i].name); break;
 		}

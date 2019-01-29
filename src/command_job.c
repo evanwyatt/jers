@@ -128,6 +128,7 @@ void * deserialize_get_job(msg_t * t) {
 			case TAGS     : s->filters.tag_count = getStringMapField(&item->fields[i], (key_val_t **)&s->filters.tags); s->filter_fields |= JERS_FILTER_TAGS ; break;
 			case RESOURCES: s->filters.res_count = getStringArrayField(&item->fields[i], &s->filters.resources); s->filter_fields |= JERS_FILTER_RESOURCES ; break;
 			case UID      : s->filters.uid = getNumberField(&item->fields[i]); s->filter_fields |= JERS_FILTER_UID ; break;
+			case NODE     : s->filters.node = getStringField(&item->fields[i]); s->filter_fields |= JERS_FILTER_NODE ; break;
 
 			case RETFIELDS: s->return_fields = getNumberField(&item->fields[i]); break;
 
@@ -271,6 +272,9 @@ void serialize_jersJob(resp_t * r, struct job * j, int fields) {
 
 	if (fields == 0 || fields & JERS_RET_ARGS)
 		addStringArrayField(r, ARGS, j->argc, j->argv);
+
+	if (fields == 0 || fields & JERS_RET_NODE)
+		addStringField(r, NODE, j->queue->host);
 
 	if (j->stdout && (fields == 0 || fields & JERS_RET_STDOUT))
 		addStringField(r, STDOUT, j->stdout);
