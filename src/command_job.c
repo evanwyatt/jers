@@ -35,31 +35,38 @@
 #include <time.h>
 #include <pwd.h>
 
+/* Convert a resource string and populate the passed in res structure */
+int resourceStringToResource(const char * string, struct jobResource * res) {
+	char * string_temp = strdup(string);
+	char * ptr = strchr(string_temp, ':');
+	struct resource * search_res = NULL;
+
+	if (ptr) {
+		*ptr = '\0';
+		res->needed = atoi(ptr + 1);
+	} else {
+		res->needed = 1;
+	}
+
+	HASH_FIND_STR(server.resTable, string_temp, search_res);
+
+	if (search_res == NULL) {
+		free(string_temp);
+		return 1;
+	}
+
+	res->res = search_res;
+	free(string_temp);
+	return 0;
+}
+
 struct jobResource * convertResourceStrings(int res_count, char ** res_strings) {
 	struct jobResource * resources = malloc(sizeof(struct jobResource) * res_count);
-	int i;
 
 	/* Check the resources */
-	for (i = 0; i < res_count; i++) {
-		struct resource * res = NULL;
-		char * ptr = strchr(res_strings[i], ':');
-
-		if (ptr) {
-			*ptr = '\0';
-			resources[i].needed = atoi(ptr + 1);
-		} else {
-			resources[i].needed = 1;
-		}
-
-		HASH_FIND_STR(server.resTable, res_strings[i], res);
-
-		if (res == NULL) {
-			free(resources);
+	for (int i = 0; i < res_count; i++) {
+		if (resourceStringToResource(res_strings[i], &resources[i]) != 0)
 			return NULL;
-			
-		}
-
-		resources[i].res = res;
 	}
 
 	return resources;

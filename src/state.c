@@ -43,8 +43,9 @@
 #include <time.h>
 #include <glob.h>
 
-
 #define STATE_DIV_FACTOR 10000
+
+int resourceStringToResource(const char * string, struct jobResource * res);
 
 /* Functions to save/recover the state to/from disk
  *   The state journals (journal.yymmdd) are written to when commands are received
@@ -459,6 +460,12 @@ int stateSaveJob(struct job * j) {
 		fprintf(f, "TAG_COUNT %d\n", j->tag_count);
 		for (i = 0; i < j->tag_count; i++)
 			fprintf(f, "TAG[%d] %s\t%s\n", i, j->tags[i].key, escapeString(j->tags[i].value, NULL));
+	}
+
+	if (j->res_count) {
+		fprintf(f, "RES_COUNT %d\n", j->res_count);
+		for (i = 0; i < j->res_count; i++)
+			fprintf(f, "RES[%d] %s:%d\n", i, j->req_resources[i].res->name, j->req_resources[i].needed);
 	}
 
 	if (j->uid)
@@ -936,7 +943,14 @@ int stateLoadJob(char * fileName) {
 
 			j->tags[index].key = strdup(tag_key);
 
-		}else if (strcmp(key, "UID") == 0) {
+		} else if (strcmp(key, "RES_COUNT") == 0) {
+			j->res_count = atoi(value);
+			j->req_resources = malloc(sizeof(struct jobResource) * j->res_count);
+		} else if (strcmp(key, "RES") == 0) {
+			if (resourceStringToResource(value, &j->req_resources[index]) != 0) {
+				error_die("Invalid resource encountered for job %d\n", j->jobid);
+			}
+		} else if (strcmp(key, "UID") == 0) {
 			j->uid = atoi(value);
 		} else if (strcmp(key, "NICE") == 0) {
 			j->nice = atoi(value);
