@@ -53,12 +53,12 @@ msg_t msg;
 buff_t response = {0};
 int initalised = 0;
 
+const char * getPendString(int);
 const char * getErrString(int);
 int getJersErrno(char *, char **);
 void setJersErrno(int err, char * msg);
-int deserialize_jerJob(msg_item * item, struct jersJob * job);
-static int jersConnect(void);
 
+static int jersConnect(void);
 static int customInit(char * custom_config) {
 	
 	return 0;
@@ -249,6 +249,10 @@ const char * jersGetErrStr(int jers_error) {
 	return getErrString(jers_error);
 }
 
+const char * jersGetPendStr(int pend_reason) {
+	return getPendString(pend_reason);
+}
+
 void jersFreeJobInfo (jersJobInfo * info) {
 	int64_t i, j;
 
@@ -353,6 +357,7 @@ int deserialize_jersJob(msg_item * item, jersJob *j) {
 			case TAGS      : j->tag_count = getStringMapField(&item->fields[i], (key_val_t **)&j->tags); break;
 			case RESOURCES : j->res_count = getStringArrayField(&item->fields[i], &j->resources); break;
 			case NODE      : j->node = getStringField(&item->fields[i]); break;
+			case PENDREASON: j->pend_reason = getNumberField(&item->fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",item->fields[i].name); break;
 		}

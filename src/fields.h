@@ -131,6 +131,7 @@ enum field_type {
 	SIGNAL,
 	TAG_KEY,
 	TAG_VALUE,
+	PENDREASON,
 
 	ENDOFFIELDS
 };

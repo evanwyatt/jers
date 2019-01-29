@@ -69,10 +69,15 @@ const struct jers_err jers_errors[] = {
 	{"JERS_ERR_UNKNOWN",     "Unknown error occurred"}
 };
 
-const char * job_pending_reason_strings[] = {
-	"No reason",
-	"Queue is stopped",
-	"Queue job limit reached"
+const char * jers_pend_reasons[] = {
+	"",
+	"System max jobs reached",
+	"Queue limit reached",
+	"Waiting for resources",
+	"Queue stopped",
+	"Agent not connected",
+
+	"Unknown reason"
 };
 
 void setJersErrno(int err, char * msg) {
@@ -133,8 +138,10 @@ const char * getErrType(int jers_error) {
 	return jers_errors[jers_error].name;
 }
 
-const char * get_pend_reason(int reason) {
-	//TODO: bounds checking;
-	return job_pending_reason_strings[reason];
+const char * getPendString(int reason) {
+	if (reason < 0 || reason > JERS_PEND_UNKNOWN)
+		return "Invalid reason code provided";
+
+	return jers_pend_reasons[reason];
 }
 

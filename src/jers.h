@@ -130,6 +130,17 @@ enum jers_error_codes {
 	JERS_ERR_UNKNOWN
 };
 
+enum jers_pend_codes {
+	JERS_PEND_NOREASON = 0,
+	JERS_PEND_SYSTEMFULL,
+	JERS_PEND_QUEUEFULL,
+	JERS_PEND_NORES,
+	JERS_PEND_QUEUESTOPPED,
+	JERS_PEND_AGENTDOWN,
+
+	JERS_PEND_UNKNOWN
+};
+
 typedef struct {
 	char * key;
 	char * value;
@@ -217,6 +228,7 @@ typedef struct jersJob {
 	char ** argv;
 
 	char * node;
+	int pend_reason;
 
 	time_t submit_time;
 	time_t defer_time;
@@ -394,4 +406,5 @@ int jersGetStats(jersStats * s);
 
 void jersFinish(void);
 const char * jersGetErrStr(int jers_error);
+const char * jersGetPendStr(int pend_reason);
 #endif

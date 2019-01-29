@@ -26,6 +26,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
 #include <server.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -80,6 +81,7 @@ void sendStartCmd(struct job * j) {
 
 	if (j->stdout)
 		addStringField(&r, STDOUT, j->stdout);
+
 	if (j->stderr)
 		addStringField(&r, STDERR, j->stderr);
 
@@ -198,13 +200,13 @@ void checkJobs(void) {
 		j->pend_reason = 0;
 
 		if (server.max_run_jobs != UNLIMITED_JOBS && server.stats.jobs.running + server.stats.jobs.start_pending > server.max_run_jobs) {
-			j->pend_reason = PEND_REASON_SYSTEMFULL;
+			j->pend_reason = JERS_PEND_SYSTEMFULL;
 			continue;
 		}
 
 		/* Check the queue limit */
 		if (j->queue->stats.running + j->queue->stats.start_pending >= j->queue->job_limit) {
-			j->pend_reason = PEND_REASON_QUEUEFULL;
+			j->pend_reason = JERS_PEND_QUEUEFULL;
 			continue;
 		}
 
@@ -213,25 +215,25 @@ void checkJobs(void) {
 			int res_idx;
 			for (res_idx = 0; res_idx < j->res_count; res_idx++) {
 				if (j->req_resources[res_idx].needed > j->req_resources[res_idx].res->count - j->req_resources[res_idx].res->in_use) {
-					j->pend_reason = PEND_REASON_WAITINGRES;
+					j->pend_reason = JERS_PEND_NORES;
 					break;
 				}
 			}
 
-			/* Not enough of the required resources are avaiable */
+			/* Not enough of the required resources are available */
 			if (j->pend_reason)
 				continue;
 		}
 
 		/* Queue stopped? */
 		if (!(j->queue->state &JERS_QUEUE_FLAG_STARTED)) {
-			j->pend_reason = PEND_REASON_QUEUESTOPPED;
+			j->pend_reason = JERS_PEND_QUEUESTOPPED;
 			continue;
 		}
 
 		/* Agent not connected? */
 		if (j->queue->agent == NULL) {
-			j->pend_reason = PEND_REASON_NOAGENT;
+			j->pend_reason = JERS_PEND_AGENTDOWN;
 			continue;
 		}
 
