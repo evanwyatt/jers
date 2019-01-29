@@ -257,11 +257,11 @@ char * createTempScript(struct jersJobSpawn * j) {
  *
  * Note: This function does not return */
 
-void jersRunJob(struct jersJobSpawn * j, int socket) {
+void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 	pid_t jobPid;
 	char * tempScript = NULL;
 	int stdout_fd, stderr_fd;
-	struct timespec start, end, elapsed;
+	struct timespec end, elapsed;
 	int i;
 
 	/* Generate the temporary script we are going to execute, if no wrapper was specified. */
@@ -349,8 +349,6 @@ void jersRunJob(struct jersJobSpawn * j, int socket) {
 			_exit(1);
 		}
 	}
-
-	clock_gettime(CLOCK_REALTIME_COARSE, &start);
 
 	char new_proc_name[16];
 	snprintf(new_proc_name, sizeof(new_proc_name), "jers_%d", j->jobid);
@@ -465,7 +463,7 @@ void jersRunJob(struct jersJobSpawn * j, int socket) {
 	}
 
 	clock_gettime(CLOCK_REALTIME_COARSE, &end);
-	timespec_diff(&start, &end, &elapsed);
+	timespec_diff(start, &end, &elapsed);
 
 	if (WIFEXITED(job_completion.exitcode)) {
 		rc = WEXITSTATUS(job_completion.exitcode);
@@ -486,7 +484,7 @@ void jersRunJob(struct jersJobSpawn * j, int socket) {
 	lseek(stdout_fd, 0, SEEK_END);
 	dprintf(stdout_fd, "\n========= Job Summary =========\n");
 	dprintf(stdout_fd, " Elapsed Time : %s\n", print_time(&elapsed, 1));
-	dprintf(stdout_fd, " Start time   : %s\n", print_time(&start, 0));
+	dprintf(stdout_fd, " Start time   : %s\n", print_time(start, 0));
 	dprintf(stdout_fd, " End time     : %s\n", print_time(&end, 0));
 	dprintf(stdout_fd, " User CPU     : %s\n", print_time(&user_cpu, 1));
 	dprintf(stdout_fd, " Sys CPU      : %s\n", print_time(&sys_cpu, 1));
@@ -537,9 +535,9 @@ struct runningJob * removeJob (struct runningJob * j) {
 	return next;
 }
 
-struct runningJob * addJob (jobid_t jobid, pid_t pid, int socket) {
+struct runningJob * addJob (jobid_t jobid, pid_t pid, time_t start_time, int socket) {
 	struct runningJob * j = calloc(sizeof(struct runningJob), 1);
-	j->start_time = time(NULL);
+	j->start_time = start_time;
 	j->pid = pid;
 	j->job_pid = 0;
 	j->jobID = jobid;
@@ -583,6 +581,7 @@ void send_msg(resp_t * r) {
 	if (epoll_ctl(agent.event_fd, EPOLL_CTL_MOD, agent.daemon_fd, &ee)) {
 		print_msg(JERS_LOG_WARNING, "Failed to set epoll EPOLLOUT on daemon_fd");
 	}
+
 }
 int send_start(struct runningJob * j) {
 	resp_t r;
@@ -621,10 +620,11 @@ int send_completion(struct runningJob * j) {
 
 	/* Usage info */
 	//TODO:
-	//respAddInt(r, j->rusage.ru_utime.tv_sec);
-	//respAddInt(r, j->rusage.ru_utime.tv_usec);
-	//respAddInt(r, j->rusage.ru_stime.tv_sec);
-	//respAddInt(r, j->rusage.ru_stime.tv_usec);
+	//respAddInt(r, , j->rusage.ru_utime.tv_sec);
+	//respAddInt(r, , j->rusage.ru_utime.tv_usec);
+	//respAddInt(r, , j->rusage.ru_stime.tv_sec);
+	//respAddInt(r, , j->rusage.ru_stime.tv_usec);
+	//respAddint(r, , j->rusage.ru_maxrss);
 
 	respCloseMap(&r);
 
@@ -769,6 +769,7 @@ void check_children(void) {
 struct runningJob * spawn_job(struct jersJobSpawn * j) {
 	/* Setup a socketpair so the child can return the usage infomation */
 	int sockpair[2];
+	struct timespec start_time;
 
 	if (socketpair(AF_UNIX, SOCK_STREAM|SOCK_NONBLOCK|SOCK_CLOEXEC, 0, sockpair) != 0) {
 		fprintf(stderr, "Failed to create socketpair: %s\n", strerror(errno));
@@ -780,6 +781,8 @@ struct runningJob * spawn_job(struct jersJobSpawn * j) {
 	fflush(stdout);
 	fflush(stderr);
 
+	clock_gettime(CLOCK_REALTIME_COARSE, &start_time);
+
 	pid_t pid = fork();
 
 	if (pid == -1) {
@@ -788,13 +791,13 @@ struct runningJob * spawn_job(struct jersJobSpawn * j) {
 	} else if (pid == 0) {
 		/* Child */
 		close(sockpair[0]);
-		jersRunJob(j, sockpair[1]);
+		jersRunJob(j, &start_time, sockpair[1]);
 		/* jersRunJob() does not return */
 	}
 
 	close(sockpair[1]);
 
-	return addJob(j->jobid, pid, sockpair[0]);
+	return addJob(j->jobid, pid, start_time.tv_sec, sockpair[0]);
 }
 
 void start_command(msg_t * m) {
