@@ -135,6 +135,8 @@ typedef struct {
 } jers_tag_t;
 
 typedef struct jersJobAdd {
+	jobid_t jobid;
+
 	char * name;
 	char * queue;
 

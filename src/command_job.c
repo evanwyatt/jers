@@ -89,6 +89,7 @@ void * deserialize_add_job(msg_t * t) {
 
 	for (i = 0; i < t->items[0].field_count; i++) {
 		switch(t->items[0].fields[i].number) {
+			case JOBID    : s->jobid = getNumberField(&t->items[0].fields[i]); break;
 			case JOBNAME  : s->name = getStringField(&t->items[0].fields[i]); break;
 			case QUEUENAME: s->queue = getStringField(&t->items[0].fields[i]); break;
 			case UID      : s->uid = getNumberField(&t->items[0].fields[i]); break;
@@ -343,6 +344,21 @@ int command_add_job(client * c, void * args) {
 		free(s->queue);
 	}
 
+	/* Have they requested a particular jobid? */
+	if (s->jobid) {
+		if (c->uid) {
+			sendError(c, JERS_ERR_NOPERM, "Only root can specify a jobid");
+			return -1;
+		}
+
+		HASH_FIND_INT(server.jobTable, &s->jobid, j);
+
+		if (j != NULL) {
+			sendError(c, JERS_ERR_JOBEXISTS, NULL);
+			return -1;
+		}
+	}
+
 	if (s->uid < 0) //TODO: Don't use -1
 		s->uid = c->uid;
 
@@ -378,7 +394,9 @@ int command_add_job(client * c, void * args) {
 
 	/* Request looks good. Allocate a new job structure and jobid */
 	j = calloc(sizeof(struct job), 1);
-	j->jobid = getNextJobID();
+
+	if (j->jobid == 0)
+		j->jobid = getNextJobID();
 
 	/* Fill out the job structure */
 	j->jobname = s->name;

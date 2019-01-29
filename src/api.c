@@ -509,6 +509,10 @@ jobid_t jersAddJob(jersJobAdd * j) {
 		addStringArrayField(&r, ENVS, j->env_count, j->envs);
 	}
 
+	if (j->jobid) {
+		addIntField(&r, JOBID, j->jobid);
+	}
+
 	if (j->wrapper) {
 		addStringField(&r, WRAPPER, j->wrapper);
 	} else {
