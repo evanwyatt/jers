@@ -50,6 +50,7 @@ const struct jers_err jers_errors[] = {
 	{"JERS_ERR_NOPERM",      "Permission denied"},
 	{"JERS_ERR_NOQUEUE",     "Queue not found"},
 	{"JERS_ERR_INVARG",      "Invalid argument provided"},
+	{"JERS_ERR_INVTAG",      "Invalid tag provided"},
 	{"JERS_ERR_NOTAG",       "Tag not found"},
 	{"JERS_ERR_JOBEXISTS",   "Job already exists"},
 	{"JERS_ERR_RESEXISTS",   "Resource already exists"},

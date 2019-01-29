@@ -229,6 +229,18 @@ void lowercasestring(char * str) {
 	}
 }
 
+/* Return non-zero if all the characters are printable */
+int isprintable(const char * str) {
+	int len = strlen(str);
+
+	for (int i = 0; i < len; i++) {
+		if (isprint(str[i]) == 0)
+			return 0;
+	}
+
+	return 1;
+}
+
 /* Add the string representation of the supplied int64_t to the buffer provided.
  * Returns the len added to the buffer, excluding the null terminator.
  * Caution - No overflow checking is performed */

@@ -392,6 +392,16 @@ int command_add_job(client * c, void * args) {
 		}
 	}
 
+	if (s->tag_count) {
+		for (int i = 0; i < s->tag_count; i++) {
+			if (isprintable(s->tags[i].key) == 0) {
+				sendError(c, JERS_ERR_INVTAG, NULL);
+				return -1;
+			}
+
+		}
+	}
+
 	/* Request looks good. Allocate a new job structure and jobid */
 	j = calloc(sizeof(struct job), 1);
 
@@ -777,6 +787,12 @@ int command_set_tag(client * c, void * args) {
 
 	if (j == NULL) {
 		sendError(c, JERS_ERR_NOJOB, NULL);
+		return 1;
+	}
+
+	/* The key can only be printable characters */
+	if (isprintable(ts->key) == 0) {
+		sendError(c, JERS_ERR_INVTAG, NULL);
 		return 1;
 	}
 

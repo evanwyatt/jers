@@ -75,6 +75,7 @@ void unescapeString(char * string);
 char * removeWhitespace(char * str);
 void uppercasestring(char * str);
 void lowercasestring(char * str);
+int isprintable(const char * str);
 int int64tostr(char * dest, int64_t num);
 char * gethost(void);
 
