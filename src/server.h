@@ -45,6 +45,8 @@
 #include <fields.h>
 #include <logging.h>
 
+#define likely(x)       __builtin_expect((x),1)
+#define unlikely(x)     __builtin_expect((x),0)
 #define UNUSED(x) (void)(x)
 
 #define UNLIMITED_JOBS -1
@@ -251,6 +253,13 @@ struct jersServer {
 		struct gid_array queue;
 	} permissions;
 
+	struct {
+		int in_progress;
+		uid_t uid;
+		time_t time;
+		jobid_t jobid;
+	} recovery;
+
 	int candidate_recalc;
 
 	int64_t candidate_pool_size;
@@ -318,7 +327,7 @@ void removeAgent(agent * a);
 
 void loadConfig(char * config);
 
-int stateSaveCmd(uid_t uid, char * cmd, int64_t field_count, field fields[], int64_t extra_field_count, field extra_fields[]);
+int stateSaveCmd(uid_t uid, char * cmd, char * msg, jobid_t jobid);
 void stateInit(void);
 int stateLoadJobs(void);
 int stateLoadQueues(void);
@@ -331,6 +340,7 @@ void releaseDeferred(void);
 
 int stateDelJob(struct job * j);
 
+void setJobDirty(struct job * j);
 void changeJobState(struct job * j, int new_state, int dirty);
 
 int validateUserAction(client * c, int action);
@@ -352,5 +362,8 @@ void handleWriteable(struct epoll_event * e);
 
 void handleClientDisconnect(client * c);
 void handleAgentDisconnect(agent * a);
+
+void sortAgentCommands(void);
+void sortCommands(void);
 
 #endif

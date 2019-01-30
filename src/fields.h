@@ -29,6 +29,7 @@
 #ifndef _FIELDS_H
 #define _FIELDS_H
 
+#include <jers.h>
 #include <resp.h>
 #include <buffer.h>
 
@@ -73,9 +74,8 @@ typedef struct {
 	int64_t item_count;
 	msg_item * items;
 
-	/* Currently only used by 'ADD_JOB' command to save the jobid */
-	int64_t out_field_count;
-	field out_fields[1];
+	/* This field is filled in by a command so that it can be saved in the transaction journal */
+	jobid_t jobid;
 } msg_t;
 
 enum field_type {

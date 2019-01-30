@@ -62,6 +62,148 @@ command_t commands[] = {
 	{"STATS",        PERM_READ,             0,          command_stats,        NULL, NULL},
 };
 
+agent_command_t agent_commands[] = {
+	{"JOB_STARTED",   CMD_REPLAY, command_agent_jobstart},
+	{"JOB_COMPLETED", CMD_REPLAY, command_agent_jobcompleted},
+	{"AGENT_LOGIN",   0,          command_agent_login},
+};
+
+command_t * sorted_commands = NULL;
+agent_command_t * sorted_agentcommands = NULL;
+
+int cmpCommand(const void * _a, const void * _b) {
+	const command_t * a = _a;
+	const command_t * b = _b;
+
+	return strcmp(a->name, b->name);
+}
+
+int cmpAgentCommand(const void * _a, const void * _b) {
+	const agent_command_t * a = _a;
+	const agent_command_t * b = _b;
+
+	return strcmp(a->name, b->name);
+}
+
+void sortAgentCommands(void) {
+	int cmd_count = sizeof(agent_commands) / sizeof(agent_command_t);
+	sorted_agentcommands = malloc(cmd_count * sizeof(agent_command_t));
+
+	memcpy(sorted_agentcommands, agent_commands, cmd_count * sizeof(agent_command_t));
+
+	qsort(sorted_agentcommands, cmd_count, sizeof(agent_command_t), cmpAgentCommand);
+}
+
+void sortCommands(void) {
+	int cmd_count = sizeof(commands) / sizeof(command_t);
+	sorted_commands = malloc(cmd_count * sizeof(command_t));
+
+	memcpy(sorted_commands, commands, cmd_count * sizeof(command_t));
+
+	qsort(sorted_commands, cmd_count, sizeof(command_t), cmpCommand);
+}
+
+void runComplexCommand(client * c) {
+	static int cmd_count = sizeof(commands) / sizeof(command_t);
+	uint64_t start, end;
+	command_t * command_to_run = NULL;
+	void * args = NULL;
+
+	start = getTimeMS();
+
+	if (unlikely(c->msg.command == NULL)) {
+		fprintf(stderr, "Bad request from client\n");
+		return;
+	}
+
+	if (likely(sorted_commands != NULL)) {
+		command_t lookup;
+		lookup.name = c->msg.command;
+
+		command_to_run = bsearch(&lookup, sorted_commands, cmd_count, sizeof(command_t), cmpCommand);
+	} else {
+		for (int i = 0; i < cmd_count; i++) {
+			if (strcmp(c->msg.command, commands[i].name) == 0) {
+				command_to_run = &commands[i];
+				break;
+			}
+		}
+	}
+
+	if (unlikely(command_to_run == NULL)) {
+		print_msg(JERS_LOG_WARNING, "Got unknown command from client");
+		return;
+	}
+
+	if (validateUserAction(c, command_to_run->perm) != 0) {
+		sendError(c, JERS_ERR_NOPERM, NULL);
+		print_msg(JERS_LOG_DEBUG, "User %d not authorized to run %s", c->uid, c->msg.command);
+		return;
+	}
+
+	if (likely(command_to_run->deserialize_func != NULL)) {
+		args = command_to_run->deserialize_func(&c->msg);
+
+		if (unlikely(args == NULL)) {
+			print_msg(JERS_LOG_WARNING, "Failed to deserialize %s args\n", c->msg.command);
+			return;
+		}
+	}
+
+	int status = command_to_run->cmd_func(c, args);
+
+	/* Write to the journal if the transaction was an update and successful */
+	if (command_to_run->flags &CMD_REPLAY && status == 0)
+		stateSaveCmd(c->uid, c->msg.command, c->msg.reader.msg_cpy, c->msg.jobid);
+
+	if (likely(command_to_run->free_func != NULL))
+		command_to_run->free_func(args);
+
+	end = getTimeMS();
+
+	print_msg(JERS_LOG_DEBUG, "Command '%s' took %ldms\n", c->msg.command, end - start);
+
+	free_message(&c->msg, NULL);
+}
+
+int runAgentCommand(agent * a) {
+	static int cmd_count = sizeof(agent_commands) / sizeof(agent_command_t);
+	agent_command_t * command_to_run = NULL;
+
+	if (likely(sorted_agentcommands != NULL)) {
+		agent_command_t lookup;
+		lookup.name = a->msg.command;
+
+		command_to_run = bsearch(&lookup, sorted_agentcommands, cmd_count, sizeof(agent_command_t), cmpAgentCommand);
+	} else {
+		for (int i = 0; i < cmd_count; i++) {
+			if (strcmp(a->msg.command, agent_commands[i].name) == 0) {
+				command_to_run = &agent_commands[i];
+				break;
+			}
+		}
+	}
+
+	if (likely(command_to_run != NULL)) {
+		command_to_run->cmd_func(a, &a->msg);
+	} else {
+		print_msg(JERS_LOG_WARNING, "Invalid agent command %s received", a->msg.command);
+	}
+
+	/* Write to the journal if the transaction was an update and successful */
+	if (command_to_run->flags &CMD_REPLAY)
+		stateSaveCmd(0, a->msg.command, a->msg.reader.msg_cpy, 0);
+
+	free_message(&a->msg, NULL);
+	
+	if (buffRemove(&a->requests, a->msg.reader.pos, 0)) {
+			a->msg.reader.pos = 0;
+			respReadUpdate(&a->msg.reader, a->requests.data, a->requests.used);
+	}
+
+	return 0;
+}
+
 static int _sendMessage(struct connectionType * connection, buff_t * b, resp_t * r) {
 	size_t buff_length = 0;
 	char * buff = respFinish(r, &buff_length);
@@ -93,6 +235,14 @@ void sendError(client * c, int error, const char * err_msg) {
 int sendClientReturnCode(client * c, const char * ret) {
 	resp_t r;
 
+	if (c == NULL) {
+		if (server.recovery.in_progress)
+			return 0;
+		
+		print_msg(JERS_LOG_WARNING, "Trying to send a return code, but no client provided");
+		return 1;
+	}
+
 	respNew(&r);
 	respAddSimpleString(&r, ret);
 
@@ -101,6 +251,14 @@ int sendClientReturnCode(client * c, const char * ret) {
 
 int sendClientMessage(client * c, resp_t * r) {
 	respCloseArray(r);
+
+	if (c == NULL) {
+		if (server.recovery.in_progress)
+			return 0;
+		
+		print_msg(JERS_LOG_WARNING, "Trying to send a response, but no client provided");
+		return 1;
+	}
 
 	return _sendMessage(&c->connection, &c->response, r);
 }
@@ -142,6 +300,11 @@ void runSimpleCommand(client * c) {
 
 void replayCommand(msg_t * msg) {
 	static int cmd_count = sizeof(commands) / sizeof(command_t);
+	static int agent_cmd_count = sizeof(commands) / sizeof(agent_command_t);
+	int done = 0;
+
+	if (msg->command == NULL)
+		return;
 
 	/* Match the command name */
 	for (int i = 0; i < cmd_count; i++) {
@@ -164,60 +327,24 @@ void replayCommand(msg_t * msg) {
 			if (commands[i].free_func)
 				commands[i].free_func(args);
 
+			done = 1;
 			break;
 		}
 	}
-}
 
-void runComplexCommand(client * c) {
-	static int cmd_count = sizeof(commands) / sizeof(command_t);
-	uint64_t start, end;
-
-	start = getTimeMS();
-
-	if (c->msg.command == NULL) {
-		fprintf(stderr, "Bad request from client\n");
-		return;
-	}
-
-	/* Match the command name */
-	for (int i = 0; i < cmd_count; i++) {
-		if (strcmp(c->msg.command, commands[i].name) == 0) {
-			void * args = NULL;
-
-			if (validateUserAction(c, commands[i].perm) != 0) {
-				sendError(c, JERS_ERR_NOPERM, NULL);
-				print_msg(JERS_LOG_DEBUG, "User %d not authorized to run %s", c->uid, c->msg.command);
+	if (done == 0) {
+		/* Agent commands to replay */
+		for (int i = 0; i < agent_cmd_count; i++) {
+			if (strcmp(msg->command, agent_commands[i].name) == 0) {
+				agent_commands[i].cmd_func(NULL, msg);
 				break;
 			}
-
-			if (commands[i].deserialize_func) {
-				args = commands[i].deserialize_func(&c->msg);
-
-				if (!args) {
-					fprintf(stderr, "Failed to deserialize %s args\n", c->msg.command);
-					break;
-				}
-			}
-
-			int status = commands[i].cmd_func(c, args);
-
-			/* Write to the journal if the transaction was an update and successful */
-			if (commands[i].perm &PERM_WRITE && status == 0)
-				stateSaveCmd(c->uid, c->msg.command, c->msg.items[0].field_count, c->msg.items[0].fields, c->msg.out_field_count, c->msg.out_fields);
-
-			if (commands[i].free_func)
-				commands[i].free_func(args);
-
-			break;
 		}
 	}
 
-	end = getTimeMS();
-
-	print_msg(JERS_LOG_DEBUG, "Command '%s' took %ldms\n", c->msg.command, end - start);
-
-	free_message(&c->msg, NULL);
+	free_message(msg, NULL);
+	
+	return;
 }
 
 int command_stats(client * c, void * args) {
@@ -244,140 +371,4 @@ int command_stats(client * c, void * args) {
 	respCloseMap(&r);
 
 	return sendClientMessage(c, &r);
-}
-
-void command_agent_login(agent * a) {
-	/* We should only have a NODE field */
-	if (a->msg.items[0].field_count != 1 || a->msg.items[0].fields[0].number != NODE) {
-		print_msg(JERS_LOG_WARNING, "Got invalid login from agent");
-		return;
-	}
-
-	a->host = getStringField(&a->msg.items[0].fields[0]);
-
-	print_msg(JERS_LOG_INFO, "Got login from agent on host %s", a->host);
-
-	/* Check the queues and link this agent against queues matching this host */
-
-	struct queue * q;
-	for (q = server.queueTable; q != NULL; q = q->hh.next) {
-		if (strcmp(q->host, "localhost") == 0) {
-			if (strcmp(gethost(), a->host) == 0)
-				q->agent = a;
-		} else if (strcmp(q->host, a->host) == 0) {
-			q->agent = a;
-		}
-	}
-}
-
-void command_agent_jobstart(agent * a) {
-	int64_t i;
-	jobid_t jobid = 0;
-	pid_t pid = -1;
-	time_t start_time = 0;
-	struct job * j = NULL;
-
-	for (i = 0; i < a->msg.items[0].field_count; i++) {
-		switch(a->msg.items[0].fields[i].number) {
-			case JOBID : jobid = getNumberField(&a->msg.items[0].fields[i]); break;
-			case STARTTIME: start_time = getNumberField(&a->msg.items[0].fields[i]); break;
-			case JOBPID: pid = getNumberField(&a->msg.items[0].fields[i]); break;
-
-			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",a->msg.items[0].fields[i].name); break;
-		}
-	}
-
-	HASH_FIND_INT(server.jobTable, &jobid, j);
-
-	if (j == NULL) {
-		print_msg(JERS_LOG_WARNING, "Got job start for non-existent jobid: %d", jobid);
-		return;
-	}
-
-	changeJobState(j, JERS_JOB_RUNNING, 0);
-
-	j->internal_state &= ~JERS_JOB_FLAG_STARTED;
-	j->pid = pid;
-	j->start_time = start_time;
-
-	stateSaveCmd(0, a->msg.command, a->msg.items[0].field_count, a->msg.items[0].fields, 0, NULL);
-
-	server.stats.total.started++;
-	print_msg(JERS_LOG_DEBUG, "JobID: %d started PID:%d", jobid, pid);
-
-	return;
-}
-
-void command_agent_jobcompleted(agent * a) {
-	jobid_t jobid = 0;
-	int exitcode = 0;
-	time_t finish_time = 0;
-	int i;
-	struct job * j = NULL;
-
-	for (i = 0; i < a->msg.items[0].field_count; i++) {
-		switch(a->msg.items[0].fields[i].number) {
-			case JOBID : jobid = getNumberField(&a->msg.items[0].fields[i]); break;
-			case FINISHTIME: finish_time = getNumberField(&a->msg.items[0].fields[i]); break;
-			case EXITCODE: exitcode = getNumberField(&a->msg.items[0].fields[i]); break;
-
-			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",a->msg.items[0].fields[i].name); break;
-		}
-	}
-
-	HASH_FIND_INT(server.jobTable, &jobid, j);
-
-	if (j == NULL) {
-		print_msg(JERS_LOG_WARNING, "Got job completed for non-existent jobid: %d", jobid);
-		return;
-	}
-
-	if (j->res_count) {
-		for (i = 0; i < j->res_count; i++)
-			j->req_resources[i].res->in_use -= j->req_resources[i].needed;
-	}
-
-	if (WIFEXITED(exitcode)) {
-		j->exitcode = WEXITSTATUS(exitcode);
-	} else if (WIFSIGNALED(exitcode)) {
-		j->signal = WTERMSIG(exitcode);
-		j->exitcode = 128 + j->signal;
-	}
-
-	j->pid = -1;
-	j->finish_time = finish_time;
-
-	changeJobState(j, j->exitcode ? JERS_JOB_EXITED : JERS_JOB_COMPLETED, 1);
-
-	stateSaveCmd(0, a->msg.command, a->msg.items[0].field_count, a->msg.items[0].fields, 0, NULL);
-
-	if (exitcode)
-		server.stats.total.exited++;
-	else
-		server.stats.total.completed++;
-
-	print_msg(JERS_LOG_INFO, "JobID: %d %s exitcode:%d finish_time:%d", jobid, exitcode ? "EXITED" : "COMPLETED", j->exitcode, j->finish_time);
-
-	return;
-}
-
-int runAgentCommand(agent * a) {
-	if (strcasecmp(a->msg.command, "AGENT_LOGIN") == 0) {
-		command_agent_login(a);
-	} else if (strcasecmp(a->msg.command, "JOB_STARTED") == 0) {
-		command_agent_jobstart(a);
-	} else if (strcasecmp(a->msg.command, "JOB_COMPLETED") == 0){
-		command_agent_jobcompleted(a);
-	} else {
-		print_msg(JERS_LOG_WARNING, "Invalid agent command %s received", a->msg.command);
-	}
-
-	free_message(&a->msg, NULL);
-
-	if (buffRemove(&a->requests, a->msg.reader.pos, 0)) {
-			a->msg.reader.pos = 0;
-			respReadUpdate(&a->msg.reader, a->requests.data, a->requests.used);
-	}
-
-	return 0;
 }

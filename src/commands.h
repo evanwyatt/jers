@@ -36,7 +36,6 @@ void sendError(client * c, int error, const char * msg);
 
 void replayCommand(msg_t * msg);
 
-
 typedef struct command {
 	char * name;
 	int perm;     // Bitmask of required permissions
@@ -45,6 +44,16 @@ typedef struct command {
 	void * (*deserialize_func)(msg_t *);
 	void (*free_func)(void *);
 } command_t;
+
+typedef struct {
+	char * name;
+	int flags;
+	void (*cmd_func)(agent * a, msg_t * msg);
+} agent_command_t;
+
+void command_agent_login(agent * a, msg_t * msg);
+void command_agent_jobstart(agent * a, msg_t * msg);
+void command_agent_jobcompleted(agent * a, msg_t * msg);
 
 int command_stats(client *, void *);
 

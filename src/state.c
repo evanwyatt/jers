@@ -84,76 +84,6 @@ int openStateFile(time_t now) {
 	return fd;
 }
 
-static inline ssize_t _writev_state(const struct iovec * iov, int iovcnt) {
-	ssize_t bytes;
-
-	do {
-		bytes = writev(server.state_fd, iov, iovcnt);
-	} while (bytes < 0 && errno == EINTR);
-
-	if (bytes < 0)
-		error_die("Failed to write to state journal: %s", strerror(errno));
-
-	return bytes;
-}
-
-static inline void _write_field(const char * name, field * f, int array_index) {
-	struct iovec iov[4];
-	char temp_int[32];
-	char * temp;
-
-	if (name == NULL)
-		name = f->name;
-
-	iov[0].iov_base = "\t";
-	iov[0].iov_len = 1;
-
-	iov[1].iov_base = (void *)name;
-	iov[1].iov_len = strlen(name);
-
-	iov[2].iov_base = "=";
-	iov[2].iov_len = 1;
-
-	switch (f->type) {
-		case RESP_TYPE_BLOBSTRING:
-		case RESP_TYPE_SIMPLESTRING:
-		case RESP_TYPE_SIMPLEERROR:
-		case RESP_TYPE_ARRAY:
-		case RESP_TYPE_MAP:
-
-			if (f->type == RESP_TYPE_ARRAY)
-				temp = f->value.string_array.strings[array_index];
-			else if (f->type == RESP_TYPE_MAP)
-				temp = f->value.map.keys[array_index].value;
-			else
-				temp = f->value.string;
-
-			if (!temp) {
-				iov[3].iov_base = "";
-				iov[3].iov_base = 0;
-				break;
-			}
-
-			temp = escapeString(temp, &iov[3].iov_len);
-			iov[3].iov_base = temp;
-			break;
-
-		case RESP_TYPE_INT:
-			iov[3].iov_base = temp_int;
-			iov[3].iov_len = int64tostr(temp_int, f->value.number);
-			break;
-
-		case RESP_TYPE_BOOL:
-			iov[3].iov_base = f->value.boolean ? "t":"f";
-			iov[3].iov_len = 1;
-			break;
-		default:
-			error_die("stateSaveCmd - unknown field type being written for field : %d (%s) type:%d", f->number, name, f->type);
-	}
-
-	_writev_state(iov, 4);
-}
-
 time_t getRollOver(time_t now) {
 	time_t result;
 	struct tm * tm = localtime(&now);
@@ -180,7 +110,7 @@ time_t getRollOver(time_t now) {
  *       to this position when these transaction have been commited to disk as the job/queue/resource state files
  *       A '$' will be written to this position as a 'End of journal' marker when rotating the journal files */
 
-int stateSaveCmd(uid_t uid, char * cmd, int64_t field_count, field fields[], int64_t extra_field_count, field extra_fields[]) {
+int stateSaveCmd(uid_t uid, char * cmd, char * msg, jobid_t jobid) {
 	off_t start_offset;
 	struct timespec now;
 	int64_t i;
@@ -188,7 +118,7 @@ int stateSaveCmd(uid_t uid, char * cmd, int64_t field_count, field fields[], int
 	static time_t next_rollover = 0;
 
 	clock_gettime(CLOCK_REALTIME_COARSE, &now);
-	
+
 	if (now.tv_sec >= next_rollover) {
 		/* Write the End of journal marker and close the current file */
 		if (server.state_fd > 0) {
@@ -207,45 +137,7 @@ int stateSaveCmd(uid_t uid, char * cmd, int64_t field_count, field fields[], int
 	/* Save the offset of this new record, so we can write the '*' later if needed */
 	start_offset = lseek(server.state_fd, 0, SEEK_CUR);
 
-	dprintf(server.state_fd, " %ld.%03d\t%d\t%s", now.tv_sec, (int)(now.tv_nsec / 1000000), uid, cmd);
-
-	for (i = 0; i < field_count; i++) {
-		if (fields[i].type == RESP_TYPE_ARRAY) {
-			int64_t j;
-			for (j = 0; j < fields[i].value.string_array.count; j++) {
-				sprintf(name, "%s[%ld]", fields[i].name, j);
-				_write_field(name, &fields[i], j);
-			}
-		} else if (fields[i].type == RESP_TYPE_MAP) {
-			int64_t j;
-			for (j = 0; j < fields[i].value.map.count; j++) {
-				sprintf(name, "%s[%s]", fields[i].name, fields[i].value.map.keys[j].key);
-				_write_field(name, &fields[i], j);
-			}
-		} else {
-			_write_field(NULL, &fields[i], 0);
-		}
-	}
-
-	for (i = 0; i < extra_field_count; i++) {
-		if (extra_fields[i].type == RESP_TYPE_ARRAY) {
-			int64_t j;
-			for (j = 0; j < extra_fields[i].value.string_array.count; j++) {
-				sprintf(name, "%s[%ld]", extra_fields[i].name, j);
-				_write_field(name, &extra_fields[i], j);
-			}
-		} else if (fields[i].type == RESP_TYPE_MAP) {
-			int64_t j;
-			for (j = 0; j < fields[i].value.map.count; j++) {
-				sprintf(name, "%s[%s]", fields[i].name, fields[i].value.map.keys[j].key);
-				_write_field(name, &fields[i], j);
-			}
-		} else {
-			_write_field(NULL, &extra_fields[i], 0);
-		}
-	}
-
-	write(server.state_fd, "\n", 1);
+	dprintf(server.state_fd, " %ld.%03d\t%d\t%s\t%d\t%s\n", now.tv_sec, (int)(now.tv_nsec / 1000000), uid, cmd, jobid, msg ? escapeString(msg, NULL):"");
 
 	if (server.flush.defer == 0)
 		fdatasync(server.state_fd);
@@ -286,12 +178,47 @@ off_t checkForLastCommit(char * journal) {
 	return last_commit;
 }
 
-void convertJournalEntry(msg_t * msg, char * entry) {
+/* Convert a journal entry into a message that can be used for recovering state */
 
+void convertJournalEntry(msg_t * msg, buff_t * message_buffer,char * entry) {
+	time_t timestamp_s;
+	int timestamp_ms;
+	uid_t uid;
+	char command[64];
+	jobid_t jobid;
+	int field_count = 0;
+	off_t msg_offset = 0;
+
+	memset(msg, 0, sizeof(msg_t));
+	
+	message_buffer->used = 0;
+	buffResize(message_buffer, strlen(entry));
+
+	field_count = sscanf(entry, " %ld.%d\t%d\t%64s\t%d\t%n", &timestamp_s, &timestamp_ms, &uid, command, &jobid, &msg_offset);
+
+	if (field_count != 5)
+		error_die("Failed to load journal entry. Got %d fields\n", field_count);
+
+	strcpy(message_buffer->data, entry + msg_offset);
+
+	if (*message_buffer->data) {
+		unescapeString(message_buffer->data);
+		message_buffer->used = strlen(message_buffer->data);
+
+		if (load_message(msg, message_buffer) != 0)
+			error_die("Failed to load message from journal entry");
+	}
+
+	server.recovery.time = timestamp_s;
+	server.recovery.uid = uid;
+	server.recovery.jobid = jobid;
+
+	print_msg(JERS_LOG_DEBUG, "Replaying cmd:%s uid:%d time:%d jobid:%d", command, uid, timestamp_s, jobid);
 }
 
 void replayTransaction(char * line) {
 	msg_t msg;
+	buff_t buff = {0};
 
 	/* Remove the newline */
 	line[strcspn(line, "\n")] = 0;
@@ -301,10 +228,12 @@ void replayTransaction(char * line) {
 		return;
 
 	/* Load the fields into a msg_t and call the appropriate command handler */
-	print_msg(JERS_LOG_DEBUG, "replaying: %s\n", line);
-	convertJournalEntry(&msg, line);
-	replayCommand(&msg);
+	convertJournalEntry(&msg, &buff, line);
 
+	if (buff.used != 0)
+		replayCommand(&msg);
+
+	buffFree(&buff);
 	return;
 }
 
@@ -382,18 +311,32 @@ void stateReplayJournal(void) {
 		}
 	}
 
+	/* If we didn't find any offset, we need to replay everything we have */
+	if (offset == -1) {
+		offset = 0;
+		i = 0;
+	}
+
 	/* We know which journal to start from, start replaying */
 	if (i >= 0) {
+		server.recovery.in_progress = 1;
+
 		for (; i < journalGlob.gl_pathc; i++)
 			replayJournal(journalGlob.gl_pathv[i], offset);
 			offset = -1;
 	}
 
 	globfree(&journalGlob);
+
+	server.recovery.in_progress = 0;
+	server.recovery.time = 0;
+	server.recovery.uid = 0;
+	server.recovery.jobid = 0;
+
 	print_msg(JERS_LOG_INFO, "Finished recovery from journal files");
 
 	/* Make sure have the latest journal open by writing a dummy command */
-	stateSaveCmd(getuid(), "REPLAY_COMPLETE", 0, NULL, 0, NULL);
+	stateSaveCmd(getuid(), "REPLAY_COMPLETE", NULL, 0);
 }
 
 int stateDelJob(struct job * j) {
@@ -1251,6 +1194,11 @@ int stateLoadResources(void) {
 	return 0;
 }
 
+void setJobDirty(struct job * j) {
+	server.dirty_jobs = 1;
+	j->dirty = 1;
+}
+
 void changeJobState(struct job * j, int new_state, int dirty) {
 	int old_state = j->state;
 
@@ -1330,8 +1278,6 @@ void changeJobState(struct job * j, int new_state, int dirty) {
 	j->state = new_state;
 
 	/* Mark it as dirty */
-	if (dirty) {
-		server.dirty_jobs = 1;
-		j->dirty = 1;
-	}
+	if (dirty)
+		setJobDirty(j);
 }

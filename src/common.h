@@ -76,6 +76,8 @@ char * removeWhitespace(char * str);
 void uppercasestring(char * str);
 void lowercasestring(char * str);
 int isprintable(const char * str);
+void * dup_mem(void * src, size_t len, size_t size);
+
 int int64tostr(char * dest, int64_t num);
 char * gethost(void);
 

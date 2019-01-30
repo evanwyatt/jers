@@ -114,7 +114,7 @@ void * deserialize_add_job(msg_t * t) {
 			case STDERR   : s->stderr = getStringField(&t->items[0].fields[i]); break;
 			case WRAPPER  : s->wrapper = getStringField(&t->items[0].fields[i]); break;
 
-			default: fprintf(stderr, "Unknown field %d encountered - Ignoring\n",t->items[0].fields[i].number); break;
+			default: fprintf(stderr, "Unknown field %s encountered - Ignoring\n",t->items[0].fields[i].name); break;
 		}
 
 	}
@@ -355,8 +355,10 @@ int command_add_job(client * c, void * args) {
 	}
 
 	/* Have they requested a particular jobid? */
-	if (s->jobid) {
-		if (c->uid) {
+	if (server.recovery.in_progress) {
+		s->jobid = server.recovery.jobid;
+	} else if (s->jobid) {
+		if (c->uid != 0) {
 			sendError(c, JERS_ERR_NOPERM, "Only root can specify a jobid");
 			return -1;
 		}
@@ -369,8 +371,12 @@ int command_add_job(client * c, void * args) {
 		}
 	}
 
-	if (s->uid < 0) //TODO: Don't use -1
-		s->uid = c->uid;
+	if (s->uid < 0) { //TODO: Don't use -1
+		if (server.recovery.in_progress == 0)
+			s->uid = c->uid;
+		else
+			s->uid = server.recovery.uid;
+	}
 
 	if (s->uid == 0) {
 		sendError(c, JERS_ERR_INVARG, "Jobs not allowed to run as root");
@@ -379,7 +385,7 @@ int command_add_job(client * c, void * args) {
 
 	/* Validate if the requester is allowed to submit a job
 	 * under another uid */
-	if (c->uid != s->uid) {
+	if (server.recovery.in_progress == 0 && c->uid != s->uid) {
 		if (c->user->permissions &PERM_SETUID == 0) {
 			sendError(c, JERS_ERR_NOPERM, NULL);
 			return -1;
@@ -449,7 +455,10 @@ int command_add_job(client * c, void * args) {
 	else
 		state = JERS_JOB_PENDING;
 
-	j->submit_time = time(NULL);
+	if (server.recovery.in_progress)
+		j->submit_time = server.recovery.time;
+	else
+		j->submit_time = time(NULL);
 
 	/* Add it to the hashtable */
 	addJob(j, state, 1);
@@ -472,8 +481,7 @@ int command_add_job(client * c, void * args) {
 		return 0;
 
 	/* Populate the out jobid field */
-	c->msg.out_field_count = 1;
-	setIntField(&c->msg.out_fields[0], JOBID, j->jobid);
+	c->msg.jobid = j->jobid;
 
 	print_msg(JERS_LOG_DEBUG, "SUBMIT - JOBID %d created", j->jobid);
 
@@ -824,6 +832,8 @@ int command_set_tag(client * c, void * args) {
 		j->tags[i].value = ts->value;
 	}
 
+	setJobDirty(j);
+
 	return sendClientReturnCode(c, "0");
 }
 
@@ -856,6 +866,8 @@ int command_del_tag(client * c, void * args) {
 	}
 
 	j->tag_count--;
+
+	setJobDirty(j);
 
 	return sendClientReturnCode(c, "0");
 }

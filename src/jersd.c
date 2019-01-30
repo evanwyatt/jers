@@ -165,8 +165,10 @@ int main (int argc, char * argv[]) {
 	server.agent_connection.socket = -1;
 	server.client_connection.socket = -1;
 
-	/* Sort the fields used for serialization/deserialization */
+	/* Perform some sorts for improved lookup performance */
 	sortfields();
+	sortAgentCommands();
+	sortCommands();
 
 	stateInit();
 

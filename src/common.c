@@ -123,7 +123,7 @@ void unescapeString(char * string) {
 			*temp = '\t';
 
 		memmove(temp + 1, temp + 2, strlen(temp + 2) + 1);
-		temp+=2;
+		temp++;
 	}
 }
 
@@ -239,6 +239,18 @@ int isprintable(const char * str) {
 	}
 
 	return 1;
+}
+
+void * dup_mem(void * src, size_t len, size_t size) {
+	size_t alloc_size = len > size ? len : size;
+	void * dst = malloc(alloc_size);
+
+	if (dst == NULL)
+		return NULL;
+
+	memcpy(dst, src, len);
+
+	return dst;
 }
 
 /* Add the string representation of the supplied int64_t to the buffer provided.

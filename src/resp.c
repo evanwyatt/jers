@@ -175,7 +175,7 @@ static int _respGetItem(resp_read_t * r, struct argItem * item) {
 			case RESP_TYPE_SIMPLEERROR:
 				item->data.string.offset = str - r->string;
 				item->data.string.length = (r->string + r->pos) - str - 1;
-				*(str + item->data.string.length) = '\0'; // NULL terminate it
+				//*(str + item->data.string.length) = '\0'; // NULL terminate it
 				//r->pos += item->data.string.length;
 				return RESP_OK;
 
@@ -201,7 +201,7 @@ static int _respGetItem(resp_read_t * r, struct argItem * item) {
 			return RESP_INCOMP;
 
 		item->data.string.offset = str - r->string;
-		*(str + item->data.string.length) = '\0';
+		//*(str + item->data.string.length) = '\0';
 		r->pos++; // Skip the delimiter
 		return RESP_OK;
 	}
@@ -441,9 +441,12 @@ void respReadInit (resp_read_t * r, char * input, size_t length){
 	r->string = input;
 	r->length = length;
 	r->pos = 0;
+	r->start_pos = 0;
 	r->ready = 0;
 	r->currentItem = NULL;
 	r->args = NULL;
+
+	r->msg_cpy = NULL;
 }
 
 /* Update the buffer/length already initalised by respReadInit */
@@ -464,11 +467,15 @@ int respReadFree(resp_read_t * r) {
 		r->args = NULL;
 	}
 
+	free(r->msg_cpy);
+	r->msg_cpy = NULL;
+
 	r->currentItem = NULL;
 	r->string = NULL;
 	r->pos = 0;
 	r->length = 0;
 	r->ready = 0;
+	r->start_pos = 0;
 
 	return RESP_OK;
 }
@@ -480,6 +487,9 @@ int respReadLoad(resp_read_t * r) {
 		r->args = calloc(sizeof(struct argItem), 1);
 	}
 
+	if (r->start_pos == 0)
+		r->start_pos = r->pos;
+
 	rc = _respGetItem(r, r->args);
 
 	if (rc == RESP_OK) {
@@ -487,6 +497,14 @@ int respReadLoad(resp_read_t * r) {
 		 * so we are ready for processing */
 		r->currentItem = r->args;
 		r->ready = 1;
+
+		/* Create a copy of the original message. This will be written to the transaction journal.
+		 * If we already have a message copy, we are replaying a command and don't need to save a copy */
+		if (r->msg_cpy == NULL) {
+			size_t length = r->pos - r->start_pos;
+			r->msg_cpy = dup_mem(r->string + r->start_pos, length, length + 1);
+			r->msg_cpy[length] = '\0';
+		}
 	}
 
 	return rc;
@@ -508,6 +526,7 @@ void respReadShrink(resp_read_t *r) {
 	memmove(r->string, r->string + r->pos, r->length - r->pos);
 	r->length -= r->pos;
 	r->pos = 0;
+	r->start_pos = 0;
 }
 
 /* Clear the previous data loaded, ready for the next message */
@@ -519,6 +538,10 @@ int respReadReset(resp_read_t * r) {
 		memset(r->args, 0, sizeof(struct argItem));
 	}
 
+	free(r->msg_cpy);
+	r->msg_cpy = NULL;
+
+	r->start_pos = 0;
 	r->ready = 0;
 	r->currentItem = NULL;
 
@@ -623,6 +646,9 @@ static int _respGetString(resp_read_t * r, int type, char ** string, int64_t * l
 
 		if (length)
 			*length = r->currentItem->data.string.length;
+
+		/* NULL terminate the string */
+		*(*string + r->currentItem->data.string.length) = '\0';
 	}
 	/* Move to the next item */
 	_respReadAdvance(r);

@@ -52,6 +52,9 @@ typedef struct _resp_read_t {
 	off_t pos;		// Current parsing postion
 	int ready;
 
+	off_t start_pos;
+	char * msg_cpy;
+
 	/* Pointer to the current item being processed */
 	struct argItem * currentItem;
 
@@ -113,7 +116,7 @@ int respCloseArray(resp_t * r);
 int respAddMap(resp_t * r);
 int respCloseMap(resp_t *r);
 
-int respAddBool(resp_t * r, int boolean);
+int respAddBool(resp_t * r, int boolean);  
 int respAddSimpleError(resp_t * r, const char * error);
 int respAddSimpleString(resp_t * r, const char * string);
 int respAddStringArray(resp_t * r, int count, char ** strings);
