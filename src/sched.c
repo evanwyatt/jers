@@ -249,6 +249,7 @@ void checkJobs(void) {
 
 		sendStartCmd(j);
 		j->internal_state |= JERS_JOB_FLAG_STARTED;
+		j->pend_reason = JERS_PEND_AGENT;
 
 		/* Keep track of the jobs we have attempted to start */
 		j->queue->stats.start_pending++;

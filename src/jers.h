@@ -63,13 +63,13 @@ typedef uint32_t jobid_t;
 #define JERS_QUEUE_DEFAULT_STATE JERS_QUEUE_FLAG_OPEN // Open only
 
 /* Job states are flags, so that filtering can applied with bitwise operations */
-
 #define JERS_JOB_RUNNING   0x01
 #define JERS_JOB_PENDING   0x02
 #define JERS_JOB_DEFERRED  0x04
 #define JERS_JOB_HOLDING   0x08
 #define JERS_JOB_COMPLETED 0x10
 #define JERS_JOB_EXITED    0x20
+#define JERS_JOB_UNKNOWN   0x40
 
 /* Field filter flags */
 #define JERS_FILTER_JOBNAME   0x01
@@ -137,6 +137,7 @@ enum jers_pend_codes {
 	JERS_PEND_NORES,
 	JERS_PEND_QUEUESTOPPED,
 	JERS_PEND_AGENTDOWN,
+	JERS_PEND_AGENT,
 
 	JERS_PEND_UNKNOWN
 };
@@ -311,6 +312,7 @@ struct jobStats {
 	int64_t completed;
 	int64_t exited;
 	int64_t start_pending;
+	int64_t unknown;
 };
 
 typedef struct jersQueue {
@@ -367,6 +369,7 @@ typedef struct jersStats {
 		int64_t completed;
 		int64_t exited;
 		int64_t deleted;
+		int64_t unknown;
 	} total;
 } jersStats;
 

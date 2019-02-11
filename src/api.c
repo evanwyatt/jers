@@ -955,12 +955,15 @@ int jersGetStats(jersStats * s) {
 			case STATSHOLDING   : s->current.holding = getNumberField(&item->fields[i]); break;
 			case STATSCOMPLETED : s->current.completed = getNumberField(&item->fields[i]); break;
 			case STATSEXITED    : s->current.exited = getNumberField(&item->fields[i]); break;
+			case STATSUNKNOWN   : s->current.unknown = getNumberField(&item->fields[i]); break;
+
 
 			case STATSTOTALSUBMITTED : s->total.submitted = getNumberField(&item->fields[i]); break;
 			case STATSTOTALSTARTED   : s->total.started = getNumberField(&item->fields[i]); break;
 			case STATSTOTALCOMPLETED : s->total.completed = getNumberField(&item->fields[i]); break;
 			case STATSTOTALEXITED    : s->total.exited = getNumberField(&item->fields[i]); break;
 			case STATSTOTALDELETED   : s->total.deleted = getNumberField(&item->fields[i]); break;
+			case STATSTOTALUNKNOWN   : s->total.unknown = getNumberField(&item->fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",item->fields[i].name); break;
 		}

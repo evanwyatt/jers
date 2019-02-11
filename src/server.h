@@ -245,6 +245,7 @@ struct jersServer {
 				int64_t completed;
 				int64_t exited;
 				int64_t deleted;
+				int64_t unknown;
 		} total;
 	} stats;
 

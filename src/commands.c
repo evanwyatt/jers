@@ -361,12 +361,15 @@ int command_stats(client * c, void * args) {
 	addIntField(&r, STATSHOLDING, server.stats.jobs.holding);
 	addIntField(&r, STATSCOMPLETED, server.stats.jobs.completed);
 	addIntField(&r, STATSEXITED, server.stats.jobs.exited);
+	addIntField(&r, STATSEXITED, server.stats.jobs.unknown);
 
 	addIntField(&r, STATSTOTALSUBMITTED, server.stats.total.submitted);
 	addIntField(&r, STATSTOTALSTARTED, server.stats.total.started);
 	addIntField(&r, STATSTOTALCOMPLETED, server.stats.total.completed);
 	addIntField(&r, STATSTOTALEXITED, server.stats.total.exited);
 	addIntField(&r, STATSTOTALDELETED, server.stats.total.deleted);
+	addIntField(&r, STATSTOTALUNKNOWN, server.stats.total.unknown);
+
 
 	respCloseMap(&r);
 

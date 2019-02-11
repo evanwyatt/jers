@@ -272,6 +272,21 @@ void replayJournal(char * journal, off_t offset) {
 
 	print_msg(JERS_LOG_DEBUG, "Finished replaying journal %s", journal);
 
+	/* Now that we have recovered our state, we need to look for any jobs that were in a 'RUN' state when we shutdown (crashed)
+	 * We will mark these jobs as 'UNKNOWN', which will require manual intervention to start again. There is a chance
+	 * that an agent will log back in and update this state. A job will only have its state updated from an agent if it hasn't
+	 * already been modified. ie Restarted or killed */
+
+	struct job * j;
+
+	for (j = server.jobTable; j; j = j->hh.next) {
+		if (j->state == JERS_JOB_RUNNING || j->internal_state & JERS_JOB_FLAG_STARTED) {
+			j->internal_state &= ~JERS_JOB_FLAG_STARTED;
+			changeJobState(j, JERS_JOB_UNKNOWN, 1);
+			print_msg(JERS_LOG_WARNING, "Job %d is now unknown", j->jobid);
+		}
+	}
+
 	return;
 }
 
@@ -1245,6 +1260,11 @@ void changeJobState(struct job * j, int new_state, int dirty) {
 			server.stats.jobs.exited--;
 			j->queue->stats.exited--;
 			break;
+
+		case JERS_JOB_UNKNOWN:
+			server.stats.jobs.unknown--;
+			j->queue->stats.unknown--;
+			break;
 	}
 
 	/* And the new state */
@@ -1285,6 +1305,10 @@ void changeJobState(struct job * j, int new_state, int dirty) {
 			server.stats.jobs.exited++;
 			j->queue->stats.exited++;
 			break;
+
+		case JERS_JOB_UNKNOWN:
+			server.stats.jobs.unknown++;
+			j->queue->stats.unknown++;
 	}
 
 	j->state = new_state;

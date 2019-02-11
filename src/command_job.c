@@ -738,7 +738,7 @@ int command_mod_job(client *c, void *args) {
 	}
 
 	/* Need to clear some fields if this job has previously been completed */
-	if (j->state == JERS_JOB_COMPLETED || j->state == JERS_JOB_EXITED) {
+	if (j->state == JERS_JOB_COMPLETED || j->state == JERS_JOB_EXITED || j->state == JERS_JOB_UNKNOWN) {
 		j->exitcode = 0;
 		j->signal = 0;
 		j->start_time = 0;
@@ -793,6 +793,17 @@ int command_sig_job(client * c, void * args) {
 	}
 
 	if (j->state != JERS_JOB_RUNNING) {
+		/* If the job state is unknown, we will set this job state to the signal provided */
+		if (j->state == JERS_JOB_UNKNOWN) {
+			j->state = JERS_JOB_EXITED;
+			j->pid = -1;
+			j->finish_time = time(NULL);
+			j->signal = js->signum;
+			j->exitcode = 128 + j->signal;
+
+			return sendClientReturnCode(c, "0");
+		}
+
 		sendError(c, JERS_ERR_INVSTATE, "Job is not running");
 		return 1;
 	}
@@ -800,7 +811,7 @@ int command_sig_job(client * c, void * args) {
 	/* signo == 0 wants to just test the job is running */
 	if (js->signum == 0)
 		return sendClientReturnCode(c, j->pid == 0 ? "1" : "0");
-	
+
 	/* Send the requested signal to the job (via the agent) */
 	resp_t sig_message;
 	initMessage(&sig_message, "SIG_JOB", 1);

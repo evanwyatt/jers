@@ -307,8 +307,7 @@ void handleAgentConnection(void) {
 }
 
 /* The agent has disappeared.
- * - Mark any jobs that were in running as 'Unknown'. There is a chance they will reconnect.
- */
+ * - Mark any jobs that were in running as 'Unknown'. There is a chance the agent will reconnect and update the status. */
 
 void handleAgentDisconnect(agent * a) {
 	print_msg(JERS_LOG_CRITICAL, "JERS AGENT DISCONNECTED.");
@@ -324,9 +323,9 @@ void handleAgentDisconnect(agent * a) {
 
 	for (j = server.jobTable; j != NULL; j = j->hh.next) {
 		if (j->queue->agent == a && (j->state & JERS_JOB_RUNNING || j->internal_state & JERS_JOB_FLAG_STARTED)) {
-			print_msg(JERS_LOG_WARNING, "Setting JobId %d to unknown", j->jobid);
+			print_msg(JERS_LOG_WARNING, "Job %d is now unknown", j->jobid);
 			j->internal_state = 0;
-			
+			changeJobState(j, JERS_JOB_UNKNOWN, 1);
 		}
 	}
 
