@@ -81,6 +81,7 @@ void command_agent_jobstart(agent * a, msg_t * msg) {
 	changeJobState(j, JERS_JOB_RUNNING, 0);
 
 	j->internal_state &= ~JERS_JOB_FLAG_STARTED;
+	j->pend_reason = 0;
 	j->pid = pid;
 	j->start_time = start_time;
 
@@ -119,16 +120,25 @@ void command_agent_jobcompleted(agent * a, msg_t * msg) {
 		return;
 	}
 
+	if (j->internal_state & JERS_JOB_FLAG_STARTED) {
+		/* Job failed to start correctly */
+		j->internal_state &= ~JERS_JOB_FLAG_STARTED;
+		print_msg(JERS_LOG_WARNING, "Got completion for job without start: %d", jobid);
+	}
+
 	if (j->res_count) {
 		for (i = 0; i < j->res_count; i++)
 			j->req_resources[i].res->in_use -= j->req_resources[i].needed;
 	}
 
-	if (WIFEXITED(exitcode)) {
-		j->exitcode = WEXITSTATUS(exitcode);
-	} else if (WIFSIGNALED(exitcode)) {
-		j->signal = WTERMSIG(exitcode);
-		j->exitcode = 128 + j->signal;
+	j->exitcode = exitcode &JERS_EXIT_STATUS_MASK;
+
+	if (exitcode & JERS_EXIT_FAIL) {
+		j->fail_reason = j->exitcode;
+		j->exitcode = 255;
+	} else if (exitcode & JERS_EXIT_SIGNAL) {
+		j->signal = exitcode &JERS_EXIT_STATUS_MASK;
+		j->exitcode += 128;
 	}
 
 	j->pid = -1;

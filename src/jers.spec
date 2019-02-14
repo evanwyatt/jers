@@ -36,15 +36,19 @@ make %{?_smp_mflags}
 rm -rf $RPM_BUILD_ROOT
 install -d %{buildroot}%{_bindir} %{buildroot}%{_includedir} %{buildroot}%{_libdir}
 install -d %{buildroot}/%{_unitdir} %{buildroot}%{_sysconfdir}/logrotate.d
-install -d %{buildroot}%{_localstatedir}/log/jers
+install -d %{buildroot}/%{_unitdir} %{buildroot}%{_tmpfilesdir}
+install -d %{buildroot}%{_localstatedir}/log/%{name}
+install -d %{buildroot}%{_sysconfdir}/%{name}
+install -d %{buildroot}%{_sharedstatedir}/%{name} %{buildroot}%{_sharedstatedir}/%{name}/state
 
 make install DESTDIR=%{buildroot}%{_prefix}
 
 find %buildroot -type f \( -name '*.so' -o -name '*.so.*' \) -exec chmod 755 {} +
 
 install -Dm 0644 src/jersd.service src/jers_agentd.service %{buildroot}/%{_unitdir}/ 
-install -m 0644 src/jers_logrotate.conf %{buildroot}%{_sysconfdir}/logrotate.d/jers
-install -m 0644 src/default.conf %{buildroot}%{_sysconfdir}/jers.conf
+install -m 0644 src/jers_logrotate.conf %{buildroot}%{_sysconfdir}/logrotate.d/%{name}
+install -m 0644 src/jers_tmpfiles.conf %{buildroot}%{_tmpfilesdir}/%{name}.conf
+install -m 0644 src/default.conf %{buildroot}%{_sysconfdir}/%{name}/%{name}.conf
 
 %files
 %{_bindir}/jers
@@ -54,11 +58,13 @@ install -m 0644 src/default.conf %{buildroot}%{_sysconfdir}/jers.conf
 %{_libdir}/libjers.so
 
 # Systemd service files
-%config(noreplace) %{_sysconfdir}/jers.conf
+%config(noreplace) %{_sysconfdir}/jers/jers.conf
 %config(noreplace) %{_unitdir}/*.service
 %config(noreplace) %{_sysconfdir}/logrotate.d/jers
+%config(noreplace) %{_tmpfilesdir}/jers.conf
 
-%dir %attr(0750,jers,jers) %{_localstatedir}/log/jers
+%dir %attr(0755,jers,jers) %{_localstatedir}/log/jers
+%dir %attr(0750,jers,jers) %{_sharedstatedir}/jers/state
 
 %files devel
 %{_includedir}/jers.h
@@ -76,6 +82,7 @@ getent passwd jers >/dev/null || /usr/sbin/useradd -g jers -s /bin/false -r -c "
 %post
 /sbin/ldconfig
 /usr/bin/systemctl daemon-reload
+systemd-tmpfiles --create %{name}.conf
 
 %postun
 /sbin/ldconfig

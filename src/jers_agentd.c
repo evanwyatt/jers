@@ -59,6 +59,7 @@
 
 int initMessage(resp_t * r, const char * resp_name, int version);
 void error_die(char *, ...);
+const char * getFailString(int);
 
 char * server_log = "jers_agentd";
 int server_log_mode = JERS_LOG_DEBUG;
@@ -75,6 +76,7 @@ struct jobCompletion {
  *  * Note: the pid refers to the pid of the jersJob program. */
 
 struct runningJob {
+	char * temp_script;
 	pid_t pid;
 	pid_t job_pid;
 	jobid_t jobID;
@@ -111,6 +113,7 @@ struct jersJobSpawn {
 	char * shell;
 
 	char * wrapper;
+	char * temp_script;
 	char * pre_command;
 	char * post_command;
 
@@ -213,17 +216,13 @@ int open_logfile(char * file) {
 	return -1;
 }
 
-
-char * createTempScript(struct jersJobSpawn * j) {
-	static char script[1024];
+int createTempScript(struct jersJobSpawn * j) {
 	int i;
-	sprintf(script, "/var/spool/jers/jers_%d", j->jobid);
-
-	int fd = open (script, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IXUSR);
+	int fd = open (j->temp_script, O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU);
 
 	if (fd < 0) {
 		fprintf(stderr, "Failed to create temporary script: %s\n", strerror(errno));
-		return NULL;
+		return 1;
 	}
 
 	dprintf(fd, "#!%s\n", j->shell);
@@ -242,32 +241,33 @@ char * createTempScript(struct jersJobSpawn * j) {
 	if (fchown(fd, j->uid, j->uid) != 0) {
 		fprintf(stderr, "Failed to change owner of temporary script: %s\n", strerror(errno));
 		close(fd);
-		unlink(script);
-		return NULL;
+		unlink(j->temp_script);
+		return 1;
 	}
 
 	close(fd);
-	return script;
+	return 0;
 }
 
 /* jersRunJob() is essentially a wrapper around a users job to setup the environment,
- * capture rusage infomation, handle signals, etc.
+ * capture rusage information, handle signals, etc.
  *
- * The status/usage infomation is passed back through to the jersagentd via a socket
+ * The status/usage information is passed back through to the jersagentd via a socket
  *
  * Note: This function does not return */
 
 void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 	pid_t jobPid;
-	char * tempScript = NULL;
 	int stdout_fd, stderr_fd;
 	struct timespec end, elapsed;
 	int i;
+	int launch_status = 0;
 
 	/* Generate the temporary script we are going to execute, if no wrapper was specified. */
 	if (j->wrapper == NULL) {
-		if ((tempScript = createTempScript(j)) == NULL) {
-			_exit(1);
+		if (createTempScript(j) != 0) {
+			launch_status = JERS_FAIL_TMPSCRIPT;
+			goto launch_cleanup;
 		}
 	}
 
@@ -276,27 +276,32 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 
 	if (j->u->uid == 0) {
 		fprintf(stderr, "Jobs running as root are NOT permitted.\n");
-		_exit(1);
+		launch_status = JERS_FAIL_INIT;
+		goto launch_cleanup;
 	}
 
 	if (setgroups(j->u->group_count, j->u->group_list) != 0) {
 		fprintf(stderr, "Failed to initalise groups for job %d: %s\n", j->jobid, strerror(errno));
-		_exit(1);
+		launch_status = JERS_FAIL_INIT;
+		goto launch_cleanup;
 	}
 
 	if (setgid(j->u->gid) != 0) {
 		perror("setgid");
-		_exit(1);
+		launch_status = JERS_FAIL_INIT;
+		goto launch_cleanup;
 	}
 
 	if (setuid(j->u->uid) != 0) {
 		perror("setuid");
-		_exit(1);
+		launch_status = JERS_FAIL_INIT;
+		goto launch_cleanup;
 	}
 
 	if (getuid() == 0) {
 		fprintf(stderr, "Job STILL running as root after dropping privs\n");
-		_exit(1);
+		launch_status = JERS_FAIL_INIT;
+		goto launch_cleanup;
 	}
 
 	/* Redirect stdout/stderr before we spawn,
@@ -310,7 +315,8 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 	if (stdout_fd == -1) {
 		fprintf(stderr, "Failed to open stdout logfile for jobid:%d stdout:'%s' error:%s\n",
 			j->jobid, j->stdout, strerror(errno));
-		_exit(1);
+		launch_status = JERS_FAIL_LOGERR;
+		goto launch_cleanup;
 	}
 
 	if (j->stderr) {
@@ -327,7 +333,8 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 	if (stderr_fd == -1) {
 		fprintf(stderr, "Failed to open stderr logfile for jobid:%d stderr:'%s' error:%s\n",
                         j->jobid, j->stderr, strerror(errno));
-		_exit(1);
+		launch_status = JERS_FAIL_LOGERR;
+		goto launch_cleanup;
 	}
 
 	/* Open STDIN as /dev/null */
@@ -335,7 +342,8 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 
 	if (stdin_fd < 0) {
 		fprintf(stderr, "Failed to open /dev/null for stdin: %s\n", strerror(errno));
-		_exit(1);
+		launch_status = JERS_FAIL_INIT;
+		goto launch_cleanup;
 	}
 
 	/* Start off in the users home directory */
@@ -346,7 +354,8 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 
 		if (chdir(DEFAULT_DIR) != 0) {
 			dprintf(stderr_fd, "Error: Failed to change directory to %s: %s\n", DEFAULT_DIR, strerror(errno));
-			_exit(1);
+			launch_status = JERS_FAIL_INIT;
+			goto launch_cleanup;
 		}
 	}
 
@@ -361,7 +370,8 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 
 	if (jobPid < 0) {
 		fprintf(stderr, "Fork failed: %s\n", strerror(errno));
-		_exit(1);
+		launch_status = JERS_FAIL_START;
+		goto launch_cleanup;
 	}
 
 	if (jobPid == 0) {
@@ -430,7 +440,7 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 				argv[k++] = j->argv[i];
 		}
 		else {
-			argv[k++] = tempScript;
+			argv[k++] = j->temp_script;
 		}
 
 		argv[k++] = NULL;
@@ -438,11 +448,11 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 		execvpe(argv[0], argv, j->u->users_env);
 		perror("execv failed for child");
 		/* Will only get here if something goes horribly wrong with execvpe().*/
-		_exit(1);
+		_exit(JERS_FAIL_START);
 	}
 
 	struct jobCompletion job_completion = {0};
-	int rc = 0, sig = 0, status;
+	int rc = 0, exit_code = 0, sig = 0, status;
 
 	/* Send the PID of the job */
 	do {
@@ -454,22 +464,24 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 
 
 	/* Wait for the job to complete */
-	while (wait4(jobPid, &job_completion.exitcode, 0, &job_completion.rusage) < 0) {
+	while (wait4(jobPid, &rc, 0, &job_completion.rusage) < 0) {
 		if (errno == EINTR)
 			continue;
 
 		fprintf(stderr, "wait4() failed pid:%d? %s\n", jobPid, strerror(errno));
-		_exit(1);
+		_exit(JERS_FAIL_PID);
 	}
 
 	clock_gettime(CLOCK_REALTIME_COARSE, &end);
 	timespec_diff(start, &end, &elapsed);
 
-	if (WIFEXITED(job_completion.exitcode)) {
-		rc = WEXITSTATUS(job_completion.exitcode);
-	} else if (WIFSIGNALED(job_completion.exitcode)) {
-		sig = WTERMSIG(job_completion.exitcode);
-		rc = 128 + sig;
+	if (WIFEXITED(rc)) {
+		job_completion.exitcode = WEXITSTATUS(rc) | JERS_EXIT_STATUS;
+		exit_code = WEXITSTATUS(rc);
+	} else if (WIFSIGNALED(rc)) {
+		job_completion.exitcode = WTERMSIG(rc) | JERS_EXIT_SIGNAL;
+		exit_code = 128 + WTERMSIG(rc);
+		sig = WTERMSIG(rc);
 	}
 
 	struct timespec user_cpu, sys_cpu;
@@ -491,7 +503,7 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 	dprintf(stdout_fd, " Max RSS      : %ldKB\n", job_completion.rusage.ru_maxrss);
 	dprintf(stdout_fd, " UID          : %d (%s)\n", j->u->uid, j->u->username);
 	dprintf(stdout_fd, " Job ID       : %d\n", j->jobid);
-	dprintf(stdout_fd, " Exit Code    : %d\n", rc);
+	dprintf(stdout_fd, " Exit Code    : %d\n", exit_code);
 
 	if (sig)
 		dprintf(stdout_fd, " Signal       : %d\n", sig);
@@ -509,12 +521,13 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 			fprintf(stderr, "Failed to send completion to agent: (status=%d) %s\n", status, strerror(errno));
 	} while (status == -1 && errno == EINTR);
 
-	print_msg(JERS_LOG_DEBUG, "Job: %d finished: %d\n", j->jobid, job_completion.exitcode);
+	print_msg(JERS_LOG_DEBUG, "Job: %d finished: %08x\n", j->jobid, job_completion.exitcode);
+
+launch_cleanup:
+
 	close(socket);
-	_exit(0);
+	_exit(launch_status);
 }
-
-
 
 struct runningJob * removeJob (struct runningJob * j) {
 	struct runningJob * next = NULL;
@@ -535,23 +548,14 @@ struct runningJob * removeJob (struct runningJob * j) {
 	return next;
 }
 
-struct runningJob * addJob (jobid_t jobid, pid_t pid, time_t start_time, int socket) {
-	struct runningJob * j = calloc(sizeof(struct runningJob), 1);
-	j->start_time = start_time;
-	j->pid = pid;
-	j->job_pid = 0;
-	j->jobID = jobid;
-	j->socket = socket;
-
+void addJob (struct runningJob * j) {
 	if (agent.jobs) {
 		j->next = agent.jobs;
 		agent.jobs->prev = j;
 	}
 
 	agent.jobs = j;
-
 	agent.running_jobs++;
-	return j;
 }
 
 void send_msg(resp_t * r) {
@@ -611,7 +615,7 @@ int send_completion(struct runningJob * j) {
 
 	initMessage(&r, "JOB_COMPLETED", 1);
 
-	print_msg(JERS_LOG_INFO, "Job complete: JOBID:%d PID:%d RC:%d\n", j->jobID, j->pid, j->job_completion.exitcode);
+	print_msg(JERS_LOG_INFO, "Job complete: JOBID:%d PID:%d RC:%08x\n", j->jobID, j->pid, j->job_completion.exitcode);
 
 	respAddMap(&r);
 	addIntField(&r, JOBID, j->jobID);
@@ -631,7 +635,7 @@ int send_completion(struct runningJob * j) {
 	send_msg(&r);
 
 	close(j->socket);
-
+	free(j->temp_script);
 	removeJob(j);
 	free(j);
 	return 0;
@@ -677,11 +681,11 @@ int get_job_completion(struct runningJob * j) {
 
 	if (status == -1) {
 		if (errno == EAGAIN || errno == EWOULDBLOCK) {
-			/* Clear the pid for this job, we will try later to read in the completion infomation again later */
+			/* Clear the pid for this job, we will try later to read in the completion information again later */
 			j->pid = 0;
 			return 1;
 		} else {
-			print_msg(JERS_LOG_WARNING, "Failed to read in job completion infomation for jobid:%d :%s", j->jobID, strerror(errno));
+			print_msg(JERS_LOG_WARNING, "Failed to read in job completion information for jobid:%d :%s", j->jobID, strerror(errno));
 			j->job_completion.exitcode = 255; //TODO: Use a different exitcode for this?
 		}
 	}
@@ -719,7 +723,7 @@ void check_children(void) {
 			}
 		}
 
-		/* Check for any children we have cleaned up, but didn't get the completion infomation from */
+		/* Check for any children we have cleaned up, but didn't get the completion information from */
 		if (j->pid == 0) {
 			struct runningJob * next = j->next;
 
@@ -746,12 +750,26 @@ void check_children(void) {
 			continue;
 		}
 
+		/* Remove its temporary script */
+		if (j->temp_script) {
+			if (unlink(j->temp_script) != 0)
+			print_msg(JERS_LOG_WARNING, "Failed to remove temporary script file for job:%d '%s': %s", j->jobID, j->temp_script, strerror(errno));
+		}
+
 		/* If a job was started correctly, the child will always return 0
 		 * - Anything else indicates it failed to start correctly */
 
 		if (child_status) {
-			fprintf(stderr, "Job %d failed to start.\n", j->jobID);
-			j->job_completion.exitcode = 255; //TODO: Use a different exitcode for this.
+			int fail_status;
+
+			if (WIFEXITED(child_status))
+				fail_status = WEXITSTATUS(child_status);
+			else if (WIFSIGNALED(child_status))
+				fail_status = JERS_FAIL_SIG;
+
+			fprintf(stderr, "Job %d failed to start: %d\n", j->jobID, fail_status);
+			j->job_completion.exitcode = fail_status | JERS_EXIT_FAIL;
+			j->job_completion.finish_time = time(NULL);
 			send_completion(j);
 			continue;
 		}
@@ -766,14 +784,37 @@ void check_children(void) {
 	return;
 }
 
-struct runningJob * spawn_job(struct jersJobSpawn * j) {
-	/* Setup a socketpair so the child can return the usage infomation */
+struct runningJob * spawn_job(struct jersJobSpawn * j, int * fail_status) {
+	/* Setup a socketpair so the child can return the usage information */
 	int sockpair[2];
 	struct timespec start_time;
+	struct runningJob * job = calloc(sizeof(struct runningJob), 1);
+
+	*fail_status = 0;
+
+	if (job == NULL) {
+		print_msg(JERS_LOG_CRITICAL, "Failed to allocate memory while spawning job: %s", strerror(errno));
+		*fail_status = JERS_FAIL_INIT;
+		return NULL;
+	}
 
 	if (socketpair(AF_UNIX, SOCK_STREAM|SOCK_NONBLOCK|SOCK_CLOEXEC, 0, sockpair) != 0) {
 		fprintf(stderr, "Failed to create socketpair: %s\n", strerror(errno));
+		*fail_status = JERS_FAIL_INIT;
 		return NULL;
+	}
+
+	/* Generate the temporary script name */
+	if (j->wrapper == NULL) {
+		asprintf(&job->temp_script, "/run/jers/tmp/jers_%d", j->jobid);
+
+		if (job->temp_script == NULL) {
+			print_msg(JERS_LOG_CRITICAL, "Failed to allocate memory for temp script name: %s", strerror(errno));
+			*fail_status = JERS_FAIL_INIT;
+			return NULL;
+		}
+
+		j->temp_script = job->temp_script;
 	}
 
 	/* Need to flush stdout/stderr otherwise the child may get
@@ -787,6 +828,7 @@ struct runningJob * spawn_job(struct jersJobSpawn * j) {
 
 	if (pid == -1) {
 		fprintf(stderr, "FAILED TO FORK(): %s\n", strerror(errno));
+		*fail_status = JERS_FAIL_START;
 		return NULL;
 	} else if (pid == 0) {
 		/* Child */
@@ -797,13 +839,21 @@ struct runningJob * spawn_job(struct jersJobSpawn * j) {
 
 	close(sockpair[1]);
 
-	return addJob(j->jobid, pid, start_time.tv_sec, sockpair[0]);
+	job->start_time = start_time.tv_sec;
+	job->pid = pid;
+	job->job_pid = 0;
+	job->jobID = j->jobid;
+	job->socket = sockpair[0];
+
+	addJob(job);
+
+	return job;
 }
 
 void start_command(msg_t * m) {
 	struct jersJobSpawn j = {0};
 	struct runningJob * started = NULL;
-	int i;
+	int i, status = 0;
 
 	msg_item * item = &m->items[0];
 
@@ -830,15 +880,20 @@ void start_command(msg_t * m) {
 	/* Lookup the user from our cache */
 	j.u = lookup_user(j.uid, 1);
 
-	if (j.u == NULL)
+	if (j.u == NULL) {
 		print_msg(JERS_LOG_WARNING, "Failed to find user for job:%d uid:%d\n", j.jobid, j.uid);
-
-	if (j.u && (started = spawn_job(&j)) != NULL) {
-		send_start(started);
+		status = JERS_FAIL_INIT;
 	} else {
+		started = spawn_job(&j, &status);
+
+		if (started)
+			send_start(started);
+	}
+
+	if (status) {
 		// Send start failed message
-		print_msg(JERS_LOG_WARNING, "JOBID %d failed to start", j.jobid);
-		//TODO: Return an error 
+		print_msg(JERS_LOG_WARNING, "JOBID %d failed to start: %d (%s)", j.jobid, status, getFailString(status));
+		//TODO - Send error message
 	}
 
 	free(j.name);

@@ -55,6 +55,7 @@ int initalised = 0;
 
 const char * getPendString(int);
 const char * getErrString(int);
+const char * getFailString(int);
 int getJersErrno(char *, char **);
 void setJersErrno(int err, char * msg);
 
@@ -253,6 +254,10 @@ const char * jersGetPendStr(int pend_reason) {
 	return getPendString(pend_reason);
 }
 
+const char * jersGetFailStr(int fail_reason) {
+	return getFailString(fail_reason);
+}
+
 void jersFreeJobInfo (jersJobInfo * info) {
 	int64_t i, j;
 
@@ -358,6 +363,7 @@ int deserialize_jersJob(msg_item * item, jersJob *j) {
 			case RESOURCES : j->res_count = getStringArrayField(&item->fields[i], &j->resources); break;
 			case NODE      : j->node = getStringField(&item->fields[i]); break;
 			case PENDREASON: j->pend_reason = getNumberField(&item->fields[i]); break;
+			case FAILREASON: j->fail_reason = getNumberField(&item->fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",item->fields[i].name); break;
 		}

@@ -81,6 +81,19 @@ const char * jers_pend_reasons[] = {
 	"Unknown reason"
 };
 
+const char * jers_fail_reasons[] = {
+	"",
+	"Failed to read completion information",
+	"Failed to read PID of started job",
+	"Failed to create log file",
+	"Failed to create temporary script",
+	"Failed to start job",
+	"Failed to initalise job",
+	"Got signal while starting job",
+
+	"Unknown reason"
+};
+
 void setJersErrno(int err, char * msg) {
 	int saved_errno = errno;
 	jers_errno = err;
@@ -146,3 +159,9 @@ const char * getPendString(int reason) {
 	return jers_pend_reasons[reason];
 }
 
+const char * getFailString(int reason) {
+	if (reason < 0 || reason > JERS_FAIL_UNKNOWN)
+		return "Invalid reason code provided";
+
+	return jers_fail_reasons[reason];
+}

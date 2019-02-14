@@ -328,6 +328,9 @@ void serialize_jersJob(resp_t * r, struct job * j, int fields) {
 	if (j->pend_reason)
 		addIntField(r, PENDREASON, j->pend_reason);
 
+	if (j->fail_reason)
+		addIntField(r, FAILREASON, j->fail_reason);
+
 	respCloseMap(r);
 }
 

@@ -174,6 +174,7 @@ struct job {
 	int32_t internal_state;
 
 	int pend_reason;
+	int fail_reason;
 
 	int32_t priority;
 	time_t submit_time;

@@ -135,6 +135,7 @@ enum field_type {
 	TAG_KEY,
 	TAG_VALUE,
 	PENDREASON,
+	FAILREASON,
 
 	ENDOFFIELDS
 };

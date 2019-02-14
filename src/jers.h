@@ -142,6 +142,19 @@ enum jers_pend_codes {
 	JERS_PEND_UNKNOWN
 };
 
+enum jers_fail_codes {
+	JERS_FAIL_NOREASON = 0,
+	JERS_FAIL_NOCOMPLETE,
+	JERS_FAIL_PID,
+	JERS_FAIL_LOGERR,
+	JERS_FAIL_TMPSCRIPT,
+	JERS_FAIL_START,
+	JERS_FAIL_INIT,
+	JERS_FAIL_SIG,
+
+	JERS_FAIL_UNKNOWN
+};
+
 typedef struct {
 	char * key;
 	char * value;
@@ -230,6 +243,7 @@ typedef struct jersJob {
 
 	char * node;
 	int pend_reason;
+	int fail_reason;
 
 	time_t submit_time;
 	time_t defer_time;
@@ -410,4 +424,5 @@ int jersGetStats(jersStats * s);
 void jersFinish(void);
 const char * jersGetErrStr(int jers_error);
 const char * jersGetPendStr(int pend_reason);
+const char * jersGetFailStr(int fail_reason);
 #endif

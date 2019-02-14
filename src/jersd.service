@@ -6,7 +6,6 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-RuntimeDirectory=jers
 User=jers
 Group=jers
 

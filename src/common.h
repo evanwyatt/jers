@@ -43,6 +43,12 @@
 
 #define CMD_REPLAY 0x01
 
+/* Exit code flags to indicate issues between agent and daemon */
+#define JERS_EXIT_FAIL (1<<24)   // Job failed to start
+#define JERS_EXIT_SIGNAL (1<<25) // Job was signaled
+#define JERS_EXIT_STATUS 0       // Exit code from job
+#define JERS_EXIT_STATUS_MASK 0xFF
+
 struct user {
 	uid_t uid;
 	gid_t gid;
