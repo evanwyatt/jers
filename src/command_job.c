@@ -746,6 +746,7 @@ int command_mod_job(client *c, void *args) {
 		j->signal = 0;
 		j->start_time = 0;
 		j->finish_time = 0;
+		j->fail_reason = 0;
 
 		dirty = 1;
 	}
@@ -813,7 +814,7 @@ int command_sig_job(client * c, void * args) {
 
 	/* signo == 0 wants to just test the job is running */
 	if (js->signum == 0)
-		return sendClientReturnCode(c, j->pid == 0 ? "1" : "0");
+		return sendClientReturnCode(c, "0");
 
 	/* Send the requested signal to the job (via the agent) */
 	resp_t sig_message;

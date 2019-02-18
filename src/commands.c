@@ -223,6 +223,14 @@ void sendError(client * c, int error, const char * err_msg) {
 	char str[1024];
 	const char * error_type = getErrType(error);
 
+	if (c == NULL) {
+		if (server.recovery.in_progress)
+			return;
+		
+		print_msg(JERS_LOG_WARNING, "Trying to send a error code, but no client provided");
+		return;
+	}
+
 	respNew(&response);
 
 	snprintf(str, sizeof(str), "%s %s", error_type, err_msg ? err_msg : "");
