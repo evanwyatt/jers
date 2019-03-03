@@ -760,7 +760,7 @@ void check_children(void) {
 		 * - Anything else indicates it failed to start correctly */
 
 		if (child_status) {
-			int fail_status;
+			int fail_status = 255;
 
 			if (WIFEXITED(child_status))
 				fail_status = WEXITSTATUS(child_status);
@@ -801,6 +801,7 @@ struct runningJob * spawn_job(struct jersJobSpawn * j, int * fail_status) {
 	if (socketpair(AF_UNIX, SOCK_STREAM|SOCK_NONBLOCK|SOCK_CLOEXEC, 0, sockpair) != 0) {
 		fprintf(stderr, "Failed to create socketpair: %s\n", strerror(errno));
 		*fail_status = JERS_FAIL_INIT;
+		free(job);
 		return NULL;
 	}
 
@@ -811,6 +812,7 @@ struct runningJob * spawn_job(struct jersJobSpawn * j, int * fail_status) {
 		if (job->temp_script == NULL) {
 			print_msg(JERS_LOG_CRITICAL, "Failed to allocate memory for temp script name: %s", strerror(errno));
 			*fail_status = JERS_FAIL_INIT;
+			free(job);
 			return NULL;
 		}
 
@@ -829,6 +831,7 @@ struct runningJob * spawn_job(struct jersJobSpawn * j, int * fail_status) {
 	if (pid == -1) {
 		fprintf(stderr, "FAILED TO FORK(): %s\n", strerror(errno));
 		*fail_status = JERS_FAIL_START;
+		free(job);
 		return NULL;
 	} else if (pid == 0) {
 		/* Child */

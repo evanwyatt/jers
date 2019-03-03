@@ -374,7 +374,7 @@ int command_add_job(client * c, void * args) {
 
 	/* Have they requested a particular jobid? */
 	if (s->jobid) {
-		if ((c && c->uid != 0) && server.recovery.in_progress == 0) {
+		if (server.recovery.in_progress == 0 && c->uid) {
 			sendError(c, JERS_ERR_NOPERM, "Only root can specify a jobid");
 			return -1;
 		}
@@ -388,7 +388,7 @@ int command_add_job(client * c, void * args) {
 	}
 
 	if (s->uid <= 0)
-		s->uid = c->uid;
+			s->uid = c->uid;
 
 	if (s->uid == 0) {
 		sendError(c, JERS_ERR_INVARG, "Jobs not allowed to run as root");

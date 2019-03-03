@@ -184,7 +184,7 @@ void convertJournalEntry(msg_t * msg, buff_t * message_buffer,char * entry) {
 	time_t timestamp_s;
 	int timestamp_ms;
 	uid_t uid;
-	char command[64];
+	char command[65];
 	jobid_t jobid;
 	int64_t revision;
 	int field_count = 0;
