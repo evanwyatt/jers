@@ -74,8 +74,9 @@ typedef struct {
 	int64_t item_count;
 	msg_item * items;
 
-	/* This field is filled in by a command so that it can be saved in the transaction journal */
+	/* These fields are filled in by a command so that it can be saved in the transaction journal */
 	jobid_t jobid;
+	int64_t revision;
 } msg_t;
 
 enum field_type {

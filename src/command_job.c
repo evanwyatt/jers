@@ -91,7 +91,6 @@ void * deserialize_add_job(msg_t * t) {
 	jersJobAdd * s = calloc(sizeof(jersJobAdd), 1);
 	int i;
 
-	s->uid = -1; //TODO: Don't use -1
 	s->priority = JERS_JOB_DEFAULT_PRIORITY;
 
 	for (i = 0; i < t->items[0].field_count; i++) {
@@ -340,9 +339,25 @@ int command_add_job(client * c, void * args) {
 	struct jobResource * resources = NULL;
 	struct user * u = NULL;
 
+	if (unlikely(server.recovery.in_progress)) {
+		/* Have we already loaded this job? */
+		HASH_FIND_INT(server.jobTable, &s->jobid, j);
+
+		if (j)
+			return 0;
+		print_msg(JERS_LOG_INFO, "Recovering jobid:%d\n", server.recovery.jobid);
+		s->jobid = server.recovery.jobid;
+		s->uid = server.recovery.uid;
+	}
+
 	/* Validate the request first up */
 	if (s->queue == NULL) {
 		q = server.defaultQueue;
+
+		if (q == NULL) {
+			sendError(c, JERS_ERR_NOQUEUE, "No default queue");
+			return -1;
+		}
 	} else {
 		HASH_FIND_STR(server.queueTable, s->queue, q);
 
@@ -355,10 +370,8 @@ int command_add_job(client * c, void * args) {
 	}
 
 	/* Have they requested a particular jobid? */
-	if (server.recovery.in_progress) {
-		s->jobid = server.recovery.jobid;
-	} else if (s->jobid) {
-		if (c->uid != 0) {
+	if (s->jobid) {
+		if ((c && c->uid != 0) && server.recovery.in_progress == 0) {
 			sendError(c, JERS_ERR_NOPERM, "Only root can specify a jobid");
 			return -1;
 		}
@@ -371,12 +384,8 @@ int command_add_job(client * c, void * args) {
 		}
 	}
 
-	if (s->uid < 0) { //TODO: Don't use -1
-		if (server.recovery.in_progress == 0)
-			s->uid = c->uid;
-		else
-			s->uid = server.recovery.uid;
-	}
+	if (s->uid <= 0)
+		s->uid = c->uid;
 
 	if (s->uid == 0) {
 		sendError(c, JERS_ERR_INVARG, "Jobs not allowed to run as root");
@@ -482,6 +491,7 @@ int command_add_job(client * c, void * args) {
 
 	/* Populate the out jobid field */
 	c->msg.jobid = j->jobid;
+	c->msg.revision = 1;
 
 	print_msg(JERS_LOG_DEBUG, "SUBMIT - JOBID %d created", j->jobid);
 
@@ -619,6 +629,13 @@ int command_mod_job(client *c, void *args) {
 		return 0;
 	}
 
+	if (unlikely(server.recovery.in_progress)) {
+		if (j->revision >= server.recovery.revision) {
+			print_msg(JERS_LOG_DEBUG, "Skipping recovery of job_mod job %ld rev:%ld trans rev:%ld", j->jobid, j->revision, server.recovery.revision);
+			return 0;
+		}
+	}
+
 	state = j->state;
 	hold = (j->state == JERS_JOB_HOLDING);
 
@@ -738,6 +755,8 @@ int command_mod_job(client *c, void *args) {
 		state = JERS_JOB_PENDING;
 
 	changeJobState(j, state, dirty);
+
+	j->revision++;
 
 	return sendClientReturnCode(c, "0");
 }

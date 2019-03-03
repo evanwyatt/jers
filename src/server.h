@@ -105,6 +105,7 @@ typedef struct _agent {
 
 struct queue {
 	char *name;
+	int64_t revision;
 	char *desc;
 	int job_limit;
 	int state;
@@ -122,6 +123,7 @@ struct queue {
 
 struct resource {
 	char *name;
+	int64_t revision;
 	int32_t count;
 	int32_t in_use;
 
@@ -138,6 +140,7 @@ struct jobResource {
 
 struct job {
 	jobid_t jobid;
+	int64_t revision;
 	char * jobname;
 	struct queue * queue;
 
@@ -258,6 +261,7 @@ struct jersServer {
 		uid_t uid;
 		time_t time;
 		jobid_t jobid;
+		int64_t revision;
 	} recovery;
 
 	int candidate_recalc;
@@ -327,7 +331,7 @@ void removeAgent(agent * a);
 
 void loadConfig(char * config);
 
-int stateSaveCmd(uid_t uid, char * cmd, char * msg, jobid_t jobid);
+int stateSaveCmd(uid_t uid, char * cmd, char * msg, jobid_t jobid, int64_t revision);
 void stateInit(void);
 int stateLoadJobs(void);
 int stateLoadQueues(void);

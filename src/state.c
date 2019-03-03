@@ -110,7 +110,7 @@ time_t getRollOver(time_t now) {
  *       to this position when these transaction have been commited to disk as the job/queue/resource state files
  *       A '$' will be written to this position as a 'End of journal' marker when rotating the journal files */
 
-int stateSaveCmd(uid_t uid, char * cmd, char * msg, jobid_t jobid) {
+int stateSaveCmd(uid_t uid, char * cmd, char * msg, jobid_t jobid, int64_t revision) {
 	off_t start_offset;
 	struct timespec now;
 	int64_t i;
@@ -137,7 +137,7 @@ int stateSaveCmd(uid_t uid, char * cmd, char * msg, jobid_t jobid) {
 	/* Save the offset of this new record, so we can write the '*' later if needed */
 	start_offset = lseek(server.state_fd, 0, SEEK_CUR);
 
-	dprintf(server.state_fd, " %ld.%03d\t%d\t%s\t%d\t%s\n", now.tv_sec, (int)(now.tv_nsec / 1000000), uid, cmd, jobid, msg ? escapeString(msg, NULL):"");
+	dprintf(server.state_fd, " %ld.%03d\t%d\t%s\t%d\t%ld\t%s\n", now.tv_sec, (int)(now.tv_nsec / 1000000), uid, cmd, jobid, revision, msg ? escapeString(msg, NULL):"");
 
 	if (server.flush.defer == 0)
 		fdatasync(server.state_fd);
@@ -186,6 +186,7 @@ void convertJournalEntry(msg_t * msg, buff_t * message_buffer,char * entry) {
 	uid_t uid;
 	char command[64];
 	jobid_t jobid;
+	int64_t revision;
 	int field_count = 0;
 	off_t msg_offset = 0;
 
@@ -194,10 +195,10 @@ void convertJournalEntry(msg_t * msg, buff_t * message_buffer,char * entry) {
 	message_buffer->used = 0;
 	buffResize(message_buffer, strlen(entry));
 
-	field_count = sscanf(entry, " %ld.%d\t%d\t%64s\t%d\t%n", &timestamp_s, &timestamp_ms, &uid, command, &jobid, &msg_offset);
+	field_count = sscanf(entry, " %ld.%d\t%d\t%64s\t%d\t%ld\t%n", &timestamp_s, &timestamp_ms, &uid, command, &jobid, &revision, &msg_offset);
 
-	if (field_count != 5)
-		error_die("Failed to load journal entry. Got %d fields\n", field_count);
+	if (field_count != 6)
+		error_die("Failed to load journal entry. Got %d fields, wanted 6\n", field_count);
 
 	strcpy(message_buffer->data, entry + msg_offset);
 
@@ -212,8 +213,9 @@ void convertJournalEntry(msg_t * msg, buff_t * message_buffer,char * entry) {
 	server.recovery.time = timestamp_s;
 	server.recovery.uid = uid;
 	server.recovery.jobid = jobid;
+	server.recovery.revision = revision;
 
-	print_msg(JERS_LOG_DEBUG, "Replaying cmd:%s uid:%d time:%d jobid:%d", command, uid, timestamp_s, jobid);
+	print_msg(JERS_LOG_DEBUG, "Replaying cmd:%s uid:%d time:%d jobid:%d revision:%ld", command, uid, timestamp_s, jobid, revision);
 }
 
 void replayTransaction(char * line) {
@@ -336,7 +338,7 @@ void stateReplayJournal(void) {
 	print_msg(JERS_LOG_INFO, "Finished recovery from journal files");
 
 	/* Make sure have the latest journal open by writing a dummy command */
-	stateSaveCmd(getuid(), "REPLAY_COMPLETE", NULL, 0);
+	stateSaveCmd(getuid(), "REPLAY_COMPLETE", NULL, 0, 0);
 }
 
 int stateDelJob(struct job * j) {
@@ -438,6 +440,8 @@ int stateSaveJob(struct job * j) {
 	if (j->signal)
 		fprintf(f,"SIGNAL %d\n", j->signal);
 
+	fprintf(f, "REVISION %ld\n", j->revision);
+
 	fflush(f);
 	fsync(fileno(f));
 	fclose(f);
@@ -465,6 +469,7 @@ int stateSaveQueue(struct queue * q) {
 	fprintf(f, "JOBLIMIT %d\n", q->job_limit);
 	fprintf(f, "PRIORITY %d\n", q->priority);
 	fprintf(f, "HOST %s\n", q->host);
+	fprintf(f, "REVISION %ld\n", q->revision);
 
 	if (server.defaultQueue == q)
 		fprintf(f, "DEFAULT 1\n");
@@ -493,6 +498,7 @@ int stateSaveResource(struct resource * r) {
 	}
 
 	fprintf(f, "COUNT %d\n", r->count);
+	fprintf(f, "REVISION %ld\n", r->revision);
 
 	fflush(f);
 	fsync(fileno(f));
@@ -913,6 +919,8 @@ int stateLoadJob(char * fileName) {
 			j->exitcode = atoi(value);
 		} else if (strcmp(key, "SIGNAL") == 0) {
 			j->signal = atoi(value);
+		} else if (strcmp(key, "REVISION") == 0) {
+			j->revision = atol(value);
 		}
 	}
 
@@ -1030,6 +1038,8 @@ int stateLoadQueue(char * fileName) {
 			def = atoi(value);
 		} else if (strcasecmp(key, "HOST") == 0) {
 			q->host = strdup(value);
+		} else if (strcmp(key, "REVISION") == 0) {
+			q->revision = atol(value);
 		} else {
 			print_msg(JERS_LOG_WARNING, "stateLoadQueue: skipping unknown config '%s' for queue %s\n", key, name);
 		}
@@ -1141,6 +1151,8 @@ int stateLoadRes(char * file_name) {
 
 		if (strcasecmp(key, "COUNT") == 0) {
 			r->count = atoi(value);
+		} else if (strcmp(key, "REVISION") == 0) {
+			r->revision = atol(value);
 		} else {
 			print_msg(JERS_LOG_WARNING, "stateLoadRes: skipping unknown config '%s' for resource %s\n", key, name);
 		}
@@ -1276,6 +1288,7 @@ void changeJobState(struct job * j, int new_state, int dirty) {
 	}
 
 	j->state = new_state;
+	j->revision++;
 
 	/* Mark it as dirty */
 	if (dirty)

@@ -154,7 +154,7 @@ void runComplexCommand(client * c) {
 
 	/* Write to the journal if the transaction was an update and successful */
 	if (command_to_run->flags &CMD_REPLAY && status == 0)
-		stateSaveCmd(c->uid, c->msg.command, c->msg.reader.msg_cpy, c->msg.jobid);
+		stateSaveCmd(c->uid, c->msg.command, c->msg.reader.msg_cpy, c->msg.jobid, c->msg.revision);
 
 	if (likely(command_to_run->free_func != NULL))
 		command_to_run->free_func(args);
@@ -192,7 +192,7 @@ int runAgentCommand(agent * a) {
 
 	/* Write to the journal if the transaction was an update and successful */
 	if (command_to_run->flags &CMD_REPLAY)
-		stateSaveCmd(0, a->msg.command, a->msg.reader.msg_cpy, 0);
+		stateSaveCmd(0, a->msg.command, a->msg.reader.msg_cpy, 0, 0);
 
 	free_message(&a->msg, NULL);
 	

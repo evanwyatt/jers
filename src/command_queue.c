@@ -124,6 +124,9 @@ int command_add_queue(client * c, void * args) {
 	HASH_FIND_STR(server.queueTable, qa->name, q);
 
 	if (q != NULL) {
+		if (server.recovery.in_progress)
+			return 0;
+
 		sendError(c, JERS_ERR_QUEUEEXISTS, NULL);
 		return 1;
 	}
@@ -137,6 +140,8 @@ int command_add_queue(client * c, void * args) {
 	q->state = qa->state != -1 ? qa->state : JERS_QUEUE_DEFAULT_STATE;
 	q->agent = NULL;
 	q->dirty = 1;
+	q->revision = 0;
+
 	server.dirty_queues = 1;
 
 	HASH_ADD_STR(server.queueTable, name, q);
@@ -226,6 +231,13 @@ int command_mod_queue(client *c, void * args) {
 		return 1;
 	}
 
+	if (unlikely(server.recovery.in_progress)) {
+		if (q->revision >= server.recovery.revision) {
+			print_msg(JERS_LOG_DEBUG, "Skipping recovery of queue_mod queue %s rev:%ld trans rev:%ld", q->name, q->revision, server.recovery.revision);
+			return 0;
+		}
+	}
+
 	if (qm->desc && (q->desc == NULL || strcmp(q->desc, qm->desc) == 0)) {
 		free(q->desc);
 		q->desc = strdup(qm->desc);
@@ -248,6 +260,7 @@ int command_mod_queue(client *c, void * args) {
 	}
 
 	server.dirty_queues = 1;
+	q->revision++;
 
 	return sendClientReturnCode(c, "0");
 }
@@ -282,10 +295,7 @@ int command_del_queue(client *c, void *args) {
 		return 1;
 	}
 
-	/* We can delete it. */
-
-	//TODO: Delete the queue
-
+	//TODO: Delete queues
 
 	return sendClientReturnCode(c, "0");
 }

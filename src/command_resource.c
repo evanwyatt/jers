@@ -26,6 +26,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
 #include <server.h>
 #include <jers.h>
 #include <commands.h>
@@ -116,6 +117,9 @@ int command_add_resource(client *c, void *args) {
 	HASH_FIND_STR(server.resTable, ra->name, r);
 
 	if (r != NULL) {
+		if (server.recovery.in_progress)
+			return 0;
+
 		sendError(c, JERS_ERR_RESEXISTS, NULL);
 		return 1;
 	}
@@ -124,6 +128,7 @@ int command_add_resource(client *c, void *args) {
 
 	r->name = ra->name;
 	r->count = ra->count;
+	r->revision = 0;
 
 	addRes(r, 1);
 
@@ -190,7 +195,15 @@ int command_mod_resource(client *c, void *args) {
 		return 1;
 	}
 
+	if (unlikely(server.recovery.in_progress)) {
+		if (r->revision >= server.recovery.revision) {
+			print_msg(JERS_LOG_DEBUG, "Skipping recovery of resource_mod resource %s rev:%ld trans rev:%ld", r->name, r->revision, server.recovery.revision);
+			return 0;
+		}
+	}
+
 	r->count = rm->count;
+	r->revision++;
 
 	return sendClientReturnCode(c, "0");
 }
