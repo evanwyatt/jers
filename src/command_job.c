@@ -65,8 +65,10 @@ struct jobResource * convertResourceStrings(int res_count, char ** res_strings) 
 
 	/* Check the resources */
 	for (int i = 0; i < res_count; i++) {
-		if (resourceStringToResource(res_strings[i], &resources[i]) != 0)
+		if (resourceStringToResource(res_strings[i], &resources[i]) != 0) {
+			free(resources);
 			return NULL;
+		}
 	}
 
 	return resources;
@@ -423,6 +425,7 @@ int command_add_job(client * c, void * args) {
 	if (s->tag_count) {
 		for (int i = 0; i < s->tag_count; i++) {
 			if (isprintable(s->tags[i].key) == 0) {
+				free(resources);
 				sendError(c, JERS_ERR_INVTAG, NULL);
 				return -1;
 			}

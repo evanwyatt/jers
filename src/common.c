@@ -242,7 +242,7 @@ int isprintable(const char * str) {
 }
 
 void * dup_mem(void * src, size_t len, size_t size) {
-	size_t alloc_size = len > size ? len : size;
+	size_t alloc_size = len > size ? len + 1 : size;
 	void * dst = malloc(alloc_size);
 
 	if (dst == NULL)

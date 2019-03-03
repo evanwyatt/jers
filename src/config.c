@@ -81,10 +81,6 @@ void loadConfig(char * config) {
 
 	if (config == NULL)
 		config = DEFAULT_CONFIG_FILE;
-
-	if (access(config, F_OK) == -1) {
-		error_die("Failed to access config file: %s", strerror(errno));
-	}
 	
 	f = fopen(config, "r");
 

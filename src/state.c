@@ -229,6 +229,8 @@ void replayTransaction(char * line) {
 	if (line[0] == '$')
 		return;
 
+	buffResize(&buff, 0);
+
 	/* Load the fields into a msg_t and call the appropriate command handler */
 	convertJournalEntry(&msg, &buff, line);
 
@@ -323,9 +325,8 @@ void stateReplayJournal(void) {
 	}
 
 	for (i = journalGlob.gl_pathc - 1; i >= 0 ; i--) {
-		if ((offset = checkForLastCommit(journalGlob.gl_pathv[i])) >= 0) {
+		if ((offset = checkForLastCommit(journalGlob.gl_pathv[i])) >= 0)
 			break;
-		}
 	}
 
 	/* If we didn't find any offset, we need to replay everything we have */
@@ -338,9 +339,10 @@ void stateReplayJournal(void) {
 	if (i >= 0) {
 		server.recovery.in_progress = 1;
 
-		for (; i < journalGlob.gl_pathc; i++)
+		for (; i < journalGlob.gl_pathc; i++) {
 			replayJournal(journalGlob.gl_pathv[i], offset);
 			offset = -1;
+		}
 	}
 
 	globfree(&journalGlob);

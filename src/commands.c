@@ -188,6 +188,7 @@ int runAgentCommand(agent * a) {
 		command_to_run->cmd_func(a, &a->msg);
 	} else {
 		print_msg(JERS_LOG_WARNING, "Invalid agent command %s received", a->msg.command);
+		return 0;
 	}
 
 	/* Write to the journal if the transaction was an update and successful */
