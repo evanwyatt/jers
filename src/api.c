@@ -105,7 +105,7 @@ int jersInitAPI(char * custom_config) {
 
 void jersFinish(void) {
 	close(fd);
-	free_message(&msg, NULL);
+	free_message(&msg);
 	respReadFree(&msg.reader);
 
 	buffFree(&response);
@@ -121,6 +121,11 @@ static int jersConnect(void) {
 	struct sockaddr_un addr;
 
 	fd = socket(AF_UNIX, SOCK_STREAM, 0);
+
+	if (fd < 0) {
+		fprintf(stderr, "Failed to create socket: %s\n", strerror(errno));
+		return 1;
+	}
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_UNIX;
@@ -225,7 +230,7 @@ static int readResponse(void) {
 		if (rc < 0) {
 			setJersErrno(JERS_ERR_INVRESP, NULL);
 			fprintf(stderr, "Failed to parse response from jers daemon\n");
-			free_message(&msg, NULL);
+			free_message(&msg);
 			return 1;
 		}
 
@@ -238,7 +243,7 @@ static int readResponse(void) {
 		int err = getJersErrno(msg.error, &err_msg);
 
 		setJersErrno(err, err_msg);
-		free_message(&msg, NULL);
+		free_message(&msg);
 		free(err_msg);
 		return 1;
 	}
@@ -427,7 +432,7 @@ int jersGetJob(jobid_t jobid, jersJobFilter * filter, jersJobInfo * job_info) {
 
 	job_info->count = msg.item_count;
 
-	free_message(&msg, NULL);
+	free_message(&msg);
 
 	return 0;
 }
@@ -449,7 +454,7 @@ int jersDelJob(jobid_t jobid) {
 	if (readResponse())
 		return 1;
 
-	free_message(&msg, NULL);
+	free_message(&msg);
 
 	return 0;
 }
@@ -560,7 +565,7 @@ jobid_t jersAddJob(jersJobAdd * j) {
 
 	new_jobid = getNumberField(&msg.items[0].fields[0]);
 
-	free_message(&msg, NULL);
+	free_message(&msg);
 	return new_jobid;
 }
 
@@ -624,7 +629,7 @@ int jersModJob(jersJobMod *j) {
 	if(readResponse())
 		return 1;
 
-	free_message(&msg, NULL);
+	free_message(&msg);
 	return 0;
 }
 
@@ -661,7 +666,7 @@ int jersSignalJob(jobid_t id, int signum) {
 	if (msg.command && strcmp(msg.command, "0") == 0)
 		status = 0;
 
-	free_message(&msg, NULL);
+	free_message(&msg);
 
 	return status;
 }
@@ -719,7 +724,7 @@ int jersGetQueue(char * name, jersQueueFilter * filter, jersQueueInfo * info) {
 
 	info->count = msg.item_count;
 
-	free_message(&msg, NULL);
+	free_message(&msg);
 
 	return 0;
 }
@@ -779,7 +784,7 @@ int jersAddQueue(jersQueueAdd *q) {
 	if(readResponse())
 		return 1;
 
-	free_message(&msg, NULL);
+	free_message(&msg);
 
 	return 0;
 }
@@ -825,7 +830,7 @@ int jersModQueue(jersQueueMod *q) {
 	if(readResponse())
 		return 1;
 
-	free_message(&msg, NULL);
+	free_message(&msg);
 
 	return 0;
 }
@@ -854,7 +859,7 @@ int jersAddResource(char *name, int count) {
 	if (readResponse())
 		return 1;
 
-	free_message(&msg, NULL);
+	free_message(&msg);
 
 	return 0;
 }
@@ -890,7 +895,7 @@ int jersGetResource(char * name, jersResourceFilter *filter, jersResourceInfo *i
 
 	info->count = msg.item_count;
 
-	free_message(&msg, NULL);
+	free_message(&msg);
 
 	return 0;
 }
@@ -915,7 +920,7 @@ int jersDelResource(char *name) {
 	if (readResponse())
 		return 1;
 
-	free_message(&msg, NULL);
+	free_message(&msg);
 
 	return 0;
 }
@@ -975,7 +980,7 @@ int jersGetStats(jersStats * s) {
 		}
 	}
 
-	free_message(&msg, NULL);
+	free_message(&msg);
 
 	return 0;
 }
@@ -1000,7 +1005,7 @@ int jersSetTag(jobid_t id, char * key, char * value) {
 	if(readResponse())
 		return 1;
 
-	free_message(&msg, NULL);
+	free_message(&msg);
 
 	return 0;
 }
@@ -1023,7 +1028,7 @@ int jersDelTag(jobid_t id, char * key) {
 	if (readResponse())
 		return 1;
 
-	free_message(&msg, NULL);
+	free_message(&msg);
 
 	return 0;
 }

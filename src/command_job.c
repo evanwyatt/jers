@@ -400,7 +400,7 @@ int command_add_job(client * c, void * args) {
 	/* Validate if the requester is allowed to submit a job
 	 * under another uid */
 	if (server.recovery.in_progress == 0 && c->uid != s->uid) {
-		if (c->user->permissions &PERM_SETUID == 0) {
+		if ((c->user->permissions &PERM_SETUID) == 0) {
 			sendError(c, JERS_ERR_NOPERM, NULL);
 			return -1;
 		}

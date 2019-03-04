@@ -163,7 +163,7 @@ void runComplexCommand(client * c) {
 
 	print_msg(JERS_LOG_DEBUG, "Command '%s' took %ldms\n", c->msg.command, end - start);
 
-	free_message(&c->msg, NULL);
+	free_message(&c->msg);
 }
 
 int runAgentCommand(agent * a) {
@@ -195,7 +195,7 @@ int runAgentCommand(agent * a) {
 	if (command_to_run->flags &CMD_REPLAY)
 		stateSaveCmd(0, a->msg.command, a->msg.reader.msg_cpy, 0, 0);
 
-	free_message(&a->msg, NULL);
+	free_message(&a->msg);
 	
 	if (buffRemove(&a->requests, a->msg.reader.pos, 0)) {
 			a->msg.reader.pos = 0;
@@ -304,7 +304,7 @@ void runSimpleCommand(client * c) {
 	}
 
 	_sendMessage(&c->connection, &c->response, &response);
-	free_message(&c->msg, NULL);
+	free_message(&c->msg);
 }
 
 void replayCommand(msg_t * msg) {
@@ -351,7 +351,7 @@ void replayCommand(msg_t * msg) {
 		}
 	}
 
-	free_message(msg, NULL);
+	free_message(msg);
 	
 	return;
 }

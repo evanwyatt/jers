@@ -229,7 +229,8 @@ void replayTransaction(char * line) {
 	if (line[0] == '$')
 		return;
 
-	buffResize(&buff, 0);
+	if (buffResize(&buff, 0) != 0)
+		error_die("Failed to resize buffer to replayTransaction");
 
 	/* Load the fields into a msg_t and call the appropriate command handler */
 	convertJournalEntry(&msg, &buff, line);
@@ -463,7 +464,11 @@ int stateSaveJob(struct job * j) {
 	fsync(fileno(f));
 	fclose(f);
 
-	rename(new_filename, filename);
+	if (rename(new_filename, filename) != 0) {
+		fprintf(stderr, "Failed to rename '%s' to '%s': %s\n", new_filename, filename, strerror(errno));
+		return 1;
+	}
+
 	return 0;
 }
 
@@ -495,7 +500,11 @@ int stateSaveQueue(struct queue * q) {
 	fsync(fileno(f));
 	fclose(f);
 
-	rename(new_filename, filename);
+	if (rename(new_filename, filename) != 0) {
+		fprintf(stderr, "Failed to rename '%s' to '%s': %s\n", new_filename, filename, strerror(errno));
+		return 1;
+	}
+
 	return 0;
 }
 
@@ -521,7 +530,11 @@ int stateSaveResource(struct resource * r) {
 	fsync(fileno(f));
 	fclose(f);
 
-	rename(new_filename, filename);
+	if (rename(new_filename, filename) != 0) {
+		fprintf(stderr, "Failed to rename '%s' to '%s': %s\n", new_filename, filename, strerror(errno));
+		return 1;
+	}
+
 	return 0;
 }
 
@@ -779,21 +792,17 @@ int loadKeyValue (char * line, char **key, char ** value, int * index) {
 void createDir(char * path) {
 	struct stat buf;
 
-	if (stat(path, &buf) != 0) {
-		if (errno != ENOENT) {
-			error_die("Failed to check state directory %s: %s", path, strerror(errno));
-		}
-
-		/* Here is it doesn't exist */
-		if (mkdir(path, S_IRWXU|S_IRGRP|S_IXGRP) != 0) {
+	if (mkdir(path, S_IRWXU|S_IRGRP|S_IXGRP) != 0) {
+		if (errno != EEXIST)
 			error_die("Failed to create required directory %s : %s", path, strerror(errno));
-		}
 
-	} else if (!(buf.st_mode &S_IFDIR)) {
-		error_die("Wanted to create directory: %s but it already exists as a file?", path);
+		if (stat(path, &buf) != 0)
+			error_die("Failed to stat directory %s: %s", path, strerror(errno));
+
+		if (!(buf.st_mode &S_IFDIR))
+			error_die("Attemped to create directory %s, but it already exists as a file?", path);
 	}
 
-	/* Here if it already existed, or we created it.*/
 	return;
 }
 

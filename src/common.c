@@ -109,6 +109,9 @@ char * escapeString(const char * string, size_t * length) {
 void unescapeString(char * string) {
 	char * temp = string;
 
+	if (string == NULL)
+		return;
+
 	while (*temp != '\0') {
 		if (*temp != '\\') {
 			temp++;

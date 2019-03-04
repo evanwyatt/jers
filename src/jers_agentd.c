@@ -424,9 +424,6 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 		dup2(stdout_fd, STDOUT_FILENO);
 		dup2(stderr_fd, STDERR_FILENO);
 
-		close(stdout_fd);
-		close(stderr_fd);
-
 		int k = 0;
 		char * argv[j->argc + 3];
 
@@ -1001,7 +998,7 @@ void process_message(msg_t * m) {
 		print_msg(JERS_LOG_WARNING, "Got an unexpected command message '%s'", m->command);
 	}
 
-	free_message(m, NULL);
+	free_message(m);
 
 	if (buffRemove(&agent.requests, m->reader.pos, 0x10000)) {
 		m->reader.pos = 0;
@@ -1022,7 +1019,6 @@ int connectjers(void) {
 
 	if (fd < 0) {
 		print_msg(JERS_LOG_WARNING, "Failed to connect to JERS daemon (socket failed): %s", strerror(errno));
-		close(fd);
 		sleep(5);
 		return 1;
 	}

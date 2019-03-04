@@ -343,7 +343,7 @@ static int load_fields(msg_t * msg) {
 	return msg->item_count;
 }
 
-void free_message(msg_t * msg, buff_t * buff) {
+void free_message(msg_t * msg) {
 	int i,j;
 
 	for (j = 0; j < msg->item_count; j++) {
@@ -360,14 +360,6 @@ void free_message(msg_t * msg, buff_t * buff) {
 		msg->items[j].fields = NULL;
 	}
 
-	/* If the buffer has enough free space at the start, move everything down */
-	if (buff) {
-		if (buffRemove(buff, msg->reader.pos, 0)) {
-			msg->reader.pos = 0;
-			respReadUpdate(&msg->reader, buff->data, buff->used);
-		}
-	}
-
 	respReadReset(&msg->reader);
 	free(msg->items);
 
@@ -376,9 +368,6 @@ void free_message(msg_t * msg, buff_t * buff) {
 	msg->command = NULL;
 	msg->version = 0;
 	msg->error = NULL;
-
-	if (buff)
-		load_message(msg, buff);
 }
 
 /* Load our string into a message structure

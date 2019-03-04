@@ -65,9 +65,9 @@ int buffResize(buff_t * b, size_t length) {
 	if (new_size == 0)
 		new_size = BUFF_DEFAULT_SIZE;
 
-	 while (new_size <= b->used + length) {
+	while (new_size <= b->used + length) {
 		new_size *= 2;
-	};
+	}
 
 	char * new_data = realloc(b->data, new_size);
 
