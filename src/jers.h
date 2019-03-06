@@ -80,6 +80,7 @@ typedef uint32_t jobid_t;
 #define JERS_FILTER_UID       0x20
 #define JERS_FILTER_RESNAME   0x40
 #define JERS_FILTER_NODE      0x80
+#define JERS_FILTER_SUBMITTER 0x0100
 
 #define JERS_RET_JOBID      0x01
 #define JERS_RET_QUEUE      0x02
@@ -102,6 +103,7 @@ typedef uint32_t jobid_t;
 #define JERS_RET_ARGS       0x040000
 #define JERS_RET_SHELL      0x080000
 #define JERS_RET_NODE       0x100000
+#define JERS_RET_SUBMITTER  0x200000
 
 extern int jers_errno;
 
@@ -227,6 +229,7 @@ typedef struct jersJob {
 	int state;
 	int nice;
 	uid_t uid;
+	uid_t submitter;
 
 	int hold;
 	int exit_code;
@@ -282,6 +285,7 @@ typedef struct jersJobFilter {
 		int64_t res_count;
 		char ** resources;
 		uid_t uid;
+		uid_t submitter;
 	} filters;
 } jersJobFilter;
 
