@@ -121,7 +121,7 @@ int command_add_queue(client * c, void * args) {
 
 	lowercasestring(qa->name);
 
-	HASH_FIND_STR(server.queueTable, qa->name, q);
+	q = findQueue(qa->name);
 
 	if (q != NULL) {
 		if (server.recovery.in_progress)
@@ -224,7 +224,7 @@ int command_mod_queue(client *c, void * args) {
 		return 1;
 	}
 
-	HASH_FIND_STR(server.queueTable, qm->name, q);
+	q = findQueue(qm->name);
 
 	if (q == NULL) {
 		sendError(c, JERS_ERR_NOQUEUE, NULL);
@@ -275,7 +275,7 @@ int command_del_queue(client *c, void *args) {
 		return 1;
 	}
 
-	HASH_FIND_STR(server.queueTable, qd->name, q);
+	q = findQueue(qd->name);
 
 	if (q == NULL) {
 		sendError(c, JERS_ERR_NOQUEUE, NULL);

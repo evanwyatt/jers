@@ -71,7 +71,7 @@ void command_agent_jobstart(agent * a, msg_t * msg) {
 		}
 	}
 
-	HASH_FIND_INT(server.jobTable, &jobid, j);
+	j = findJob(jobid);
 
 	if (j == NULL) {
 		print_msg(JERS_LOG_WARNING, "Got job start for non-existent jobid: %d", jobid);
@@ -113,7 +113,7 @@ void command_agent_jobcompleted(agent * a, msg_t * msg) {
 		}
 	}
 
-	HASH_FIND_INT(server.jobTable, &jobid, j);
+	j = findJob(jobid);
 
 	if (j == NULL) {
 		print_msg(JERS_LOG_WARNING, "Got job completed for non-existent jobid: %d", jobid);

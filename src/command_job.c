@@ -48,7 +48,7 @@ int resourceStringToResource(const char * string, struct jobResource * res) {
 		res->needed = 1;
 	}
 
-	HASH_FIND_STR(server.resTable, string_temp, search_res);
+	search_res = findResource(string_temp);
 
 	if (search_res == NULL) {
 		free(string_temp);
@@ -346,10 +346,11 @@ int command_add_job(client * c, void * args) {
 
 	if (unlikely(server.recovery.in_progress)) {
 		/* Have we already loaded this job? */
-		HASH_FIND_INT(server.jobTable, &s->jobid, j);
+		j = findJob(s->jobid);
 
 		if (j)
 			return 0;
+
 		print_msg(JERS_LOG_INFO, "Recovering jobid:%d\n", server.recovery.jobid);
 		s->jobid = server.recovery.jobid;
 		s->uid = server.recovery.uid;
@@ -364,7 +365,7 @@ int command_add_job(client * c, void * args) {
 			return -1;
 		}
 	} else {
-		HASH_FIND_STR(server.queueTable, s->queue, q);
+		q = findQueue(s->queue);
 
 		if (q == NULL) {
 			sendError(c, JERS_ERR_NOQUEUE, NULL);
@@ -381,7 +382,7 @@ int command_add_job(client * c, void * args) {
 			return -1;
 		}
 
-		HASH_FIND_INT(server.jobTable, &s->jobid, j);
+		j = findJob(s->jobid);
 
 		if (j != NULL) {
 			sendError(c, JERS_ERR_JOBEXISTS, NULL);
@@ -517,7 +518,7 @@ int command_get_job(client *c, void * args) {
 
 	/* JobId? Just look it up and return the result */
 	if (s->jobid) {
-		HASH_FIND_INT(server.jobTable, &s->jobid, j);
+		j = findJob(s->jobid);
 
 		if (j == NULL || (j->internal_state &JERS_JOB_FLAG_DELETED)) {
 			sendError(c, JERS_ERR_NOJOB, NULL);
@@ -534,7 +535,7 @@ int command_get_job(client *c, void * args) {
 
 			if (strchr(s->filters.queue_name, '*') == NULL && strchr(s->filters.queue_name, '?') == NULL)
 			{
-				HASH_FIND_STR(server.queueTable, s->filters.queue_name, q);
+				q = findQueue(s->filters.queue_name);
 
 				if (q == NULL) {
 					sendError(c, JERS_ERR_NOQUEUE, NULL);
@@ -628,7 +629,7 @@ int command_mod_job(client *c, void *args) {
 		return 0;
 	}
 
-	HASH_FIND_INT(server.jobTable, &mj->jobid, j);
+	j = findJob(mj->jobid);
 
 	if (j == NULL || j->internal_state &JERS_JOB_FLAG_DELETED) {
 		sendError(c, JERS_ERR_NOJOB, NULL);
@@ -663,7 +664,7 @@ int command_mod_job(client *c, void *args) {
 	}
 
 	if (mj->queue) {
-		HASH_FIND_STR(server.queueTable, mj->queue, q);
+		q = findQueue(mj->queue);
 
 		if (q == NULL) {
 			sendError(c, JERS_ERR_NOQUEUE, NULL);
@@ -772,7 +773,7 @@ int command_del_job(client * c, void * args) {
 	jersJobDel * jd = args;
 	struct job * j = NULL;
 
-	HASH_FIND_INT(server.jobTable, &jd->jobid, j);
+	j = findJob(jd->jobid);
 
 	if (!j || j->internal_state &JERS_JOB_FLAG_DELETED) {
 		sendError(c, JERS_ERR_NOJOB, NULL);
@@ -792,7 +793,7 @@ int command_sig_job(client * c, void * args) {
 	resp_t r;
 	int rc = 0;
 
-	HASH_FIND_INT(server.jobTable, &js->jobid, j);
+	j = findJob(js->jobid);
 
 	if (!j || j->internal_state &JERS_JOB_FLAG_DELETED) {
 		sendError(c, JERS_ERR_NOJOB, NULL);
@@ -838,7 +839,7 @@ int command_set_tag(client * c, void * args) {
 	struct job * j = NULL;
 	int i;
 
-	HASH_FIND_INT(server.jobTable, &ts->jobid, j);
+	j = findJob(ts->jobid);
 
 	if (j == NULL) {
 		sendError(c, JERS_ERR_NOJOB, NULL);
@@ -879,7 +880,7 @@ int command_del_tag(client * c, void * args) {
 	struct job * j = NULL;
 	int i;
 
-	HASH_FIND_INT(server.jobTable, &td->jobid, j);
+	j = findJob(td->jobid);
 
 	if (j == NULL) {
 		sendError(c, JERS_ERR_NOJOB, NULL);

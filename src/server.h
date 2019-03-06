@@ -319,12 +319,15 @@ void error_die(char *, ...);
 jobid_t getNextJobID(void);
 int addJob(struct job * j, int state, int dirty);
 void freeJob(struct job * j);
+struct job * findJob(jobid_t jobid);
 
 int addRes(struct resource * r, int dirty);
 void freeRes(struct resource *r);
+struct resource * findResource(char * name);
 
 int addQueue(struct queue * q, int def, int dirty);
 void freeQueue(struct queue * q);
+struct queue * findQueue(char * name);
 
 void addClient(client * c);
 void removeClient(client * c);

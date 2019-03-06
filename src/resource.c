@@ -26,13 +26,14 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
 #include <jers.h>
 #include <server.h>
 
 int addRes(struct resource * r, int dirty) {
 	struct resource * check_res = NULL;
 
-	HASH_FIND_STR(server.resTable, r->name, check_res);
+	check_res = findResource(r->name);
 
 	if (check_res) {
 		print_msg(JERS_LOG_WARNING, "Trying to add duplicate resource %s", r->name);
@@ -52,4 +53,10 @@ int addRes(struct resource * r, int dirty) {
 void freeRes(struct resource * r) {
 	free(r->name);
 	free(r);
+}
+
+struct resource * findResource(char * name) {
+	struct resource * r = NULL;
+	HASH_FIND_STR(server.resTable, name, r);
+	return r;
 }

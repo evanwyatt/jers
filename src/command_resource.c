@@ -114,7 +114,7 @@ int command_add_resource(client *c, void *args) {
 		return 1;
 	}
 
-	HASH_FIND_STR(server.resTable, ra->name, r);
+	r = findResource(ra->name);
 
 	if (r != NULL) {
 		if (server.recovery.in_progress)
@@ -165,7 +165,7 @@ int command_get_resource(client *c, void *args) {
 
 		respCloseArray(&response);
 	} else {
-		HASH_FIND_STR(server.resTable, rf->filters.name, r);
+		r = findResource(rf->filters.name);
 
 		if (r) {
 			respAddMap(&response);
@@ -188,7 +188,7 @@ int command_mod_resource(client *c, void *args) {
 		return 1;
 	}
 
-	HASH_FIND_STR(server.resTable, rm->name , r);
+	r = findResource(rm->name);
 
 	if (r == NULL) {
 		sendError(c, JERS_ERR_NORES, NULL);

@@ -116,7 +116,7 @@ int addQueue(struct queue * q, int def, int dirty) {
 	lowercasestring(q->name);
 
 	/* Check if it already exists */
-	HASH_FIND_STR(server.queueTable, q->name, check);
+	check = findQueue(q->name);
 
 	if (check != NULL) {
 		print_msg(JERS_LOG_CRITICAL, "Queue %s already exists\n", q->name);
@@ -151,4 +151,10 @@ void freeQueue(struct queue * q) {
 void removeQueue(struct queue * q) {
 	HASH_DEL(server.queueTable, q);
 	freeQueue(q);
+}
+
+struct queue * findQueue(char * name) {
+	struct queue * q = NULL;
+	HASH_FIND_STR(server.queueTable, name, q);
+	return q;
 }

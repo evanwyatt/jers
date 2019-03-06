@@ -26,11 +26,12 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
 #include <server.h>
 #include <limits.h>
 
 /* Return the next free jobid.
- *  * 0 is returned if no ids are avaiable */
+ * 0 is returned if no ids are available */
 
 jobid_t getNextJobID(void) {
 	static jobid_t start_jobid = 0;
@@ -42,7 +43,8 @@ jobid_t getNextJobID(void) {
 	for (i = 0; i < server.highest_jobid; i++) {
 		if (++id >= server.highest_jobid)
 			id = 1;
-		HASH_FIND_INT(server.jobTable, &id, tmp_job);
+
+		tmp_job = findJob(id);
 
 		if (!tmp_job) {
 			start_jobid = id;
@@ -94,6 +96,12 @@ void freeJob (struct job * j) {
 	free(j);
 }
 
+/* Locate the requested jobid from the job hash table */
+struct job * findJob(jobid_t jobid) {
+	struct job * j = NULL;
+	HASH_FIND_INT(server.jobTable, &jobid, j);
+	return j;
+}
 
 /* Cleanup jobs that are marked as deleted, returning the number of jobs cleaned up
  * - Only cleanup jobs until the max_clean threshold is reached. */
@@ -129,7 +137,7 @@ int addJob(struct job * j, int state, int dirty) {
 	struct job * check_job = NULL;
 
 	/* Does a job with this ID already exist? */
-	HASH_FIND_INT(server.jobTable, &j->jobid, check_job);
+	check_job = findJob(j->jobid);
 
 	if (check_job) {
 		print_msg(JERS_LOG_WARNING, "Trying to add a duplicate jobid: %d", j->jobid);

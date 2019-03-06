@@ -878,7 +878,7 @@ int stateLoadJob(char * fileName) {
 		if (strcmp(key, "JOBNAME") == 0) {
 			j->jobname = strdup(value);
 		} else if (strcmp(key, "QUEUENAME") == 0) {
-			HASH_FIND_STR(server.queueTable, value, j->queue);
+			j->queue = findQueue(value);
 
 			if (!j->queue) {
 				error_die("Error loading jobid %d - Queue '%s' does not exist", jobid, value);
