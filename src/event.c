@@ -111,11 +111,8 @@ void flushEvent(void) {
 	int64_t start = getTimeMS();
 	int64_t end;
 
-	if (!server.flush.dirty)
-		return;
+	flush_journal(0);
 
-	fdatasync(server.state_fd);
-	server.flush.dirty = 0;
 	end = getTimeMS();
 	print_msg(JERS_LOG_DEBUG, "state sync event took: %ldms\n", end - start);
 }
@@ -129,7 +126,7 @@ void cleanupJobsEvent(void) {
 }
 
 void backgroundSaveEvent(void) {
-	stateSaveToDisk();
+	stateSaveToDisk(0);
 }
 
 void initEvents(void) {

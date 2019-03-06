@@ -67,7 +67,7 @@
 #define DEFAULT_CONFIG_SOCKETPATH "/var/run/jers/jers.socket"
 #define DEFAULT_CONFIG_AGENTSOCKETPATH "/var/run/jers/agent.socket"
 #define DEFAULT_CONFIG_FLUSHDEFER 1
-#define DEFAULT_CONFIG_FLUSHDEFERMS 1000
+#define DEFAULT_CONFIG_FLUSHDEFERMS 5000
 
 typedef struct _client {
 	struct connectionType connection;
@@ -293,6 +293,7 @@ struct jersServer {
 		char defer;		// 0 == flush after every write. 1 == flush every defer_ms milliseconds
 		int defer_ms;	// milliseconds between state file flushes
 		int dirty;
+		time_t lastflush;
 	} flush;
 
 	struct journal {
@@ -343,7 +344,8 @@ int stateLoadJobs(void);
 int stateLoadQueues(void);
 int stateLoadResources(void);
 void stateReplayJournal(void);
-void stateSaveToDisk(void);
+void stateSaveToDisk(int block);
+void flush_journal(int force);
 
 void checkJobs(void);
 void releaseDeferred(void);

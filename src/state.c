@@ -191,9 +191,11 @@ void convertJournalEntry(msg_t * msg, buff_t * message_buffer,char * entry) {
 	off_t msg_offset = 0;
 
 	memset(msg, 0, sizeof(msg_t));
-	
+
 	message_buffer->used = 0;
-	buffResize(message_buffer, strlen(entry));
+
+	if (buffResize(message_buffer, strlen(entry)) != 0)
+		error_die("Failed to allocate memory for journal buffer");
 
 	field_count = sscanf(entry, " %ld.%d\t%d\t%64s\t%d\t%ld\t%n", &timestamp_s, &timestamp_ms, &uid, command, &jobid, &revision, &msg_offset);
 
@@ -220,7 +222,7 @@ void convertJournalEntry(msg_t * msg, buff_t * message_buffer,char * entry) {
 
 void replayTransaction(char * line) {
 	msg_t msg;
-	buff_t buff = {0};
+	buff_t buff;
 
 	/* Remove the newline */
 	line[strcspn(line, "\n")] = 0;
@@ -229,7 +231,7 @@ void replayTransaction(char * line) {
 	if (line[0] == '$')
 		return;
 
-	if (buffResize(&buff, 0) != 0)
+	if (buffNew(&buff, 0) != 0)
 		error_die("Failed to resize buffer to replayTransaction");
 
 	/* Load the fields into a msg_t and call the appropriate command handler */
@@ -290,7 +292,7 @@ void stateReplayJournal(void) {
 	print_msg(JERS_LOG_INFO, "Recovering state from journal files");
 
 	int rc = 0;
-	int64_t i, j;
+	int64_t i;
 	glob_t journalGlob;
 	char pattern[PATH_MAX];
 	off_t offset = -1;
@@ -563,7 +565,7 @@ void stateSaveToDiskChild(struct job ** jobs, struct queue ** queues, struct res
  * - This is done by creating a list of the dirty objects, then
  *   forking off so the writes are done in the background */
 
-void stateSaveToDisk(void) {
+void stateSaveToDisk(int block) {
 	static uint64_t startTime = 0;
 	uint64_t now = getTimeMS();
 
@@ -576,7 +578,7 @@ void stateSaveToDisk(void) {
 		int rc = 0;
 		pid_t retPid = 0;
 
-		if ((retPid = waitpid(server.flush.pid, &rc, WNOHANG)) > 0) {
+		if ((retPid = waitpid(server.flush.pid, &rc, block? 0 : WNOHANG)) > 0) {
 			int status = 0, signo = 0;
 
 			if (WIFEXITED(rc)) {
@@ -719,7 +721,7 @@ void stateSaveToDisk(void) {
 		free(dirtyResources);
 
 		/* Now we need to mark the journal that we commited all those transactions to disk */
-		if(pwrite(server.state_fd, "*", 1, server.journal.last_commit) != 1) {
+		if (pwrite(server.state_fd, "*", 1, server.journal.last_commit) != 1) {
 			/* This isn't too catastrophic, we might just end up replaying extra transactions if we crash */
 			print_msg(JERS_LOG_WARNING, "Background save: Failed to write marker to journal: %s\n", strerror(errno));
 		}
@@ -732,7 +734,13 @@ void stateSaveToDisk(void) {
 		_exit(0);
 	}
 
-	/* Parent process - All done for now. We'll check on the child later */
+	/* Parent process - All done for now. We'll check on the child later if we aren't told to block */
+
+	if (block) {
+		print_msg(JERS_LOG_INFO, "Waiting for background save to complete (blocking)");
+		stateSaveToDisk(1);
+	}
+
 	return;
 }
 
@@ -1330,4 +1338,13 @@ void changeJobState(struct job * j, int new_state, int dirty) {
 	/* Mark it as dirty */
 	if (dirty)
 		setJobDirty(j);
+}
+
+void flush_journal(int force) {
+	if (!force && !server.flush.dirty)
+		return;
+
+	fdatasync(server.state_fd);
+	server.flush.lastflush = time(NULL);
+	server.flush.dirty = 0;
 }
