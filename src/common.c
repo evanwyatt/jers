@@ -131,9 +131,8 @@ void unescapeString(char * string) {
 }
 
 /* Return the time, in milliseconds
- * Note: This is not the real time, and is mainly used
- *       for timed events, where only the duration between
- *       calls is important.  */
+ * Note: This is NOT the real time! It's mainly used for timed events,
+ *       where only the duration between calls is important. */
 
 int64_t getTimeMS(void) {
 	struct timespec tp;
@@ -514,6 +513,7 @@ void handlerSigsegv(int signum, siginfo_t *info, void *context) {
 
 	if (signum == SIGSEGV || signum == SIGBUS || signum == SIGILL || signum == SIGFPE || signum == SIGTRAP)
 		fprintf(stderr, "Crash occured accessing memory at address %p\n", info->si_addr);
+		//TODO: Show registers (EIP, etc...)
 
 	if (signum == SIGSEGV) {
 		fprintf(stderr, "SIGSEGV - %s\n", info->si_code == SEGV_MAPERR ? "address not mapped to object" : info->si_code == SEGV_ACCERR ?
@@ -525,15 +525,14 @@ void handlerSigsegv(int signum, siginfo_t *info, void *context) {
 	backtrace_symbols_fd(btrace, btrace_size, STDERR_FILENO);
 	fprintf(stderr, "====================================================================\n");
 
-	/* Reinstate the default handler and send ourselves
-	 * the same signal so we can produce a core dump */
+	/* Reinstate the default handler and send ourselves the same signal so we can produce a core dump */
 	struct sigaction sigact;
     sigemptyset(&sigact.sa_mask);
-    sigact.sa_flags = SA_NODEFER|SA_RESETHAND;
-    sigact.sa_handler = SIG_DFL;
+	sigact.sa_flags = SA_NODEFER|SA_RESETHAND;
+	sigact.sa_handler = SIG_DFL;
 	sigaction(signum, &sigact, NULL);
 
-	kill(getpid(), signum);
+	raise(signum);
 }
 
 void clearCacheHandler(int signum) {
