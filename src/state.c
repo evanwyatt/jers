@@ -393,7 +393,7 @@ int stateSaveJob(struct job * j) {
 	fprintf(f, "QUEUENAME %s\n", escapeString(j->queue->name, NULL));
 	fprintf(f, "SUBMITTIME %ld\n", j->submit_time);
 
-	fprintf(f, "SUBMITTER %ld\n", j->submitter);
+	fprintf(f, "SUBMITTER %d\n", j->submitter);
 
 	fprintf(f, "ARGC %d\n", j->argc);
 
@@ -463,6 +463,21 @@ int stateSaveJob(struct job * j) {
 		fprintf(f,"SIGNAL %d\n", j->signal);
 
 	fprintf(f, "REVISION %ld\n", j->revision);
+
+	/* Usage */
+	if (j->finish_time) {
+		fprintf(f, "USAGE_UTIME_SEC %ld\n", j->usage.ru_utime.tv_sec);
+		fprintf(f, "USAGE_UTIME_USEC %ld\n", j->usage.ru_utime.tv_usec);
+		fprintf(f, "USAGE_STIME_SEC %ld\n", j->usage.ru_stime.tv_sec);
+		fprintf(f, "USAGE_STIME_USEC %ld\n", j->usage.ru_stime.tv_usec);
+		fprintf(f, "USAGE_MAXRSS %ld\n", j->usage.ru_maxrss);
+		fprintf(f, "USAGE_MINFLT %ld\n", j->usage.ru_minflt);
+		fprintf(f, "USAGE_MAJFLT %ld\n", j->usage.ru_majflt);
+		fprintf(f, "USAGE_INBLOCK %ld\n", j->usage.ru_inblock);
+		fprintf(f, "USAGE_OUBLOCK %ld\n", j->usage.ru_oublock);
+		fprintf(f, "USAGE_NVCSW %ld\n", j->usage.ru_nvcsw);
+		fprintf(f, "USAGE_NIVCSW %ld\n", j->usage.ru_nivcsw);
+	}
 
 	fflush(f);
 	fsync(fileno(f));
@@ -961,6 +976,28 @@ int stateLoadJob(char * fileName) {
 			j->signal = atoi(value);
 		} else if (strcmp(key, "REVISION") == 0) {
 			j->revision = atol(value);
+		} else if (strcmp(key, "USAGE_UTIME_SEC") == 0) {
+			j->usage.ru_utime.tv_sec = atol(value);
+		} else if (strcmp(key, "USAGE_UTIME_USEC") == 0) {
+			j->usage.ru_utime.tv_usec = atol(value);
+		} else if (strcmp(key, "USAGE_STIME_SEC") == 0) {
+			j->usage.ru_stime.tv_sec = atol(value);
+		} else if (strcmp(key, "USAGE_STIME_USEC") == 0) {
+			j->usage.ru_stime.tv_usec = atol(value);
+		} else if (strcmp(key, "USAGE_MAXRSS") == 0) {
+			j->usage.ru_maxrss = atol(value);
+		} else if (strcmp(key, "USAGE_MINFLT") == 0) {
+			j->usage.ru_minflt = atol(value);
+		} else if (strcmp(key, "USAGE_MAJFLT") == 0) {
+			j->usage.ru_majflt = atol(value);
+		} else if (strcmp(key, "USAGE_INBLOCK") == 0) {
+			j->usage.ru_inblock = atol(value);
+		} else if (strcmp(key, "USAGE_OUBLOCK") == 0) {
+			j->usage.ru_oublock = atol(value);
+		} else if (strcmp(key, "USAGE_NVCSW") == 0) {
+			j->usage.ru_nvcsw = atol(value);
+		} else if (strcmp(key, "USAGE_NIVCSW") == 0) {
+			j->usage.ru_nivcsw = atol(value);
 		}
 	}
 

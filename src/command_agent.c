@@ -71,6 +71,7 @@ void command_agent_recon(agent * a, msg_t * msg) {
 		time_t finish_time = 0;
 		pid_t pid = 0;
 		int exitcode = 0;
+		struct rusage usage = {0};
 
 		for (int k = 0; k < msg->items[0].field_count; k++) {
 			switch(msg->items[i].fields[k].number) {
@@ -79,6 +80,18 @@ void command_agent_recon(agent * a, msg_t * msg) {
 				case FINISHTIME: finish_time = getNumberField(&msg->items[i].fields[k]); break;
 				case JOBPID: pid = getNumberField(&msg->items[i].fields[k]); break;
 				case EXITCODE: exitcode = getNumberField(&msg->items[i].fields[k]); break;
+
+				case USAGE_UTIME_SEC : usage.ru_utime.tv_sec = getNumberField(&msg->items[i].fields[k]); break;
+				case USAGE_UTIME_USEC: usage.ru_utime.tv_usec = getNumberField(&msg->items[i].fields[k]); break;
+				case USAGE_STIME_SEC : usage.ru_stime.tv_sec = getNumberField(&msg->items[i].fields[k]); break;
+				case USAGE_STIME_USEC: usage.ru_stime.tv_usec = getNumberField(&msg->items[i].fields[k]); break;
+				case USAGE_MAXRSS    : usage.ru_maxrss = getNumberField(&msg->items[i].fields[k]); break;
+				case USAGE_MINFLT    : usage.ru_minflt = getNumberField(&msg->items[i].fields[k]); break;
+				case USAGE_MAJFLT    : usage.ru_majflt = getNumberField(&msg->items[i].fields[k]); break;
+				case USAGE_INBLOCK   : usage.ru_inblock = getNumberField(&msg->items[i].fields[k]); break;
+				case USAGE_OUBLOCK   : usage.ru_oublock = getNumberField(&msg->items[i].fields[k]); break;
+				case USAGE_NVCSW     : usage.ru_nvcsw = getNumberField(&msg->items[i].fields[k]); break;
+				case USAGE_NIVCSW    : usage.ru_nivcsw = getNumberField(&msg->items[i].fields[k]); break;
 
 				default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", msg->items[i].fields[k].name); break;
 			}
@@ -174,12 +187,25 @@ void command_agent_jobcompleted(agent * a, msg_t * msg) {
 	time_t finish_time = 0;
 	int i;
 	struct job * j = NULL;
+	struct rusage usage = {0};
 
 	for (i = 0; i < msg->items[0].field_count; i++) {
 		switch(msg->items[0].fields[i].number) {
 			case JOBID : jobid = getNumberField(&msg->items[0].fields[i]); break;
 			case FINISHTIME: finish_time = getNumberField(&msg->items[0].fields[i]); break;
 			case EXITCODE: exitcode = getNumberField(&msg->items[0].fields[i]); break;
+
+			case USAGE_UTIME_SEC : usage.ru_utime.tv_sec = getNumberField(&msg->items[0].fields[i]); break;
+			case USAGE_UTIME_USEC: usage.ru_utime.tv_usec = getNumberField(&msg->items[0].fields[i]); break;
+			case USAGE_STIME_SEC : usage.ru_stime.tv_sec = getNumberField(&msg->items[0].fields[i]); break;
+			case USAGE_STIME_USEC: usage.ru_stime.tv_usec = getNumberField(&msg->items[0].fields[i]); break;
+			case USAGE_MAXRSS    : usage.ru_maxrss = getNumberField(&msg->items[0].fields[i]); break;
+			case USAGE_MINFLT    : usage.ru_minflt = getNumberField(&msg->items[0].fields[i]); break;
+			case USAGE_MAJFLT    : usage.ru_majflt = getNumberField(&msg->items[0].fields[i]); break;
+			case USAGE_INBLOCK   : usage.ru_inblock = getNumberField(&msg->items[0].fields[i]); break;
+			case USAGE_OUBLOCK   : usage.ru_oublock = getNumberField(&msg->items[0].fields[i]); break;
+			case USAGE_NVCSW     : usage.ru_nvcsw = getNumberField(&msg->items[0].fields[i]); break;
+			case USAGE_NIVCSW    : usage.ru_nivcsw = getNumberField(&msg->items[0].fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", msg->items[0].fields[i].name); break;
 		}
@@ -215,6 +241,8 @@ void command_agent_jobcompleted(agent * a, msg_t * msg) {
 
 	j->pid = -1;
 	j->finish_time = finish_time;
+
+	memcpy(&j->usage, &usage, sizeof(struct rusage));
 
 	changeJobState(j, j->exitcode ? JERS_JOB_EXITED : JERS_JOB_COMPLETED, 1);
 

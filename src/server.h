@@ -34,6 +34,7 @@
 #include <limits.h>
 #include <time.h>
 #include <signal.h>
+ #include <sys/resource.h>
 
 #include <uthash.h>
 
@@ -173,6 +174,8 @@ struct job {
 	pid_t pid;
 	int exitcode;
 	int signal;
+
+	struct rusage usage;
 
 	int32_t state;
 	int32_t internal_state;

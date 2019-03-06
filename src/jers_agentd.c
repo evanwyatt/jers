@@ -619,12 +619,18 @@ int send_completion(struct runningJob * j) {
 	addIntField(&r, FINISHTIME, j->job_completion.finish_time);
 
 	/* Usage info */
-	//TODO:
-	//respAddInt(r, , j->rusage.ru_utime.tv_sec);
-	//respAddInt(r, , j->rusage.ru_utime.tv_usec);
-	//respAddInt(r, , j->rusage.ru_stime.tv_sec);
-	//respAddInt(r, , j->rusage.ru_stime.tv_usec);
-	//respAddint(r, , j->rusage.ru_maxrss);
+	addIntField(&r, USAGE_UTIME_SEC,  j->job_completion.rusage.ru_utime.tv_sec);
+	addIntField(&r, USAGE_UTIME_USEC, j->job_completion.rusage.ru_utime.tv_usec);
+	addIntField(&r, USAGE_STIME_SEC,  j->job_completion.rusage.ru_stime.tv_sec);
+	addIntField(&r, USAGE_STIME_USEC, j->job_completion.rusage.ru_stime.tv_usec);
+	addIntField(&r, USAGE_MAXRSS,     j->job_completion.rusage.ru_maxrss);
+	addIntField(&r, USAGE_MINFLT,     j->job_completion.rusage.ru_minflt);
+	addIntField(&r, USAGE_MAJFLT,     j->job_completion.rusage.ru_majflt);
+	addIntField(&r, USAGE_INBLOCK,    j->job_completion.rusage.ru_inblock);
+	addIntField(&r, USAGE_OUBLOCK,    j->job_completion.rusage.ru_oublock);
+	addIntField(&r, USAGE_INBLOCK,    j->job_completion.rusage.ru_inblock);
+	addIntField(&r, USAGE_NVCSW,      j->job_completion.rusage.ru_nvcsw);
+	addIntField(&r, USAGE_NIVCSW,     j->job_completion.rusage.ru_nivcsw);
 
 	respCloseMap(&r);
 
