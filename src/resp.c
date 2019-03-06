@@ -247,7 +247,7 @@ int respNew(resp_t * r) {
 /* Return the completed buffer, and the length.
  * Free any memory we allocated as part of this processing */
 
-char *  respFinish(resp_t * r, size_t * len) {
+char * respFinish(resp_t * r, size_t * len) {
 	char * buffer = r->items[0].string;
 
 	if (len)
@@ -557,7 +557,7 @@ static void _respReadAdvance(resp_read_t * r) {
 /* Return the current type, or -1 on error */
 int respGetType(resp_read_t * r) {
 	if (!r->currentItem) {
-		return RESP_DONE;
+		return RESP_TYPE_NONE;
 	}
 
 	return r->currentItem->type;

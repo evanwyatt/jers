@@ -948,8 +948,6 @@ int jersGetStats(jersStats * s) {
 
 	initRequest(&r, "STATS", 1);
 
-	addIntField(&r, JOBID, 0); // Dummy field
-
 	if (sendRequest(&r))
 		return 1;
 

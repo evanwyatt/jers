@@ -105,7 +105,9 @@ enum resp_types {
 	RESP_TYPE_NULL,
 	RESP_TYPE_INT,
 	RESP_TYPE_ARRAY,
-	RESP_TYPE_MAP
+	RESP_TYPE_MAP,
+
+	RESP_TYPE_NONE = 100
 };
 
 int respNew(resp_t * r);

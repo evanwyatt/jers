@@ -251,16 +251,23 @@ static int load_fields(msg_t * msg) {
 		}
 	} else if (type == RESP_TYPE_MAP) {
 		item_count = 1;
+	} else if (type == RESP_TYPE_NONE) {
+		item_count = 0;
 	} else {
 		fprintf(stderr, "Unexpected type while loading request\n");
 		return -1;
 	}
 
 	msg->item_count = item_count;
+
+	if (msg->item_count == 0) {
+		msg->items = NULL;
+		return msg->item_count;
+	}
+
 	msg->items = malloc(sizeof(msg_item) * item_count);
 
 	for (item = 0; item < item_count; item++) {
-
 		if (respGetMap(&msg->reader, &map_count)) {
 			return -1;
 		}
