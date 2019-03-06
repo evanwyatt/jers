@@ -77,6 +77,7 @@ const char * jers_pend_reasons[] = {
 	"Queue stopped",
 	"Agent not connected",
 	"Waiting for agent to confirm start",
+	"Agent starting",
 
 	"Unknown reason"
 };

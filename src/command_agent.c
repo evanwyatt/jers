@@ -52,6 +52,78 @@ void command_agent_login(agent * a, msg_t * msg) {
 			q->agent = a;
 		}
 	}
+
+	/* Request a reconciliation from the agent */
+	resp_t recon;
+	initMessage(&recon, "RECON_REQ", 1);
+	sendAgentMessage(a, &recon);
+	print_msg(JERS_LOG_INFO, "Requested recon from %s\n", a->host);
+
+	a->recon = 1;
+}
+
+void command_agent_recon(agent * a, msg_t * msg) {
+	print_msg(JERS_LOG_INFO, "Got recon message from agent on host: %s", a->host);
+
+	for (int i = 0; i < msg->item_count; i++) {
+		jobid_t jobid = 0;
+		time_t start_time = 0;
+		time_t finish_time = 0;
+		pid_t pid = 0;
+		int exitcode = 0;
+
+		for (int k = 0; k < msg->items[0].field_count; k++) {
+			switch(msg->items[i].fields[k].number) {
+				case JOBID : jobid = getNumberField(&msg->items[i].fields[k]); break;
+				case STARTTIME: start_time = getNumberField(&msg->items[i].fields[k]); break;
+				case FINISHTIME: finish_time = getNumberField(&msg->items[i].fields[k]); break;
+				case JOBPID: pid = getNumberField(&msg->items[i].fields[k]); break;
+				case EXITCODE: exitcode = getNumberField(&msg->items[i].fields[k]); break;
+
+				default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", msg->items[i].fields[k].name); break;
+			}
+		}
+
+		print_msg(JERS_LOG_INFO, "Recon - JobID:%d StartTime:%d FinishTime:%d JobPID:%ld ExitCode:%d", jobid, start_time, finish_time, pid, exitcode);
+
+		/* Update the details of the job */
+		struct job * j = findJob(jobid);
+
+		/* There is a slim chance that the main daemon doesn't have the job in memory, while an agent does.
+		 * This can be caused if the transaction journal didn't get flushed to disk before the job
+		 * was sent to the agent, then the node the main daemon was on has crashed and 'lost' that job. Solutions would involve
+		 * ensuring the journal had been flushed prior to the job being started - TODO */
+
+		if (j == NULL)
+			error_die("Agent '%s' has sent recon for job %d, but we don't have it in memory.", a->host, jobid);
+
+		if (start_time) {
+			j->start_time = start_time;
+		}
+
+		if (finish_time) {
+			j->finish_time = finish_time;
+			j->exitcode = exitcode;
+			changeJobState(j, JERS_JOB_COMPLETED, 1);
+		}
+
+		if (pid) {
+			j->pid = pid;
+			changeJobState(j, JERS_JOB_RUNNING, 0);
+		}
+	}
+
+	/* Make sure this is committed to disk */
+	flush_journal(1);
+
+	/* Reply to the agent letting it know we've processed this message */
+	resp_t fin;
+	initMessage(&fin, "RECON_COMPLETE", 1);
+	sendAgentMessage(a, &fin);
+
+	a->recon = 0;
+
+	return;
 }
 
 void command_agent_jobstart(agent * a, msg_t * msg) {

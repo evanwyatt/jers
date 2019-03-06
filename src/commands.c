@@ -66,6 +66,7 @@ agent_command_t agent_commands[] = {
 	{"JOB_STARTED",   CMD_REPLAY, command_agent_jobstart},
 	{"JOB_COMPLETED", CMD_REPLAY, command_agent_jobcompleted},
 	{"AGENT_LOGIN",   0,          command_agent_login},
+	{"RECON_RESP",    0,          command_agent_recon},
 };
 
 command_t * sorted_commands = NULL;

@@ -54,6 +54,7 @@ typedef struct {
 void command_agent_login(agent * a, msg_t * msg);
 void command_agent_jobstart(agent * a, msg_t * msg);
 void command_agent_jobcompleted(agent * a, msg_t * msg);
+void command_agent_recon(agent * a, msg_t * msg);
 
 int command_stats(client *, void *);
 

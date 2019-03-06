@@ -91,6 +91,7 @@ typedef struct _agent {
 	msg_t msg;
 
 	char * host;
+	int recon;
 
 	/* Requests to send to this agent */
 	buff_t requests;

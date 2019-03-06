@@ -97,6 +97,7 @@ struct agent {
 	msg_t msg;
 
 	int daemon;
+	int in_recon;
 
 	int daemon_fd;
 	int event_fd;
@@ -560,7 +561,6 @@ void send_msg(resp_t * r) {
 	if (agent.responses_sent <= agent.responses.used)
 		add_epoll = 1;
 
-
 	respCloseArray(r);
 
 	buffer = respFinish(r, &length);
@@ -600,8 +600,11 @@ int send_start(struct runningJob * j) {
 int send_completion(struct runningJob * j) {
 	resp_t r;
 
+	close(j->socket);
+	free(j->temp_script);
+
 	/* Only send the completion if we are connected to the main daemon process */
-	if (agent.daemon_fd == -1) {
+	if (agent.daemon_fd == -1 || agent.in_recon) {
 		j->pid = -1;
 		return 0;
 	}
@@ -627,8 +630,6 @@ int send_completion(struct runningJob * j) {
 
 	send_msg(&r);
 
-	close(j->socket);
-	free(j->temp_script);
 	removeJob(j);
 	free(j);
 	return 0;
@@ -706,10 +707,13 @@ void check_children(void) {
 			if (status == -1 && (errno != EAGAIN && errno != EWOULDBLOCK))
 				fprintf(stderr, "Failed to read pid from job %d\n", j->jobID);
 
-			if (j->job_pid && j->kill) {
-				/* Send the saved signal to the job */
-				print_msg(JERS_LOG_DEBUG, "Sending delayed signal to job:%d siugnum:%d\n", j->jobID, j->kill);
+			/* Check if we've been asked to send a signal to a batch job.
+			 * We might have gotten this request before we knew the PID */
 
+			if (j->job_pid && j->kill) {
+				print_msg(JERS_LOG_DEBUG, "Sending delayed signal to job:%d signum:%d\n", j->jobID, j->kill);
+
+				/* Send the saved signal to the job */
 				if (kill(-j->job_pid, j->kill)) {
 					print_msg(JERS_LOG_WARNING, "Failed to signal JOBID:%d with SIGNUM:%d", j->jobID, j->kill);
 				}
@@ -746,7 +750,10 @@ void check_children(void) {
 		/* Remove its temporary script */
 		if (j->temp_script) {
 			if (unlink(j->temp_script) != 0)
-			print_msg(JERS_LOG_WARNING, "Failed to remove temporary script file for job:%d '%s': %s", j->jobID, j->temp_script, strerror(errno));
+				print_msg(JERS_LOG_WARNING, "Failed to remove temporary script file for job:%d '%s': %s", j->jobID, j->temp_script, strerror(errno));
+
+			free(j->temp_script);
+			j->temp_script = NULL;
 		}
 
 		/* If a job was started correctly, the child will always return 0
@@ -955,28 +962,76 @@ void signal_command(msg_t * m) {
 }
 
 void recon_command(msg_t * m) {
-	struct runningJob * j = NULL;
+	int32_t count = 0;
+	resp_t r;
+	struct runningJob * j = agent.jobs;
 
-	/* The master daemon is requesting a list of all the jobs we have in memory
-	 * We can remove completed jobs here */
+	/* The master daemon is requesting a list of all the jobs we have in memory.
+	 * We will remove the jobs in memory only when the master daemon confirms it's processed the recon message */
 
-	printf("=== Start Recon ===\n");
-	j = agent.jobs;
+	initMessage(&r, "RECON_RESP", 1);
+	respAddArray(&r);
+
+	print_msg(JERS_LOG_INFO, "=== Start Recon ===\n");
 
 	while (j) {
-		printf("JobID: %d PID:%d ExitCode: %d\n", j->jobID, j->pid, j->job_completion.exitcode);
+		print_msg(JERS_LOG_INFO, "JobID: %d PID:%d ExitCode:%d StartTime:%d FinishTime:%d\n", j->jobID, j->pid, j->job_completion.exitcode, j->start_time, j->job_completion.finish_time);
 
+		/* Add job to recon message request */
+		respAddMap(&r);
+		addIntField(&r, JOBID, j->jobID);
+		addIntField(&r, STARTTIME, j->start_time);
+
+		switch (j->pid) {
+			case -1:
+				/* Job complete */
+				addIntField(&r, EXITCODE, j->job_completion.exitcode);
+				addIntField(&r, FINISHTIME, j->job_completion.finish_time);
+				//TODO: Add usage info
+				break;
+
+			case 0:
+				/* Just finished, no completion info available yet. */
+				break;
+
+			default:
+				/* Running */
+				addIntField(&r, JOBPID, j->pid);
+				break;
+		}
+
+		respCloseMap(&r);
+
+		count++;
+		j = j->next;
+	}
+
+	respCloseArray(&r);
+
+	send_msg(&r);
+
+	agent.in_recon = 1;
+
+	print_msg(JERS_LOG_INFO, "=== End Recon %d jobs ===\n", count);
+}
+
+/* Master daemon has acknowleged it has completed the recon 
+ * We can now cleanup all the jobs that have completed. */
+
+void recon_complete(msg_t * m) {
+	struct runningJob * j = agent.jobs;
+
+	while (j) {
 		if (j->pid == -1) {
 			struct runningJob * next = removeJob(j);
 			free(j);
 			j = next;
-		}
-		else {
+		} else {
 			j = j->next;
 		}
 	}
 
-	printf("=== End Recon ===\n");
+	agent.in_recon = 0;
 }
 
 /* Process a command */
@@ -988,8 +1043,10 @@ void process_message(msg_t * m) {
 		start_command(m);
 	} else if (strcmp(m->command, "SIG_JOB") == 0) {
 		signal_command(m);
-	} else if (strcmp(m->command, "RECON") == 0) {
+	} else if (strcmp(m->command, "RECON_REQ") == 0) {
 		recon_command(m);
+	} else if (strcmp(m->command, "RECON_COMPLETE") == 0) {
+		recon_complete(m);
 	} else {
 		print_msg(JERS_LOG_WARNING, "Got an unexpected command message '%s'", m->command);
 	}

@@ -237,6 +237,11 @@ void checkJobs(void) {
 			continue;
 		}
 
+		if (j->queue->agent->recon) {
+			j->pend_reason = JERS_PEND_RECON;
+			continue;
+		}
+
 		/* We can start this job! */
 
 		/* Increase all the needed resources */
