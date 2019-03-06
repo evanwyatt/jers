@@ -354,6 +354,7 @@ int deserialize_jersJob(msg_item * item, jersJob *j) {
 			case STATE     : j->state = getNumberField(&item->fields[i]); break;
 			case NICE      : j->nice = getNumberField(&item->fields[i]); break;
 			case UID       : j->uid = getNumberField(&item->fields[i]); break;
+			case SUBMITTER : j->submitter = getNumberField(&item->fields[i]); break;
 			case SHELL     : j->shell = getStringField(&item->fields[i]); break;
 			case PRECMD    : j->pre_command = getStringField(&item->fields[i]); break;
 			case POSTCMD   : j->post_command = getStringField(&item->fields[i]); break;
@@ -410,6 +411,9 @@ int jersGetJob(jobid_t jobid, jersJobFilter * filter, jersJobInfo * job_info) {
 
 			if (filter->filter_fields & JERS_FILTER_UID)
 				addIntField(&r, UID, filter->filters.uid);
+
+			if (filter->filter_fields & JERS_FILTER_SUBMITTER)
+				addIntField(&r, SUBMITTER, filter->filters.submitter);
 		}
 
 		if (filter->return_fields)

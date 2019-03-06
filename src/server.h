@@ -162,8 +162,11 @@ struct job {
 	int env_count;
 	char ** envs;
 
-	/* User to run job as*/
+	/* User to run job as */
 	uid_t uid;
+
+	/* User who submitted the job */
+	uid_t submitter;
 
 	int nice;
 

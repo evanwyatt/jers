@@ -270,6 +270,9 @@ void serialize_jersJob(resp_t * r, struct job * j, int fields) {
 	if (fields == 0 || fields & JERS_RET_UID)
 		addIntField(r, UID, j->uid);
 
+	if (fields == 0 || fields & JERS_RET_SUBMITTER)
+		addIntField(r, SUBMITTER,j->submitter);
+
 	if (fields == 0 || fields & JERS_RET_PRIORITY)
 		addIntField(r, PRIORITY, j->priority);
 
@@ -454,6 +457,7 @@ int command_add_job(client * c, void * args) {
 	j->env_count = s->env_count;
 	j->envs = s->envs;
 	j->uid = s->uid;
+	j->submitter = c ? c->uid : server.recovery.uid;
 	j->defer_time = s->defer_time;
 	j->priority = s->priority;
 	j->tag_count = s->tag_count;
