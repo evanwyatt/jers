@@ -154,6 +154,10 @@ int main (int argc, char * argv[]) {
 	setup_handlers(shutdownHandler);
 	loadConfig(server.config_file);
 
+#ifdef INIT_SETPROCTITLE_REPLACEMENT
+    spt_init(argc, argv);
+#endif
+
 	if (server.daemon)
 		setupAsDaemon();
 

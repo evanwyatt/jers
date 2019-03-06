@@ -541,6 +541,8 @@ int stateSaveResource(struct resource * r) {
 void stateSaveToDiskChild(struct job ** jobs, struct queue ** queues, struct resource ** resources) {
 	int64_t i;
 
+	setproctitle("jersd_state_save");
+
 	print_msg(JERS_LOG_DEBUG, "Background save jobs:%p queues:%p resources:%p", jobs, queues, resources);
 
 	/* Save the queues and resources first, to avoid having to handle

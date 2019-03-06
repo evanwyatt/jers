@@ -34,6 +34,13 @@
 
 #include <uthash.h>
 
+#ifdef __linux
+#define USE_SETPROCTITLE
+#define INIT_SETPROCTITLE_REPLACEMENT
+void spt_init(int argc, char *argv[]);
+void setproctitle(const char *fmt, ...);
+#endif
+
 #define PERM_READ   0x01
 #define PERM_WRITE  0x02
 #define PERM_SETUID 0x04
@@ -96,5 +103,4 @@ struct user * lookup_user(uid_t uid, int load_env);
 void freeUserCache(void);
 
 void setup_handlers(void(*shutdownHandler)(int));
-
 #endif

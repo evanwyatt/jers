@@ -359,11 +359,7 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 		}
 	}
 
-	char new_proc_name[16];
-	snprintf(new_proc_name, sizeof(new_proc_name), "jers_%d", j->jobid);
-
-	if (prctl(PR_SET_NAME, new_proc_name, NULL, NULL, NULL) != 0)
-		dprintf(stderr_fd, "Warning: Failed to set process name for new job %d: %s\n", j->jobid, strerror(errno));
+	setproctitle("jers_agentd[%d]", j->jobid);
 
 	/* Fork & exec the job */
 	jobPid = fork();
@@ -1069,6 +1065,10 @@ int main (int argc, char * argv[]) {
 	parseOpts(argc, argv);
 
 	setup_handlers(shutdownHandler);
+
+#ifdef INIT_SETPROCTITLE_REPLACEMENT
+    spt_init(argc, argv);
+#endif
 
 	if (agent.daemon)
 		setLogfileName(server_log);
