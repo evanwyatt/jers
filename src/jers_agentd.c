@@ -51,6 +51,7 @@
 #include "resp.h"
 #include "buffer.h"
 #include "fields.h"
+#include "cmd_defs.h"
 
 #define MAX_EVENTS 1024
 #define INITIAL_SIZE 0x1000
@@ -584,7 +585,7 @@ int send_start(struct runningJob * j) {
 	resp_t r;
 	print_msg(JERS_LOG_INFO, "Job started: JOBID:%d PID:%d", j->jobID, j->pid);
 
-	initMessage(&r, "JOB_STARTED", 1);
+	initMessage(&r, AGENT_JOB_STARTED, 1);
 
 	respAddMap(&r);
 	addIntField(&r, JOBID, j->jobID);
@@ -609,7 +610,7 @@ int send_completion(struct runningJob * j) {
 		return 0;
 	}
 
-	initMessage(&r, "JOB_COMPLETED", 1);
+	initMessage(&r, AGENT_JOB_COMPLETED, 1);
 
 	print_msg(JERS_LOG_INFO, "Job complete: JOBID:%d PID:%d RC:%08x\n", j->jobID, j->pid, j->job_completion.exitcode);
 
@@ -650,7 +651,7 @@ int send_login(void) {
 	gethostname(host, sizeof(host) - 1);
 	host[sizeof(host) - 1] = '\0';
 
-	initMessage(&r, "AGENT_LOGIN", 1);
+	initMessage(&r, AGENT_LOGIN, 1);
 
 	respAddMap(&r);
 	addStringField(&r, NODE, host);
@@ -975,7 +976,7 @@ void recon_command(msg_t * m) {
 	/* The master daemon is requesting a list of all the jobs we have in memory.
 	 * We will remove the jobs in memory only when the master daemon confirms it's processed the recon message */
 
-	initMessage(&r, "RECON_RESP", 1);
+	initMessage(&r, AGENT_RECON_RESP, 1);
 	respAddArray(&r);
 
 	print_msg(JERS_LOG_INFO, "=== Start Recon ===\n");
@@ -1047,7 +1048,7 @@ void process_message(msg_t * m) {
 
 	if (strcmp(m->command, "START_JOB") == 0) {
 		start_command(m);
-	} else if (strcmp(m->command, "SIG_JOB") == 0) {
+	} else if (strcmp(m->command, CMD_SIG_JOB) == 0) {
 		signal_command(m);
 	} else if (strcmp(m->command, "RECON_REQ") == 0) {
 		recon_command(m);

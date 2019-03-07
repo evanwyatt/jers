@@ -42,6 +42,7 @@
 #include <resp.h>
 #include <fields.h>
 #include <buffer.h>
+#include <commands.h>
 
 #define DEFAULT_CLIENT_TIMEOUT 60 // seconds
 
@@ -388,7 +389,7 @@ int jersGetJob(jobid_t jobid, jersJobFilter * filter, jersJobInfo * job_info) {
 
 	resp_t r;
 
-	initRequest(&r, "GET_JOB", 1);
+	initRequest(&r, CMD_GET_JOB, 1);
 
 	if (jobid) {
 		addIntField(&r, JOBID, jobid);
@@ -449,7 +450,7 @@ int jersDelJob(jobid_t jobid) {
 
 	resp_t r;
 
-	initRequest(&r, "DEL_JOB", 1);
+	initRequest(&r, CMD_DEL_JOB, 1);
 
 	addIntField(&r, JOBID, jobid);
 
@@ -498,7 +499,7 @@ jobid_t jersAddJob(jersJobAdd * j) {
 	}
 
 	resp_t r;
-	initRequest(&r, "ADD_JOB", 1);
+	initRequest(&r, CMD_ADD_JOB, 1);
 
 	addStringField(&r, JOBNAME, j->name);
 	addStringArrayField(&r, ARGS, j->argc, j->argv);
@@ -593,7 +594,7 @@ int jersModJob(jersJobMod *j) {
 
 	resp_t r;
 
-	initRequest(&r, "MOD_JOB", 1);
+	initRequest(&r, CMD_MOD_JOB, 1);
 
 	addIntField(&r, JOBID, j->jobid);
 
@@ -657,7 +658,7 @@ int jersSignalJob(jobid_t id, int signum) {
 	/* Serialise the request */
 	resp_t r;
 
-	initRequest(&r, "SIG_JOB", 1);
+	initRequest(&r, CMD_SIG_JOB, 1);
 
 	addIntField(&r, JOBID, id);
 	addIntField(&r, SIGNAL, signum);
@@ -706,7 +707,7 @@ int jersGetQueue(char * name, jersQueueFilter * filter, jersQueueInfo * info) {
 
 	resp_t r;
 
-	initRequest(&r, "GET_QUEUE", 1);
+	initRequest(&r, CMD_GET_QUEUE, 1);
 
 	if (name)
 		addStringField(&r, QUEUENAME, name);
@@ -766,7 +767,7 @@ int jersAddQueue(jersQueueAdd *q) {
 
 	resp_t r;
 
-	initRequest(&r, "ADD_QUEUE", 1);
+	initRequest(&r, CMD_ADD_QUEUE, 1);
 
 	addStringField(&r, QUEUENAME, q->name);
 	addStringField(&r, NODE, q->node);
@@ -813,7 +814,7 @@ int jersModQueue(jersQueueMod *q) {
 
 	resp_t r;
 
-	initRequest(&r, "MOD_QUEUE", 1);
+	initRequest(&r, CMD_MOD_QUEUE, 1);
 
 	addStringField(&r, QUEUENAME, q->name);
 
@@ -852,7 +853,7 @@ int jersDelQueue(char *name) {
 
 	resp_t r;
 
-	initRequest(&r, "DEL_QUEUE", 1);
+	initRequest(&r, CMD_DEL_QUEUE, 1);
 
 	addStringField(&r, QUEUENAME, name);
 
@@ -878,7 +879,7 @@ int jersAddResource(char *name, int count) {
 
 	resp_t r;
 	
-	initRequest(&r, "ADD_RESOURCE", 1);
+	initRequest(&r, CMD_ADD_QUEUE, 1);
 
 	addStringField(&r, RESNAME, name);
 
@@ -904,7 +905,7 @@ int jersGetResource(char * name, jersResourceFilter *filter, jersResourceInfo *i
 
 	resp_t r;
 
-	initRequest(&r, "GET_RESOURCE", 1);
+	initRequest(&r, CMD_GET_QUEUE, 1);
 
 	if (name)
 		addStringField(&r, RESNAME, name);
@@ -942,7 +943,7 @@ int jersDelResource(char *name) {
 
 	resp_t r;
 
-	initRequest(&r, "DEL_RESOURCE", 1);
+	initRequest(&r, CMD_DEL_QUEUE, 1);
 
 	addStringField(&r, RESNAME, name);
 
@@ -978,7 +979,7 @@ int jersGetStats(jersStats * s) {
 
 	resp_t r;
 
-	initRequest(&r, "STATS", 1);
+	initRequest(&r, CMD_STATS, 1);
 
 	if (sendRequest(&r))
 		return 1;
@@ -1021,7 +1022,7 @@ int jersSetTag(jobid_t id, char * key, char * value) {
 
 	resp_t r;
 
-	initRequest(&r, "SET_TAG", 1);
+	initRequest(&r, CMD_SET_TAG, 1);
 
 	addIntField(&r, JOBID, id);
 	addStringField(&r, TAG_KEY, key);
@@ -1046,7 +1047,7 @@ int jersDelTag(jobid_t id, char * key) {
 
 	resp_t r;
 
-	initRequest(&r, "DEL_TAG", 1);
+	initRequest(&r, CMD_DEL_TAG, 1);
 
 	addIntField(&r, JOBID, id);
 	addStringField(&r, TAG_KEY, key);

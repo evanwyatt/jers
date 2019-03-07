@@ -48,7 +48,7 @@ void setproctitle(const char *fmt, ...);
 
 #define PERM_NOTUSED 0x8000
 
-#define CMD_REPLAY 0x01
+#define CMDFLG_REPLAY 0x01
 
 /* Exit code flags to indicate issues between agent and daemon */
 #define JERS_EXIT_FAIL (1<<24)   // Job failed to start

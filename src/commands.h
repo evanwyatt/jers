@@ -28,6 +28,7 @@
  */
 
 #include "server.h"
+#include "cmd_defs.h"
 
 int sendClientReturnCode(client * c, const char * ret);
 int sendClientMessage(client * c, resp_t *r);

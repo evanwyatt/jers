@@ -826,7 +826,7 @@ int command_sig_job(client * c, void * args) {
 
 	/* Send the requested signal to the job (via the agent) */
 	resp_t sig_message;
-	initMessage(&sig_message, "SIG_JOB", 1);
+	initMessage(&sig_message, CMD_SIG_JOB, 1);
 
 	respAddMap(&sig_message);
 	addIntField(&sig_message, JOBID, js->jobid);
