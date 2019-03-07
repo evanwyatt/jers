@@ -34,103 +34,17 @@
 #include <server.h>
 #include <jers.h>
 
-int validateQueueName(char * name) {
-	int i;
-	int len;
-
-	if (!name) {
-		fprintf(stderr, "Queuename: Not passed.\n");
-		return 1;
-	}
-
-	len = strlen(name);
-
-	/* All characters must be printable */
-	for (i = 0; i < len; i++) {
-		if (!isprint(name[i])) {
-			fprintf(stderr, "QueueName: %s contians an unprintable character\n", name);
-			return 1;
-		}
-	}
-
-	/* Invalid Characters */
-	char * ptr = strpbrk(name, JERS_QUEUE_INVALID_CHARS);
-
-	if (ptr) {
-		fprintf(stderr, "QueueName: %s contains invalid characters for a queuename. Invalid='%s'\n", name, JERS_QUEUE_INVALID_CHARS);
-		return 1;
-	}
-
-	return 0;
-}
-
-int validateQueuePriority (int priority) {
-	if (priority < 0 || priority > JERS_QUEUE_MAX_PRIORITY) {
-		fprintf(stderr, "Queue priority bad: %d\n", priority);
-		return 1;
-	}
-
-	return 0;
-}
-
-int validateQueueDesc(char * desc) {
-	if (!desc) {
-		return 0;
-	}
-
-	return 0;
-}
-
-int validateQueueJobLimit(int limit) {
-	if (limit < 0 || limit > JERS_QUEUE_MAX_LIMIT){
-		return 1;
-	}
-
-	return 0;
-}
-
 /* Create, validate and add a queue
  * Return: 0 = Success
  *         1 = validation failure
  *         2 = already exists       */
 
 int addQueue(struct queue * q, int def, int dirty) {
-	struct queue * check = NULL;
-
-	if (validateQueueName(q->name)) {
-		return 1;
-	}
-
-	if (validateQueueDesc(q->desc)) {
-		return 1;
-	}
-
-	if (validateQueuePriority(q->priority)) {
-		return 1;
-	}
-
-	if (validateQueueJobLimit(q->job_limit)) {
-		return 1;
-	}
-
-	lowercasestring(q->name);
-
-	/* Check if it already exists */
-	check = findQueue(q->name);
-
-	if (check != NULL) {
-		print_msg(JERS_LOG_CRITICAL, "Queue %s already exists\n", q->name);
-		/* Already exists */
-		return 2;
-	}
-
-	q->state = JERS_QUEUE_DEFAULT_STATE;
 
 	HASH_ADD_STR(server.queueTable, name, q);
 
-	if (def || server.defaultQueue == NULL) {
+	if (def)
 		server.defaultQueue = q;
-	}
 
 	if (dirty) {
 		q->dirty = 1;
@@ -157,4 +71,36 @@ struct queue * findQueue(char * name) {
 	struct queue * q = NULL;
 	HASH_FIND_STR(server.queueTable, name, q);
 	return q;
+}
+
+/* Cleanup queues that are marked as deleted, returning the number of queues cleaned up
+ * - Only cleanup queues until the max_clean threshold is reached. */
+
+int cleanupQueues(uint32_t max_clean) {
+	uint32_t cleaned_up = 0;
+	struct queue *q, *tmp;
+
+	if (max_clean == 0)
+		max_clean = 10;
+
+	HASH_ITER(hh, server.queueTable, q, tmp) {
+		if (!(q->internal_state &JERS_FLAG_DELETED))
+			continue;
+
+		/* Don't clean up queues flagged dirty or as being flushed */
+		if (q->dirty || q->internal_state &JERS_FLAG_FLUSHING)
+			continue;
+
+		/* Got a queue to remove */
+		print_msg(JERS_LOG_DEBUG, "Removing deleted queue: %s", q->name);
+
+		stateDelQueue(q);
+		HASH_DEL(server.queueTable, q);
+		freeQueue(q);
+
+		if (++cleaned_up >= max_clean)
+			break;
+	}
+
+	return cleaned_up;
 }

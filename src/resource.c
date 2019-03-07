@@ -31,15 +31,6 @@
 #include <server.h>
 
 int addRes(struct resource * r, int dirty) {
-	struct resource * check_res = NULL;
-
-	check_res = findResource(r->name);
-
-	if (check_res) {
-		print_msg(JERS_LOG_WARNING, "Trying to add duplicate resource %s", r->name);
-		return 1;
-	}
-
 	HASH_ADD_STR(server.resTable, name, r);
 
 	if (dirty) {
@@ -59,4 +50,36 @@ struct resource * findResource(char * name) {
 	struct resource * r = NULL;
 	HASH_FIND_STR(server.resTable, name, r);
 	return r;
+}
+
+/* Cleanup resources that are marked as deleted, returning the number of resources cleaned up
+ * - Only cleanup resources until the max_clean threshold is reached. */
+
+int cleanupResources(uint32_t max_clean) {
+	uint32_t cleaned_up = 0;
+	struct resource *r, *tmp;
+
+	if (max_clean == 0)
+		max_clean = 10;
+
+	HASH_ITER(hh, server.resTable, r, tmp) {
+		if (!(r->internal_state &JERS_FLAG_DELETED))
+			continue;
+
+		/* Don't clean up resources flagged dirty or as being flushed */
+		if (r->dirty || r->internal_state &JERS_FLAG_FLUSHING)
+			continue;
+
+		/* Got a resources to remove */
+		print_msg(JERS_LOG_DEBUG, "Removing deleted resource: %s", r->name);
+
+		stateDelResource(r);
+		HASH_DEL(server.resTable, r);
+		freeRes(r);
+
+		if (++cleaned_up >= max_clean)
+			break;
+	}
+
+	return cleaned_up;
 }

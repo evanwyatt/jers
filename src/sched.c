@@ -143,7 +143,7 @@ int64_t generateCandidatePool(void) {
 	/* Check each job for it's eligibility */
 
 	for (j = server.jobTable; j != NULL; j = j->hh.next) {
-		if (j->internal_state &JERS_JOB_FLAG_DELETED)
+		if (j->internal_state &JERS_FLAG_DELETED)
 			continue;
 
 		if (j->state != JERS_JOB_PENDING)
@@ -194,7 +194,7 @@ void checkJobs(void) {
 		if (j == NULL)
 			continue;
 
-		if (j->state != JERS_JOB_PENDING || j->internal_state &JERS_JOB_FLAG_STARTED)
+		if (j->state != JERS_JOB_PENDING || j->internal_state &JERS_FLAG_JOB_STARTED)
 			continue;
 
 		j->pend_reason = 0;
@@ -253,7 +253,7 @@ void checkJobs(void) {
 		}
 
 		sendStartCmd(j);
-		j->internal_state |= JERS_JOB_FLAG_STARTED;
+		j->internal_state |= JERS_FLAG_JOB_STARTED;
 		j->pend_reason = JERS_PEND_AGENT;
 
 		/* Keep track of the jobs we have attempted to start */

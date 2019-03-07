@@ -322,7 +322,7 @@ void handleAgentDisconnect(agent * a) {
 	struct job * j;
 
 	for (j = server.jobTable; j != NULL; j = j->hh.next) {
-		if (j->queue->agent == a && (j->state & JERS_JOB_RUNNING || j->internal_state & JERS_JOB_FLAG_STARTED)) {
+		if (j->queue->agent == a && (j->state & JERS_JOB_RUNNING || j->internal_state & JERS_FLAG_JOB_STARTED)) {
 			print_msg(JERS_LOG_WARNING, "Job %d is now unknown", j->jobid);
 			j->internal_state = 0;
 			changeJobState(j, JERS_JOB_UNKNOWN, 1);

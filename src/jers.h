@@ -128,6 +128,7 @@ enum jers_error_codes {
 	JERS_ERR_ERECV,
 	JERS_ERR_ESEND,
 	JERS_ERR_DISCONNECT,
+	JERS_ERR_RESINUSE,
 
 	JERS_ERR_UNKNOWN
 };
@@ -341,6 +342,7 @@ typedef struct jersQueue {
 	int job_limit;
 	int state;
 	int priority;
+	int default_queue;
 
 	struct jobStats stats;
 } jersQueue;
@@ -357,6 +359,7 @@ typedef struct jersQueueAdd {
 	int state;
 	int job_limit;
 	int priority;
+	int default_queue;
 } jersQueueAdd;
 
 typedef struct jersQueueMod {
@@ -366,6 +369,7 @@ typedef struct jersQueueMod {
 	int state;
 	int job_limit;
 	int priority;
+	int default_queue;
 } jersQueueMod;
 
 typedef struct jersQueueFilter {
@@ -415,7 +419,7 @@ int jersDelTag(jobid_t id, char * key);
 int jersAddQueue(jersQueueAdd *q);
 int jersModQueue(jersQueueMod *q);
 int jersGetQueue(char *name, jersQueueFilter *filter, jersQueueInfo *info);
-int jersDelQueue(jersQueueDel *q);
+int jersDelQueue(char *name);
 void jersFreeQueueInfo(jersQueueInfo *info);
 
 int jersAddResource(char *name, int count);

@@ -234,7 +234,7 @@ struct jersServer {
 	int sched_max;
 	int max_run_jobs;
 
-	int max_cleanup; // Maximum deleted jobs to cleanup per cycle
+	int max_cleanup; // Maximum deleted objects to cleanup per cycle
 
 	char * config_file;
 
@@ -310,10 +310,10 @@ struct jersServer {
 
 
 /* The internal_state field is a bitmap of flags */
-#define JERS_JOB_FLAG_DELETED  0x0001  // Job has been deleted and will be cleaned up
-#define JERS_JOB_FLAG_FLUSHING 0x0002  // Job state is being flushed to disk
-#define JERS_JOB_FLAG_STARTED  0x0004  // Job start message has been sent
-#define JERS_JOB_FLAG_UNKNOWN  0x0008  // Job was running/start sent to agent, agent has since disconnected.
+#define JERS_FLAG_DELETED  0x0001  // Job has been deleted and will be cleaned up
+#define JERS_FLAG_FLUSHING 0x0002  // Job state is being flushed to disk
+#define JERS_FLAG_JOB_STARTED  0x0004  // Job start message has been sent
+#define JERS_FLAG_JOB_UNKNOWN  0x0008  // Job was running/start sent to agent, agent has since disconnected.
 
 #define INITIAL_RESPONSE_SIZE 0x1000
 
@@ -357,6 +357,8 @@ void checkJobs(void);
 void releaseDeferred(void);
 
 int stateDelJob(struct job * j);
+int stateDelQueue(struct queue * q);
+int stateDelResource(struct resource * r);
 
 void setJobDirty(struct job * j);
 void changeJobState(struct job * j, int new_state, int dirty);
@@ -371,6 +373,8 @@ void checkEvents(void);
 void initEvents(void);
 
 int cleanupJobs(uint32_t max_clean);
+int cleanupQueues(uint32_t max_clean);
+int cleanupResources(uint32_t max_clean);
 
 void setup_listening_sockets(void);
 int setReadable(struct connectionType * connection);

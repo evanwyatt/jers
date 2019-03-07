@@ -121,8 +121,26 @@ void checkJobsEvent(void) {
 	checkJobs();
 }
 
-void cleanupJobsEvent(void) {
-	cleanupJobs(server.max_cleanup);
+void cleanupEvent(void) {
+	uint32_t cleaned = 0;
+
+	cleaned += cleanupJobs(server.max_cleanup);
+
+	if (cleaned >= server.max_cleanup) {
+		print_msg(JERS_LOG_DEBUG, "Cleaned %d deleted objects", cleaned);
+		return;
+	}
+
+	cleaned += cleanupQueues(server.max_cleanup - cleaned);
+
+	if (cleaned >= server.max_cleanup) {
+		print_msg(JERS_LOG_DEBUG, "Cleaned %d deleted objects", cleaned);
+		return;
+	}
+
+	cleanupResources(server.max_cleanup - cleaned);
+
+	print_msg(JERS_LOG_DEBUG, "Cleaned %d deleted objects", cleaned);
 }
 
 void backgroundSaveEvent(void) {
@@ -131,11 +149,11 @@ void backgroundSaveEvent(void) {
 
 void initEvents(void) {
 	registerEvent(checkJobsEvent, server.sched_freq);
-	registerEvent(cleanupJobsEvent, 5000);
+	registerEvent(cleanupEvent, 5000);
 	registerEvent(backgroundSaveEvent, server.background_save_ms);
 
 	if (server.flush.defer)
-		registerEvent(flushEvent, server.flush.defer_ms);
+	registerEvent(flushEvent, server.flush.defer_ms);
 
 	registerEvent(checkDeferEvent, 750);
 

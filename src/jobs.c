@@ -114,11 +114,11 @@ int cleanupJobs(uint32_t max_clean) {
 		max_clean = 10;
 
 	HASH_ITER(hh, server.jobTable, j, tmp) {
-		if (!(j->internal_state &JERS_JOB_FLAG_DELETED))
+		if (!(j->internal_state &JERS_FLAG_DELETED))
 			continue;
 
 		/* Don't clean up jobs flagged dirty or as being flushed */
-		if (j->dirty || j->internal_state &JERS_JOB_FLAG_FLUSHING)
+		if (j->dirty || j->internal_state &JERS_FLAG_FLUSHING)
 			continue;
 
 		/* Got a job to remove */

@@ -309,6 +309,7 @@ int deserialize_jersQueue(msg_item * item, jersQueue *q) {
 			case JOBLIMIT  : q->job_limit = getNumberField(&item->fields[i]); break;
 			case STATE     : q->state = getNumberField(&item->fields[i]); break;
 			case PRIORITY  : q->priority = getNumberField(&item->fields[i]); break;
+			case DEFAULT   : q->default_queue = getBoolField(&item->fields[i]); break;
 
 			case STATSRUNNING   : q->stats.running = getNumberField(&item->fields[i]); break;
 			case STATSPENDING   : q->stats.pending = getNumberField(&item->fields[i]); break;
@@ -782,6 +783,9 @@ int jersAddQueue(jersQueueAdd *q) {
 	if (q->state != -1)
 		addIntField(&r, STATE, q->state);
 
+	if (q->default_queue)
+		addBoolField(&r, DEFAULT, q->default_queue);
+
 	if (sendRequest(&r))
 		return 1;
 
@@ -828,10 +832,34 @@ int jersModQueue(jersQueueMod *q) {
 	if (q->state != -1)
 		addIntField(&r, STATE, q->state);
 
+	if (q->default_queue)
+		addBoolField(&r, DEFAULT, q->default_queue);
+
 	if (sendRequest(&r))
 		return 1;
 
 	if(readResponse())
+		return 1;
+
+	free_message(&msg);
+
+	return 0;
+}
+
+int jersDelQueue(char *name) {
+	if (jersInitAPI(NULL))
+		return 1;
+
+	resp_t r;
+
+	initRequest(&r, "DEL_QUEUE", 1);
+
+	addStringField(&r, QUEUENAME, name);
+
+	if (sendRequest(&r))
+		return 1;
+
+	if (readResponse())
 		return 1;
 
 	free_message(&msg);

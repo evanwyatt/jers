@@ -165,7 +165,7 @@ void command_agent_jobstart(agent * a, msg_t * msg) {
 
 	changeJobState(j, JERS_JOB_RUNNING, 0);
 
-	j->internal_state &= ~JERS_JOB_FLAG_STARTED;
+	j->internal_state &= ~JERS_FLAG_JOB_STARTED;
 	j->pend_reason = 0;
 	j->pid = pid;
 	j->start_time = start_time;
@@ -218,9 +218,9 @@ void command_agent_jobcompleted(agent * a, msg_t * msg) {
 		return;
 	}
 
-	if (j->internal_state & JERS_JOB_FLAG_STARTED) {
+	if (j->internal_state & JERS_FLAG_JOB_STARTED) {
 		/* Job failed to start correctly */
-		j->internal_state &= ~JERS_JOB_FLAG_STARTED;
+		j->internal_state &= ~JERS_FLAG_JOB_STARTED;
 		print_msg(JERS_LOG_WARNING, "Got completion for job without start: %d", jobid);
 	}
 

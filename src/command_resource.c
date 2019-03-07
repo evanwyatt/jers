@@ -120,15 +120,22 @@ int command_add_resource(client *c, void *args) {
 		if (server.recovery.in_progress)
 			return 0;
 
-		sendError(c, JERS_ERR_RESEXISTS, NULL);
-		return 1;
-	}
+		if ((r->internal_state &JERS_FLAG_DELETED) == 0) {
+			sendError(c, JERS_ERR_RESEXISTS, NULL);
+			return 1;
+		}
 
-	r = calloc(sizeof(struct resource), 1);
+		/* We have a deleted version of this resource. Free the old name and reuse the resource */
+		HASH_DEL(server.resTable, r);
+		free(r->name);
+		r->internal_state &= ~JERS_FLAG_DELETED;
+	} else {
+		r = calloc(sizeof(struct resource), 1);
+	}
 
 	r->name = ra->name;
 	r->count = ra->count;
-	r->revision = 0;
+	r->revision = 1;
 
 	addRes(r, 1);
 
@@ -154,7 +161,7 @@ int command_get_resource(client *c, void *args) {
 		respAddArray(&response);
 
 		for (r = server.resTable; r != NULL; r = r->hh.next) {
-			if (matches(rf->filters.name, r->name) == 0) {
+			if ((r->internal_state &JERS_FLAG_DELETED) == 0 && matches(rf->filters.name, r->name) == 0) {
 				respAddMap(&response);
 				addStringField(&response, RESNAME, r->name);
 				addIntField(&response, RESCOUNT, r->count);
@@ -167,7 +174,7 @@ int command_get_resource(client *c, void *args) {
 	} else {
 		r = findResource(rf->filters.name);
 
-		if (r) {
+		if (r && (r->internal_state &JERS_FLAG_DELETED) == 0) {
 			respAddMap(&response);
 			addStringField(&response, RESNAME, r->name);
 			addIntField(&response, RESCOUNT, r->count);
@@ -190,7 +197,7 @@ int command_mod_resource(client *c, void *args) {
 
 	r = findResource(rm->name);
 
-	if (r == NULL) {
+	if (r == NULL || r->internal_state &JERS_FLAG_DELETED) {
 		sendError(c, JERS_ERR_NORES, NULL);
 		return 1;
 	}
@@ -209,9 +216,44 @@ int command_mod_resource(client *c, void *args) {
 }
 
 int command_del_resource(client *c, void *args) {
-	//TODO: Implement
+	jersResourceDel * rd = args;
+	struct resource * r = NULL;
+	int in_use = 0;
+
+	if (rd->name == NULL) {
+		sendError(c, JERS_ERR_INVARG, "Resource name not provided");
+		return 1;
+	}
 	
-	return 1;
+	r = findResource(rd->name);
+
+	if (r == NULL || r->internal_state &JERS_FLAG_DELETED) {
+		sendError(c, JERS_ERR_NORES, NULL);
+		return 1;
+	}
+
+	/* Check that it's not in use. */
+	for (struct job * j = server.jobTable; j != NULL; j = j->hh.next) {
+		if (j->res_count == 0 || j->internal_state & JERS_FLAG_DELETED)
+			continue;
+
+		for (int i = 0; i < j->res_count; i++) {
+			if (j->req_resources[i].res == r) {
+				in_use = 1;
+				break;
+			}
+		}
+
+		if (in_use) {
+			sendError(c, JERS_ERR_RESINUSE, NULL);
+			return 1;
+		}
+	}
+
+	/* Mark it as deleted and dirty. It will be cleaned up later */
+	r->internal_state |= JERS_FLAG_DELETED;
+
+	return sendClientReturnCode(c, "0");
 }
 
 void free_add_resource(void * args) {

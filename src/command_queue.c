@@ -50,6 +50,7 @@ void * deserialize_add_queue(msg_t * msg) {
 			case PRIORITY: q->priority = getNumberField(&item->fields[i]); break;
 			case JOBLIMIT: q->job_limit = getNumberField(&item->fields[i]); break;
 			case STATE: q->state = getNumberField(&item->fields[i]); break;
+			case DEFAULT: q->default_queue = getBoolField(&item->fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",msg->items[0].fields[i].name); break;
 		}
@@ -91,6 +92,7 @@ void * deserialize_mod_queue(msg_t * msg) {
 			case PRIORITY: q->priority = getNumberField(&item->fields[i]); break;
 			case JOBLIMIT: q->job_limit = getNumberField(&item->fields[i]); break;
 			case STATE: q->state = getNumberField(&item->fields[i]); break;
+			case DEFAULT: q->default_queue = getBoolField(&item->fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",msg->items[0].fields[i].name); break;
 		}
@@ -127,11 +129,23 @@ int command_add_queue(client * c, void * args) {
 		if (server.recovery.in_progress)
 			return 0;
 
-		sendError(c, JERS_ERR_QUEUEEXISTS, NULL);
-		return 1;
+		if ((q->internal_state &JERS_FLAG_DELETED) == 0) {
+			sendError(c, JERS_ERR_QUEUEEXISTS, NULL);
+			return 1;
+		} else {
+			/* Asked to create a queue which has just been deleted.
+			 * It's easier to remove it from the hashtable, then re-add it. */
+			HASH_DEL(server.queueTable, q);
+
+			free(q->name);
+			free(q->desc);
+			free(q->host);
+			q->internal_state &= ~JERS_FLAG_DELETED;
+		}
+	} else {
+		q = calloc(sizeof(struct queue), 1);
 	}
 
-	q = calloc(sizeof(struct queue), 1);
 	q->name = qa->name;
 	q->host = qa->node;
 	q->desc = qa->desc;
@@ -139,12 +153,9 @@ int command_add_queue(client * c, void * args) {
 	q->priority = qa->priority != -1 ? qa->priority : JERS_QUEUE_DEFAULT_PRIORITY;
 	q->state = qa->state != -1 ? qa->state : JERS_QUEUE_DEFAULT_STATE;
 	q->agent = NULL;
-	q->dirty = 1;
-	q->revision = 0;
+	q->revision = 1;
 
-	server.dirty_queues = 1;
-
-	HASH_ADD_STR(server.queueTable, name, q);
+	addQueue(q, qa->default_queue, 1);
 
 	/* Check if we need to link this queue to an agent that
 	 * is already connected . */
@@ -175,6 +186,7 @@ void serialize_jersQueue(resp_t * r, struct queue * q) {
 	addIntField(r, JOBLIMIT, q->job_limit);
 	addIntField(r, STATE, q->state);
 	addIntField(r, PRIORITY, q->priority);
+	addBoolField(r, DEFAULT, (server.defaultQueue == q));
 
 	addIntField(r, STATSRUNNING, q->stats.running);
 	addIntField(r, STATSPENDING, q->stats.pending);
@@ -194,6 +206,21 @@ int command_get_queue(client *c, void *args) {
 
 	resp_t r;
 
+	if (qf->filters.name != NULL && strchr(qf->filters.name, '?') == NULL && strchr(qf->filters.name, '*') == NULL) {
+		q = findQueue(qf->filters.name);
+
+		if (q == NULL || q->internal_state &JERS_FLAG_DELETED) {
+			sendError(c, JERS_ERR_NOQUEUE, NULL);
+			return 1;
+		}
+
+		initMessage(&r, "RESP", 1);
+		respAddArray(&r);
+		serialize_jersQueue(&r, q);
+		respCloseArray(&r);
+		return sendClientMessage(c, &r);
+	}
+
 	initMessage(&r, "RESP", 1);
 
 	respAddArray(&r);
@@ -202,7 +229,7 @@ int command_get_queue(client *c, void *args) {
 		all = 1;
 
 	for (q = server.queueTable; q != NULL; q = q->hh.next) {
-		if (!all && matches(qf->filters.name, q->name) != 0)
+		if ((!all && matches(qf->filters.name, q->name) != 0) || q->internal_state &JERS_FLAG_DELETED)
 			continue;
 
 		/* Made it here, add it to our response */
@@ -277,16 +304,19 @@ int command_del_queue(client *c, void *args) {
 
 	q = findQueue(qd->name);
 
-	if (q == NULL) {
+	if (q == NULL || q->internal_state &JERS_FLAG_DELETED) {
 		sendError(c, JERS_ERR_NOQUEUE, NULL);
 		return 1;
 	}
 
-	/* We can only delete a queue if there are no active jobs on it
-	 * - Deleted jobs are ok, we can remove those before we remove the queue */
+	if (q == server.defaultQueue) {
+		sendError(c, JERS_ERR_INVARG, "Can't delete the default queue");
+		return 1;
+	}
 
+	/* We can only delete a queue if there are no active jobs on it. Deleted jobs are ok. */
 	for (j = server.jobTable; j != NULL; j = j->hh.next) {
-		if (j->queue == q && !(j->internal_state &JERS_JOB_FLAG_DELETED))
+		if (j->queue == q && !(j->internal_state &JERS_FLAG_DELETED))
 			break;
 	}
 
@@ -295,7 +325,7 @@ int command_del_queue(client *c, void *args) {
 		return 1;
 	}
 
-	//TODO: Delete queues
+	q->internal_state |= JERS_FLAG_DELETED;
 
 	return sendClientReturnCode(c, "0");
 }

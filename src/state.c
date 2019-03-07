@@ -350,8 +350,8 @@ void stateReplayJournal(void) {
 	struct job * j;
 
 	for (j = server.jobTable; j; j = j->hh.next) {
-		if (j->state == JERS_JOB_RUNNING || j->internal_state & JERS_JOB_FLAG_STARTED) {
-			j->internal_state &= ~JERS_JOB_FLAG_STARTED;
+		if (j->state == JERS_JOB_RUNNING || j->internal_state & JERS_FLAG_JOB_STARTED) {
+			j->internal_state &= ~JERS_FLAG_JOB_STARTED;
 			changeJobState(j, JERS_JOB_UNKNOWN, 1);
 			print_msg(JERS_LOG_WARNING, "Job %d is now unknown", j->jobid);
 		}
@@ -527,6 +527,16 @@ int stateSaveQueue(struct queue * q) {
 	return 0;
 }
 
+int stateDelQueue(struct queue * q) {
+	char filename[PATH_MAX];
+	sprintf(filename, "%s/queues/%s.queue", server.state_dir, q->name);
+
+	if (unlink(filename) != 0)
+		print_msg(JERS_LOG_WARNING, "Failed to remove statefile for deleted queue %s: %s", q->name, strerror(errno));
+
+	return 0;
+}
+
 int stateSaveResource(struct resource * r) {
 	char filename[PATH_MAX];
 	char new_filename[PATH_MAX];
@@ -553,6 +563,16 @@ int stateSaveResource(struct resource * r) {
 		fprintf(stderr, "Failed to rename '%s' to '%s': %s\n", new_filename, filename, strerror(errno));
 		return 1;
 	}
+
+	return 0;
+}
+
+int stateDelResource(struct resource * r) {
+	char filename[PATH_MAX];
+	sprintf(filename, "%s/resources/%s.resource", server.state_dir, r->name);
+
+	if (unlink(filename) != 0)
+		print_msg(JERS_LOG_WARNING, "Failed to remove statefile for deleted resource %s: %s", r->name, strerror(errno));
 
 	return 0;
 }
@@ -616,7 +636,7 @@ void stateSaveToDisk(int block) {
 			if (server.flush_jobs) {
 				int64_t i;
 				for (i = 0; i < server.flush_jobs; i++)
-					dirtyJobs[i]->internal_state &= ~JERS_JOB_FLAG_FLUSHING;
+					dirtyJobs[i]->internal_state &= ~JERS_FLAG_FLUSHING;
 
 				free(dirtyJobs);
 			}
@@ -624,7 +644,7 @@ void stateSaveToDisk(int block) {
 			if (server.flush_queues) {
 				int64_t i;
 				for (i = 0; i < server.flush_queues; i++)
-					dirtyQueues[i]->internal_state &= ~JERS_JOB_FLAG_FLUSHING;
+					dirtyQueues[i]->internal_state &= ~JERS_FLAG_FLUSHING;
 
 				free(dirtyQueues);
 			}
@@ -632,7 +652,7 @@ void stateSaveToDisk(int block) {
 			if (server.flush_resources) {
 				int64_t i;
 				for (i = 0; i < server.flush_resources; i++)
-					dirtyResources[i]->internal_state &= ~JERS_JOB_FLAG_FLUSHING;
+					dirtyResources[i]->internal_state &= ~JERS_FLAG_FLUSHING;
 
 				free(dirtyResources);
 			}
@@ -677,7 +697,7 @@ void stateSaveToDisk(int block) {
 			if (j->dirty) {
 				dirtyJobs[i++] = j;
 				j->dirty = 0;
-				j->internal_state |= JERS_JOB_FLAG_FLUSHING;
+				j->internal_state |= JERS_FLAG_FLUSHING;
 			}
 		}
 
@@ -695,7 +715,7 @@ void stateSaveToDisk(int block) {
 			if (q->dirty) {
 				dirtyQueues[i++] = q;
 				q->dirty = 0;
-				q->internal_state |= JERS_JOB_FLAG_FLUSHING;
+				q->internal_state |= JERS_FLAG_FLUSHING;
 			}
 		}
 
@@ -713,7 +733,7 @@ void stateSaveToDisk(int block) {
 			if (r->dirty) {
 				dirtyResources[i++] = r;
 				r->dirty = 0;
-				r->internal_state |= JERS_JOB_FLAG_FLUSHING;
+				r->internal_state |= JERS_FLAG_FLUSHING;
 			}
 		}
 
@@ -1089,21 +1109,19 @@ int stateLoadQueue(char * fileName) {
 	q->name = strdup(name);
 	q->job_limit = JERS_QUEUE_DEFAULT_LIMIT;
 	q->priority = JERS_QUEUE_DEFAULT_PRIORITY;
+	q->state = JERS_QUEUE_DEFAULT_STATE;
 
 	/* Read the contents and get the details */
 	ssize_t len;
 	while((len = getline(&line, &lineSize, f)) != -1) {
-
 		char * key = NULL, *value = NULL;
 		int index;
 
-		if (loadKeyValue(line, &key, &value, &index)) {
+		if (loadKeyValue(line, &key, &value, &index))
 			error_die("stateLoadQueue: Error parsing queue file: %s\n", fileName);
-		}
 
-		if (!key || !value) {
+		if (!key || !value)
 			continue;
-		}
 
 		if (strcasecmp(key, "DESC") == 0) {
 			q->desc = strdup(value);
@@ -1122,9 +1140,8 @@ int stateLoadQueue(char * fileName) {
 		}
 	}
 
-	if (len == -1 && feof(f) == 0) {
+	if (len == -1 && feof(f) == 0)
 		error_die("Error reading queue file %s: %s\n", fileName, strerror(errno));
-	}
 
 	fclose(f);
 	free(line);

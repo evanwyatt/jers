@@ -370,7 +370,7 @@ int command_add_job(client * c, void * args) {
 	} else {
 		q = findQueue(s->queue);
 
-		if (q == NULL) {
+		if (q == NULL || q->internal_state &JERS_FLAG_DELETED) {
 			sendError(c, JERS_ERR_NOQUEUE, NULL);
 			return -1;
 		}
@@ -524,7 +524,7 @@ int command_get_job(client *c, void * args) {
 	if (s->jobid) {
 		j = findJob(s->jobid);
 
-		if (j == NULL || (j->internal_state &JERS_JOB_FLAG_DELETED)) {
+		if (j == NULL || (j->internal_state &JERS_FLAG_DELETED)) {
 			sendError(c, JERS_ERR_NOJOB, NULL);
 			return 1;
 		}
@@ -556,7 +556,7 @@ int command_get_job(client *c, void * args) {
 
 		for (j = server.jobTable; j != NULL; j = j->hh.next) {
 
-			if (j->internal_state &JERS_JOB_FLAG_DELETED)
+			if (j->internal_state &JERS_FLAG_DELETED)
 				continue;
 
 			/* Try and filter on the easier criteria first */
@@ -635,7 +635,7 @@ int command_mod_job(client *c, void *args) {
 
 	j = findJob(mj->jobid);
 
-	if (j == NULL || j->internal_state &JERS_JOB_FLAG_DELETED) {
+	if (j == NULL || j->internal_state &JERS_FLAG_DELETED) {
 		sendError(c, JERS_ERR_NOJOB, NULL);
 		return 0;
 	}
@@ -655,7 +655,7 @@ int command_mod_job(client *c, void *args) {
 		return 0;
 	}
 
-	if (j->state == JERS_JOB_RUNNING || j->internal_state &JERS_JOB_FLAG_STARTED) {
+	if (j->state == JERS_JOB_RUNNING || j->internal_state &JERS_FLAG_JOB_STARTED) {
 		sendError(c, JERS_ERR_INVARG, "Unable to modify a running job");
 		return 0;
 	}
@@ -779,12 +779,12 @@ int command_del_job(client * c, void * args) {
 
 	j = findJob(jd->jobid);
 
-	if (!j || j->internal_state &JERS_JOB_FLAG_DELETED) {
+	if (!j || j->internal_state &JERS_FLAG_DELETED) {
 		sendError(c, JERS_ERR_NOJOB, NULL);
-		return 0;
+		return 1;
 	}
 
-	j->internal_state |= JERS_JOB_FLAG_DELETED;
+	j->internal_state |= JERS_FLAG_DELETED;
 	changeJobState(j, 0, 0);
 	server.stats.total.deleted++;
 
@@ -799,7 +799,7 @@ int command_sig_job(client * c, void * args) {
 
 	j = findJob(js->jobid);
 
-	if (!j || j->internal_state &JERS_JOB_FLAG_DELETED) {
+	if (!j || j->internal_state &JERS_FLAG_DELETED) {
 		sendError(c, JERS_ERR_NOJOB, NULL);
 		return 1;
 	}
