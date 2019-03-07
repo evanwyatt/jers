@@ -98,6 +98,12 @@ void removeAgent(agent * a) {
 }
 
 void serverShutdown(void) {
+	/* Lets do a final flush of our state file before we try anything else*/
+	if (server.state_fd >= 0) {
+		print_msg(JERS_LOG_INFO, "Performing final flush of state file");
+		fdatasync(server.state_fd);
+	}
+
 	/* Close our sockets */
 	close(server.client_connection.socket);
 	close(server.agent_connection.socket);
@@ -242,12 +248,6 @@ int main (int argc, char * argv[]) {
 
 	free(events);
 	serverShutdown();
-
-	/* Lets do a final flush of our state file*/
-	if (server.state_fd >= 0) {
-		print_msg(JERS_LOG_INFO, "Performing final flush of state file");
-		fdatasync(server.state_fd);
-	}
 
 	return 0;
 }
