@@ -1,7 +1,8 @@
 %{!?rel: %define rel 1}
+%{!?ver: %define ver 0.0.0}
 
 Name:		jers
-Version:	0.0.1
+Version:	%{ver}
 Release:	%{rel}%{?dist}
 Summary:	The Job Execution and Resource Scheduler
 

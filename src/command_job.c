@@ -780,6 +780,11 @@ int command_del_job(client * c, void * args) {
 	j = findJob(jd->jobid);
 
 	if (!j || j->internal_state &JERS_FLAG_DELETED) {
+		if (unlikely(server.recovery.in_progress)) {
+			print_msg(JERS_LOG_DEBUG, "Skipping deletion of non-existent %d", jd->jobid);
+			return 0;
+		}
+
 		sendError(c, JERS_ERR_NOJOB, NULL);
 		return 1;
 	}

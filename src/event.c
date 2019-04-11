@@ -123,6 +123,11 @@ void checkJobsEvent(void) {
 
 void cleanupEvent(void) {
 	uint32_t cleaned = 0;
+	uint32_t max_clean = server.max_cleanup;
+
+	/* If we are busy, don't try and clean up as many deleted items */
+	if (server.candidate_pool_jobs || server.candidate_recalc)
+		max_clean = (max_clean + 1) / 2;
 
 	cleaned += cleanupJobs(server.max_cleanup);
 
@@ -149,11 +154,11 @@ void backgroundSaveEvent(void) {
 
 void initEvents(void) {
 	registerEvent(checkJobsEvent, server.sched_freq);
-	registerEvent(cleanupEvent, 5000);
+	registerEvent(cleanupEvent, 1000);
 	registerEvent(backgroundSaveEvent, server.background_save_ms);
 
 	if (server.flush.defer)
-	registerEvent(flushEvent, server.flush.defer_ms);
+		registerEvent(flushEvent, server.flush.defer_ms);
 
 	registerEvent(checkDeferEvent, 750);
 

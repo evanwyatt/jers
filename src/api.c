@@ -879,7 +879,7 @@ int jersAddResource(char *name, int count) {
 
 	resp_t r;
 	
-	initRequest(&r, CMD_ADD_QUEUE, 1);
+	initRequest(&r, CMD_ADD_RESOURCE, 1);
 
 	addStringField(&r, RESNAME, name);
 
@@ -905,7 +905,7 @@ int jersGetResource(char * name, jersResourceFilter *filter, jersResourceInfo *i
 
 	resp_t r;
 
-	initRequest(&r, CMD_GET_QUEUE, 1);
+	initRequest(&r, CMD_GET_RESOURCE, 1);
 
 	if (name)
 		addStringField(&r, RESNAME, name);
@@ -943,7 +943,7 @@ int jersDelResource(char *name) {
 
 	resp_t r;
 
-	initRequest(&r, CMD_DEL_QUEUE, 1);
+	initRequest(&r, CMD_DEL_RESOURCE, 1);
 
 	addStringField(&r, RESNAME, name);
 

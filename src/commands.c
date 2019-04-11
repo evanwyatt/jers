@@ -45,28 +45,28 @@ void runComplexCommand(client * c);
 
 command_t commands[] = {
 	{CMD_ADD_JOB,      PERM_WRITE,            CMDFLG_REPLAY, command_add_job,      deserialize_add_job, free_add_job},
-	{CMD_GET_JOB,      PERM_READ,             0,          command_get_job,      deserialize_get_job, free_get_job},
+	{CMD_GET_JOB,      PERM_READ,             0,             command_get_job,      deserialize_get_job, free_get_job},
 	{CMD_MOD_JOB,      PERM_WRITE,            CMDFLG_REPLAY, command_mod_job,      deserialize_mod_job, free_mod_job},
 	{CMD_DEL_JOB,      PERM_WRITE,            CMDFLG_REPLAY, command_del_job,      deserialize_del_job, free_del_job},
-	{CMD_SIG_JOB,      PERM_WRITE,            0,          command_sig_job,      deserialize_sig_job, free_sig_job},
+	{CMD_SIG_JOB,      PERM_WRITE,            0,             command_sig_job,      deserialize_sig_job, free_sig_job},
 	{CMD_ADD_QUEUE,    PERM_WRITE|PERM_QUEUE, CMDFLG_REPLAY, command_add_queue,    deserialize_add_queue, free_add_queue},
-	{CMD_GET_QUEUE,    PERM_READ,             0,          command_get_queue,    deserialize_get_queue, free_get_queue},
+	{CMD_GET_QUEUE,    PERM_READ,             0,             command_get_queue,    deserialize_get_queue, free_get_queue},
 	{CMD_MOD_QUEUE,    PERM_WRITE|PERM_QUEUE, CMDFLG_REPLAY, command_mod_queue,    deserialize_mod_queue, free_mod_queue},
 	{CMD_DEL_QUEUE,    PERM_WRITE|PERM_QUEUE, CMDFLG_REPLAY, command_del_queue,    deserialize_del_queue, free_del_queue},
-	{CMD_ADD_QUEUE, PERM_WRITE,            CMDFLG_REPLAY, command_add_resource, deserialize_add_resource, free_add_resource},
-	{CMD_GET_QUEUE, PERM_READ,             0,          command_get_resource, deserialize_get_resource, free_get_resource},
-	{CMD_MOD_QUEUE, PERM_WRITE,            CMDFLG_REPLAY, command_mod_resource, deserialize_mod_resource, free_mod_resource},
-	{CMD_DEL_QUEUE, PERM_WRITE,            CMDFLG_REPLAY, command_del_resource, deserialize_del_resource, free_del_resource},
+	{CMD_ADD_RESOURCE, PERM_WRITE,            CMDFLG_REPLAY, command_add_resource, deserialize_add_resource, free_add_resource},
+	{CMD_GET_RESOURCE, PERM_READ,             0,             command_get_resource, deserialize_get_resource, free_get_resource},
+	{CMD_MOD_RESOURCE, PERM_WRITE,            CMDFLG_REPLAY, command_mod_resource, deserialize_mod_resource, free_mod_resource},
+	{CMD_DEL_RESOURCE, PERM_WRITE,            CMDFLG_REPLAY, command_del_resource, deserialize_del_resource, free_del_resource},
 	{CMD_SET_TAG,      PERM_WRITE,            CMDFLG_REPLAY, command_set_tag,      deserialize_set_tag, free_set_tag},
 	{CMD_DEL_TAG,      PERM_WRITE,            CMDFLG_REPLAY, command_del_tag,      deserialize_del_tag, free_del_tag},
-	{CMD_STATS,        PERM_READ,             0,          command_stats,        NULL, NULL},
+	{CMD_STATS,        PERM_READ,             0,             command_stats,        NULL, NULL},
 };
 
 agent_command_t agent_commands[] = {
 	{AGENT_JOB_STARTED,   CMDFLG_REPLAY, command_agent_jobstart},
 	{AGENT_JOB_COMPLETED, CMDFLG_REPLAY, command_agent_jobcompleted},
-	{AGENT_LOGIN,   0,          command_agent_login},
-	{AGENT_RECON_RESP,    0,          command_agent_recon},
+	{AGENT_LOGIN,         0,             command_agent_login},
+	{AGENT_RECON_RESP,    0,             command_agent_recon},
 };
 
 command_t * sorted_commands = NULL;
