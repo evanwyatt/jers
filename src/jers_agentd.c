@@ -384,7 +384,7 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 		 *   are in a forked child.  */
 
 		/* Resize if needed */
-		int to_add = 6 + j->env_count;
+		int to_add = 7 + j->env_count;
 
 		if (to_add >= j->u->env_size - j->u->env_count) {
 			j->u->users_env = realloc(j->u->users_env, sizeof(char *) * (j->u->env_count + to_add + 1));
@@ -410,6 +410,10 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 		j->u->users_env[j->u->env_count++][len-1] = '\0';
 
 		len = asprintf(&j->u->users_env[j->u->env_count],"JERS_STDERR=%s ", j->stderr ? j->stderr : j->stdout ? j->stdout : "/dev/null");
+		j->u->users_env[j->u->env_count++][len-1] = '\0';
+
+		/* A lot of things rely on having TMPDIR set */
+		len = asprintf(&j->u->users_env[j->u->env_count],"TMPDIR=/tmp");
 		j->u->users_env[j->u->env_count++][len-1] = '\0';
 
 		j->u->users_env[j->u->env_count] = NULL;
@@ -601,7 +605,9 @@ int send_start(struct runningJob * j) {
 int send_completion(struct runningJob * j) {
 	resp_t r;
 
-	close(j->socket);
+	if (j->socket)
+		close(j->socket);
+
 	free(j->temp_script);
 
 	/* Only send the completion if we are connected to the main daemon process */

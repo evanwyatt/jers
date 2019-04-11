@@ -372,6 +372,7 @@ int deserialize_jersJob(msg_item * item, jersJob *j) {
 			case NODE      : j->node = getStringField(&item->fields[i]); break;
 			case PENDREASON: j->pend_reason = getNumberField(&item->fields[i]); break;
 			case FAILREASON: j->fail_reason = getNumberField(&item->fields[i]); break;
+			case JOBPID    : j->pid = getNumberField(&item->fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",item->fields[i].name); break;
 		}

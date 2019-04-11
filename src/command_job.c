@@ -26,6 +26,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
 #include <server.h>
 #include <jers.h>
 #include <commands.h>
@@ -114,10 +115,10 @@ void * deserialize_add_job(msg_t * t) {
 			case STDOUT   : s->stdout = getStringField(&t->items[0].fields[i]); break;
 			case STDERR   : s->stderr = getStringField(&t->items[0].fields[i]); break;
 			case WRAPPER  : s->wrapper = getStringField(&t->items[0].fields[i]); break;
+			case NICE     : s->nice =  getNumberField(&t->items[0].fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field %s encountered - Ignoring\n",t->items[0].fields[i].name); break;
 		}
-
 	}
 
 	return s;
@@ -326,6 +327,9 @@ void serialize_jersJob(resp_t * r, struct job * j, int fields) {
 
 			free(res_strings);
 	}
+
+	if (j->pid && (fields == 0 || fields & JERS_RET_PID))
+		addIntField(r, JOBPID, j->pid);
 
 	addIntField(r, EXITCODE, j->exitcode);
 	addIntField(r, SIGNAL, j->signal);

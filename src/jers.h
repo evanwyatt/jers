@@ -37,7 +37,7 @@
 
 typedef uint32_t jobid_t;
 
-#define JERS_VERSION "0.1.1"
+#define JERS_VERSION "0.1.2"
 
 #define JERS_RES_NAME_MAX 64
 #define JERS_TAG_MAX 64
@@ -104,6 +104,7 @@ typedef uint32_t jobid_t;
 #define JERS_RET_SHELL      0x080000
 #define JERS_RET_NODE       0x100000
 #define JERS_RET_SUBMITTER  0x200000
+#define JERS_RET_PID        0x400000
 
 extern int jers_errno;
 
@@ -164,7 +165,7 @@ typedef struct {
 	char * value;
 } jers_tag_t;
 
-typedef struct jersJobAdd {
+typedef struct {
 	jobid_t jobid;
 
 	char * name;
@@ -199,7 +200,7 @@ typedef struct jersJobAdd {
 	char ** resources;
 } jersJobAdd;
 
-typedef struct jersJobMod {
+typedef struct {
 	jobid_t jobid;
 	char * name;
 	char * queue;
@@ -222,7 +223,7 @@ typedef struct jersJobMod {
 	char ** resources;
 } jersJobMod;
 
-typedef struct jersJob {
+typedef struct {
 	jobid_t jobid;
 	char * jobname;
 	char * queue;
@@ -231,6 +232,7 @@ typedef struct jersJob {
 	int nice;
 	uid_t uid;
 	uid_t submitter;
+	pid_t pid;
 
 	int hold;
 	int exit_code;
@@ -262,12 +264,12 @@ typedef struct jersJob {
 	char ** resources;
 } jersJob;
 
-typedef struct jersJobInfo {
+typedef struct {
 	int64_t count;
 	jersJob * jobs;
 } jersJobInfo;
 
-typedef struct jersJobFilter {
+typedef struct {
 	int64_t filter_fields; // Bitmask of fields populated in filters. 0 == no filters
 	int64_t return_fields; // Bitmask of fields to get returned; 0 == all fields
 
@@ -290,32 +292,32 @@ typedef struct jersJobFilter {
 	} filters;
 } jersJobFilter;
 
-typedef struct jersResource {
+typedef struct {
 	char * name;
 	int count;
 	int inuse;
 } jersResource;
 
-typedef struct jersResourceInfo {
+typedef struct {
 	int64_t count;
 	jersResource * resources;
 } jersResourceInfo;
 
-typedef struct jersResourceAdd {
+typedef struct {
 	char * name;
 	int count;
 } jersResourceAdd;
 
-typedef struct jersResourceMod {
+typedef struct {
 	char * name;
 	int count;
 } jersResourceMod;
 
-typedef struct jersResourceDel {
+typedef struct {
 	char * name;
 } jersResourceDel;
 
-typedef struct jersResourceFilter {
+typedef struct {
 	int64_t filter_fields;
 
 	struct {
@@ -335,7 +337,7 @@ struct jobStats {
 	int64_t unknown;
 };
 
-typedef struct jersQueue {
+typedef struct {
 	char * name;
 	char * desc;
 	char * node;
@@ -347,12 +349,12 @@ typedef struct jersQueue {
 	struct jobStats stats;
 } jersQueue;
 
-typedef struct jersQueueInfo {
+typedef struct {
 	int64_t count;
 	jersQueue * queues;
 } jersQueueInfo;
 
-typedef struct jersQueueAdd {
+typedef struct {
 	char * name;
 	char * node;
 	char * desc;
@@ -362,7 +364,7 @@ typedef struct jersQueueAdd {
 	int default_queue;
 } jersQueueAdd;
 
-typedef struct jersQueueMod {
+typedef struct {
 	char * name;
 	char * node;
 	char * desc;
@@ -372,7 +374,7 @@ typedef struct jersQueueMod {
 	int default_queue;
 } jersQueueMod;
 
-typedef struct jersQueueFilter {
+typedef struct {
 	int64_t filter_fields;
 
 	struct {
@@ -380,11 +382,11 @@ typedef struct jersQueueFilter {
 	} filters;
 } jersQueueFilter;
 
-typedef struct jersQueueDel {
+typedef struct {
 	char * name;
 } jersQueueDel;
 
-typedef struct jersStats {
+typedef struct {
 	struct jobStats current;
 	struct {
 		int64_t submitted;
