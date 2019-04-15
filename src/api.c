@@ -520,6 +520,10 @@ jobid_t jersAddJob(jersJobAdd * j) {
 	if (j->hold)
 		addBoolField(&r, HOLD, 1);
 
+	if (j->nice) {
+		addIntField(&r, NICE, j->nice);
+	}
+
 	if (j->tag_count) {
 		addStringMapField(&r, TAGS, j->tag_count, (key_val_t *)j->tags);
 	}

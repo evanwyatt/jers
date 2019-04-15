@@ -464,6 +464,7 @@ int command_add_job(client * c, void * args) {
 	j->submitter = c ? c->uid : server.recovery.uid;
 	j->defer_time = s->defer_time;
 	j->priority = s->priority;
+	j->nice = s->nice;
 	j->tag_count = s->tag_count;
 	j->tags = (key_val_t *)s->tags;
 
