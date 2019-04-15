@@ -371,7 +371,7 @@ int command_stats(client * c, void * args) {
 	addIntField(&r, STATSHOLDING, server.stats.jobs.holding);
 	addIntField(&r, STATSCOMPLETED, server.stats.jobs.completed);
 	addIntField(&r, STATSEXITED, server.stats.jobs.exited);
-	addIntField(&r, STATSEXITED, server.stats.jobs.unknown);
+	addIntField(&r, STATSUNKNOWN, server.stats.jobs.unknown);
 
 	addIntField(&r, STATSTOTALSUBMITTED, server.stats.total.submitted);
 	addIntField(&r, STATSTOTALSTARTED, server.stats.total.started);
