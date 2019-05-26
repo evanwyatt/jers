@@ -8,13 +8,13 @@
  *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation 
+ *    this list of conditions and the following disclaimer in the documentation
  *    and/or other materials provided with the distribution.
  *
  * 3. Neither the name of the copyright holder nor the names of its contributors may
  *    be used to endorse or promote products derived from this software without
  *    specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -22,7 +22,7 @@
  * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
  * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
@@ -75,7 +75,7 @@ char * escapeString(const char * string, size_t * length) {
 
 	while (*temp != '\0') {
 		switch (*temp) {
-			case '\\': 
+			case '\\':
 				*dest++ = '\\';
 				*dest++ = '\\';
 				break;
@@ -285,7 +285,7 @@ int matches(const char * pattern, const char * string) {
 	if (strchr(pattern, '*') || strchr(pattern, '?')) {
 		if (fnmatch(pattern, string, 0) == 0)
 			return 0;
-		else 
+		else
 			return 1;
 	} else {
 		return strcmp(string, pattern);
@@ -389,7 +389,7 @@ static int load_users_env(char * username, struct user * u) {
 
 	u->env_count = i;
 	u->users_env_buffer = e;
-	
+
 	return 0;
 }
 
@@ -445,7 +445,7 @@ struct user * lookup_user(uid_t uid, int load_env) {
 
 	if (getgrouplist(pw->pw_name, pw->pw_gid, u->group_list, &u->group_count) < 0) {
 		u->group_list = realloc(u->group_list, sizeof(gid_t) * u->group_count);
-		
+
 		if (getgrouplist(pw->pw_name, pw->pw_gid, u->group_list, &u->group_count) < 0) {
 			fprintf(stderr, "Failed to get group list for %d (%s): %s\n", uid, pw->pw_name, strerror(errno));
 
@@ -508,7 +508,7 @@ void handlerSigsegv(int signum, siginfo_t *info, void *context) {
 
 	/* We still use fprintf here, as we are going to crash anyway */
 	fprintf(stderr, "====================================================================\n");
-	fprintf(stderr, " JERS v%s CRASH - Signal '%s' (Signum:%d)\n", JERS_VERSION, strsignal(signum), signum);
+	fprintf(stderr, " JERS v%d.%d.%d CRASH - Signal '%s' (Signum:%d)\n", JERS_MAJOR, JERS_MINOR, JERS_PATCH, strsignal(signum), signum);
 	fprintf(stderr, "====================================================================\n");
 
 	if (signum == SIGSEGV || signum == SIGBUS || signum == SIGILL || signum == SIGFPE || signum == SIGTRAP)

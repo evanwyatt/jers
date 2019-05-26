@@ -37,7 +37,9 @@
 
 typedef uint32_t jobid_t;
 
-#define JERS_VERSION "0.1.2"
+#define JERS_MAJOR 0
+#define JERS_MINOR 1
+#define JERS_PATCH 2
 
 #define JERS_RES_NAME_MAX 64
 #define JERS_TAG_MAX 64

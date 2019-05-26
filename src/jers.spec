@@ -1,8 +1,10 @@
 %{!?rel: %define rel 1}
-%{!?ver: %define ver 0.0.0}
+%{!?major_ver: %define major_ver 0}
+%{!?minor_ver: %define minor_ver 0}
+%{!?patch: %define patch 0}
 
 Name:		jers
-Version:	%{ver}
+Version:	%{major_ver}.%{minor_ver}.%{patch}
 Release:	%{rel}%{?dist}
 Summary:	The Job Execution and Resource Scheduler
 
@@ -46,7 +48,7 @@ make install DESTDIR=%{buildroot}%{_prefix}
 
 find %buildroot -type f \( -name '*.so' -o -name '*.so.*' \) -exec chmod 755 {} +
 
-install -Dm 0644 src/jersd.service src/jers_agentd.service %{buildroot}/%{_unitdir}/ 
+install -Dm 0644 src/jersd.service src/jers_agentd.service %{buildroot}/%{_unitdir}/
 install -m 0644 src/jers_logrotate.conf %{buildroot}%{_sysconfdir}/logrotate.d/%{name}
 install -m 0644 src/jers_tmpfiles.conf %{buildroot}%{_tmpfilesdir}/%{name}.conf
 install -m 0644 src/default.conf %{buildroot}%{_sysconfdir}/%{name}/%{name}.conf
@@ -56,7 +58,8 @@ install -m 0644 src/default.conf %{buildroot}%{_sysconfdir}/%{name}/%{name}.conf
 %{_bindir}/jersd
 %{_bindir}/jers_agentd
 %{_bindir}/jers_dump_env
-%{_libdir}/libjers.so
+%{_libdir}/libjers.so.%{major_ver}.%{minor_ver}.%{patch}
+%{_libdir}/libjers.so.%{major_ver}
 
 # Systemd service files
 %config(noreplace) %{_sysconfdir}/jers/jers.conf
@@ -69,6 +72,7 @@ install -m 0644 src/default.conf %{buildroot}%{_sysconfdir}/%{name}/%{name}.conf
 
 %files devel
 %{_includedir}/jers.h
+%{_libdir}/libjers.so
 
 %clean
 rm -rf $RPM_BUILD_ROOT

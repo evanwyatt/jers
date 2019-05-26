@@ -8,13 +8,13 @@
  *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation 
+ *    this list of conditions and the following disclaimer in the documentation
  *    and/or other materials provided with the distribution.
  *
  * 3. Neither the name of the copyright holder nor the names of its contributors may
  *    be used to endorse or promote products derived from this software without
  *    specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -22,7 +22,7 @@
  * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
  * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
@@ -169,7 +169,13 @@ int main (int argc, char * argv[]) {
 
 	server_log_mode = server.logging_mode;
 
-	print_msg(JERS_LOG_INFO, "jersd v%s starting.", JERS_VERSION);
+	print_msg(JERS_LOG_INFO, "\n"
+			"     _  ___  ___  ___                   \n"
+			"  _ | || __|| _ \\/ __|                  \n"
+			" | || || _| |   /\\__ \\                  \n"
+			"  \\__/ |___||_|_\\|___/  Version %d.%d.%d\n\n", JERS_MAJOR, JERS_MINOR, JERS_PATCH);
+
+	print_msg(JERS_LOG_INFO, "jersd v%d.%d.%d starting.", JERS_MAJOR, JERS_MINOR, JERS_PATCH);
 
 	server.state_fd = -1;
 	server.agent_connection.socket = -1;
@@ -216,7 +222,7 @@ int main (int argc, char * argv[]) {
 
 	server.candidate_recalc = 1;
 
-	print_msg(JERS_LOG_INFO, "* JERSD v%s entering main loop...\n", JERS_VERSION);
+	print_msg(JERS_LOG_INFO, "* JERSD entering main loop...\n");
 
 	/* Away we go. We will sit in this loop until a shutdown is requested */
 	while (1) {
