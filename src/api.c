@@ -44,9 +44,12 @@
 #include <buffer.h>
 #include <commands.h>
 
+#define JERS_EXPORT __attribute__((visibility("default")))
+
 #define DEFAULT_CLIENT_TIMEOUT 60 // seconds
 
-extern int jers_errno;
+JERS_EXPORT int jers_errno = JERS_ERR_OK;
+char * jers_err_string = NULL;
 
 char * socket_path = NULL;
 int fd = -1;
@@ -55,12 +58,33 @@ buff_t response = {0};
 int initalised = 0;
 
 const char * getPendString(int);
-const char * getErrString(int);
 const char * getFailString(int);
+const char * getErrMsg(int jers_error);
 int getJersErrno(char *, char **);
-void setJersErrno(int err, char * msg);
 
 static int jersConnect(void);
+
+static void setJersErrno(int err, char * msg) {
+	int saved_errno = errno;
+	jers_errno = err;
+	
+	free(jers_err_string);
+	jers_err_string = NULL;
+
+	if (msg)
+		jers_err_string = strdup(msg);
+
+	/* Set errno back to what it was before this routine was called */
+	errno = saved_errno;
+}
+
+static const char * getErrString(int jers_error) {
+	if (jers_error < 0 || jers_error > JERS_ERR_UNKNOWN)
+		return "Invalid jers_errno provided";
+
+	return jers_err_string ? jers_err_string : getErrMsg(jers_error);
+}
+
 static int customInit(char * custom_config) {
 	
 	return 0;
@@ -71,7 +95,7 @@ static int defaultInit(void) {
 	return 0;
 }
 
-int jersInitAPI(char * custom_config) {
+JERS_EXPORT int jersInitAPI(char * custom_config) {
 	int rc = 0;
 
 	/* We can be reinitalised by providing a config argument */
@@ -104,7 +128,7 @@ int jersInitAPI(char * custom_config) {
 	return rc;
 }
 
-void jersFinish(void) {
+JERS_EXPORT void jersFinish(void) {
 	close(fd);
 	free_message(&msg);
 	respReadFree(&msg.reader);
@@ -252,19 +276,19 @@ static int readResponse(void) {
 	return 0;
 }
 
-const char * jersGetErrStr(int jers_error) {
+JERS_EXPORT const char * jersGetErrStr(int jers_error) {
 	return getErrString(jers_error);
 }
 
-const char * jersGetPendStr(int pend_reason) {
+JERS_EXPORT const char * jersGetPendStr(int pend_reason) {
 	return getPendString(pend_reason);
 }
 
-const char * jersGetFailStr(int fail_reason) {
+JERS_EXPORT const char * jersGetFailStr(int fail_reason) {
 	return getFailString(fail_reason);
 }
 
-void jersFreeJobInfo (jersJobInfo * info) {
+JERS_EXPORT void jersFreeJobInfo (jersJobInfo * info) {
 	int64_t i, j;
 
 	for (i = 0; i < info->count; i++) {
@@ -299,7 +323,7 @@ void jersFreeJobInfo (jersJobInfo * info) {
 	free(info->jobs);
 }
 
-int deserialize_jersQueue(msg_item * item, jersQueue *q) {
+static int deserialize_jersQueue(msg_item * item, jersQueue *q) {
 	int i;
 
 	for (i = 0; i < item->field_count; i++) {
@@ -326,7 +350,7 @@ int deserialize_jersQueue(msg_item * item, jersQueue *q) {
 	return 0;
 }
 
-int deserialize_jersResource(msg_item * item, jersResource *r) {
+static int deserialize_jersResource(msg_item * item, jersResource *r) {
 	int i;
 
 	for (i = 0; i < item->field_count; i++) {
@@ -342,7 +366,7 @@ int deserialize_jersResource(msg_item * item, jersResource *r) {
 	return 0;
 }
 
-int deserialize_jersJob(msg_item * item, jersJob *j) {
+static int deserialize_jersJob(msg_item * item, jersJob *j) {
 	int i;
 
 	for (i = 0; i < item->field_count; i++) {
@@ -381,7 +405,7 @@ int deserialize_jersJob(msg_item * item, jersJob *j) {
 	return 0;
 }
 
-int jersGetJob(jobid_t jobid, jersJobFilter * filter, jersJobInfo * job_info) {
+JERS_EXPORT int jersGetJob(jobid_t jobid, jersJobFilter * filter, jersJobInfo * job_info) {
 	if (jersInitAPI(NULL))
 		return 1;
 
@@ -445,7 +469,7 @@ int jersGetJob(jobid_t jobid, jersJobFilter * filter, jersJobInfo * job_info) {
 }
 
 
-int jersDelJob(jobid_t jobid) {
+JERS_EXPORT int jersDelJob(jobid_t jobid) {
 	if (jersInitAPI(NULL))
 		return 1;
 
@@ -466,13 +490,13 @@ int jersDelJob(jobid_t jobid) {
 	return 0;
 }
 
-void jersInitJobAdd(jersJobAdd * j) {
+JERS_EXPORT void jersInitJobAdd(jersJobAdd * j) {
 	memset(j, 0, sizeof(jersJobAdd));
 	j->priority = -1;
 	j->defer_time = -1;
 }
 
-jobid_t jersAddJob(jersJobAdd * j) {
+JERS_EXPORT jobid_t jersAddJob(jersJobAdd * j) {
 	jobid_t new_jobid = 0;
 
 	if (jersInitAPI(NULL))
@@ -580,7 +604,7 @@ jobid_t jersAddJob(jersJobAdd * j) {
 	return new_jobid;
 }
 
-void jersInitJobMod(jersJobMod *j) {
+JERS_EXPORT void jersInitJobMod(jersJobMod *j) {
 	memset(j, 0, sizeof(jersJobMod));
 	j->nice = -1;
 	j->hold = -1;
@@ -588,7 +612,7 @@ void jersInitJobMod(jersJobMod *j) {
 	j->defer_time = -1;
 }
 
-int jersModJob(jersJobMod *j) {
+JERS_EXPORT int jersModJob(jersJobMod *j) {
 	if (jersInitAPI(NULL))
 		return 1;
 
@@ -644,7 +668,7 @@ int jersModJob(jersJobMod *j) {
 	return 0;
 }
 
-int jersSignalJob(jobid_t id, int signum) {
+JERS_EXPORT int jersSignalJob(jobid_t id, int signum) {
 	int status = 1;
 
 	if (jersInitAPI(NULL))
@@ -683,7 +707,7 @@ int jersSignalJob(jobid_t id, int signum) {
 }
 
 
-void jersInitQueueMod(jersQueueMod *q) {
+JERS_EXPORT void jersInitQueueMod(jersQueueMod *q) {
 	q->name = NULL;
 	q->desc = NULL;
 	q->node = NULL;
@@ -692,7 +716,7 @@ void jersInitQueueMod(jersQueueMod *q) {
 	q->priority = -1;
 }
 
-void jersInitQueueAdd(jersQueueAdd *q) {
+JERS_EXPORT void jersInitQueueAdd(jersQueueAdd *q) {
 	q->name = NULL;
 	q->desc = NULL;
 	q->node = NULL;
@@ -703,7 +727,7 @@ void jersInitQueueAdd(jersQueueAdd *q) {
 
 /* Note: filter is currently not used for queues */
 
-int jersGetQueue(char * name, jersQueueFilter * filter, jersQueueInfo * info) {
+JERS_EXPORT int jersGetQueue(char * name, jersQueueFilter * filter, jersQueueInfo * info) {
 	if (jersInitAPI(NULL)) 
 		return 0;
 
@@ -740,7 +764,7 @@ int jersGetQueue(char * name, jersQueueFilter * filter, jersQueueInfo * info) {
 	return 0;
 }
 
-void jersFreeQueueInfo(jersQueueInfo * info) {
+JERS_EXPORT void jersFreeQueueInfo(jersQueueInfo * info) {
 	int i;
 
 	for (i = 0; i < info->count; i++) {
@@ -755,7 +779,7 @@ void jersFreeQueueInfo(jersQueueInfo * info) {
 	return;
 }
 
-int jersAddQueue(jersQueueAdd *q) {
+JERS_EXPORT int jersAddQueue(jersQueueAdd *q) {
 
 	if (jersInitAPI(NULL))
 		return 1;
@@ -803,7 +827,7 @@ int jersAddQueue(jersQueueAdd *q) {
 	return 0;
 }
 
-int jersModQueue(jersQueueMod *q) {
+JERS_EXPORT int jersModQueue(jersQueueMod *q) {
 	if (jersInitAPI(NULL))
 		return 1;
 
@@ -852,7 +876,7 @@ int jersModQueue(jersQueueMod *q) {
 	return 0;
 }
 
-int jersDelQueue(char *name) {
+JERS_EXPORT int jersDelQueue(char *name) {
 	if (jersInitAPI(NULL))
 		return 1;
 
@@ -873,7 +897,7 @@ int jersDelQueue(char *name) {
 	return 0;
 }
 
-int jersAddResource(char *name, int count) {
+JERS_EXPORT int jersAddResource(char *name, int count) {
 	if (jersInitAPI(NULL))
 		return 1;
 
@@ -901,7 +925,7 @@ int jersAddResource(char *name, int count) {
 
 	return 0;
 }
-int jersGetResource(char * name, jersResourceFilter *filter, jersResourceInfo *info) {
+JERS_EXPORT int jersGetResource(char * name, jersResourceFilter *filter, jersResourceInfo *info) {
 	if (jersInitAPI(NULL))
 		return 1;
 
@@ -938,11 +962,11 @@ int jersGetResource(char * name, jersResourceFilter *filter, jersResourceInfo *i
 	return 0;
 }
 
-int jersModResource(char *name, int new_count) {
+JERS_EXPORT int jersModResource(char *name, int new_count) {
 	return 0;
 }
 
-int jersDelResource(char *name) {
+JERS_EXPORT int jersDelResource(char *name) {
 	if (jersInitAPI(NULL))
 		return 1;
 
@@ -963,7 +987,7 @@ int jersDelResource(char *name) {
 	return 0;
 }
 
-void jersFreeResourceInfo(jersResourceInfo *info) {
+JERS_EXPORT void jersFreeResourceInfo(jersResourceInfo *info) {
 	for (int i = 0; i < info->count; i++) {
 		jersResource * res = &info->resources[i];
 
@@ -974,7 +998,7 @@ void jersFreeResourceInfo(jersResourceInfo *info) {
 	return;
 }
 
-int jersGetStats(jersStats * s) {
+JERS_EXPORT int jersGetStats(jersStats * s) {
 	int i;
 
 	if (jersInitAPI(NULL))
@@ -1021,7 +1045,7 @@ int jersGetStats(jersStats * s) {
 	return 0;
 }
 
-int jersSetTag(jobid_t id, char * key, char * value) {
+JERS_EXPORT int jersSetTag(jobid_t id, char * key, char * value) {
 	if (jersInitAPI(NULL))
 		return 1;
 
@@ -1046,7 +1070,7 @@ int jersSetTag(jobid_t id, char * key, char * value) {
 	return 0;
 }
 
-int jersDelTag(jobid_t id, char * key) {
+JERS_EXPORT int jersDelTag(jobid_t id, char * key) {
 	if (jersInitAPI(NULL))
 		return 1;
 

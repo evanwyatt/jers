@@ -39,7 +39,7 @@ typedef uint32_t jobid_t;
 
 #define JERS_MAJOR 0
 #define JERS_MINOR 1
-#define JERS_PATCH 2
+#define JERS_PATCH 5
 
 #define JERS_RES_NAME_MAX 64
 #define JERS_TAG_MAX 64
@@ -107,6 +107,8 @@ typedef uint32_t jobid_t;
 #define JERS_RET_NODE       0x100000
 #define JERS_RET_SUBMITTER  0x200000
 #define JERS_RET_PID        0x400000
+
+#define JERS_RET_ALL        0x7FFFFFFFFFFFFFFF
 
 extern int jers_errno;
 

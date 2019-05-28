@@ -34,11 +34,6 @@
 
 #include "server.h"
 
-int jers_errno = JERS_ERR_OK;
-char * jers_err_string = NULL;
-
-void set_jers_errno();
-
 struct jers_err {
 	char * name;
 	char * msg;
@@ -96,20 +91,6 @@ const char * jers_fail_reasons[] = {
 	"Unknown reason"
 };
 
-void setJersErrno(int err, char * msg) {
-	int saved_errno = errno;
-	jers_errno = err;
-	
-	free(jers_err_string);
-	jers_err_string = NULL;
-
-	if (msg)
-		jers_err_string = strdup(msg);
-
-	/* Set errno back to what it was before this routine was called */
-	errno = saved_errno;
-}
-
 /* Translate the error string into the errno */
 int lookup_jers_errno(const char * str) {
 	static int err_count = sizeof(jers_errors) / sizeof(struct jers_err);
@@ -140,11 +121,11 @@ int getJersErrno(const char * error_string, char ** error_message) {
 	return lookup_jers_errno(error_type);
 }
 
-const char * getErrString(int jers_error) {
+const char * getErrMsg(int jers_error) {
 	if (jers_error < 0 || jers_error > JERS_ERR_UNKNOWN)
-		return "Invalid jers_errno provided";
+		return jers_errors[JERS_ERR_UNKNOWN].msg;
 
-	return jers_err_string ? jers_err_string : jers_errors[jers_error].msg;
+	return jers_errors[jers_error].msg;
 }
 
 const char * getErrType(int jers_error) {

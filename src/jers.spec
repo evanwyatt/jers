@@ -16,13 +16,14 @@ Source0:	%{name}-%{version}-%{rel}.tar.gz
 BuildRequires: systemd
 Requires:   logrotate
 Requires:   sudo
+Provides:   %{name} = %{version}
 
 %description
 The Job Execution and Resource Scheduler
 
 %package devel
 Summary:	JERS development files
-Requires:	%{name}
+Requires:	%{name} = %{version}
 
 %description devel
 Development files for Job Execution and Resource Scheduler
@@ -33,7 +34,6 @@ Development files for Job Execution and Resource Scheduler
 
 %build
 make %{?_smp_mflags}
-
 
 %install
 rm -rf $RPM_BUILD_ROOT

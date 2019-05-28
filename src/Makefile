@@ -1,4 +1,4 @@
-JERS_CFLAGS=$(CFLAGS) -g -fPIC -pedantic  -Wno-missing-field-initializers -std=c99 -D_GNU_SOURCE #-Wall -W
+JERS_CFLAGS=$(CFLAGS) -g -fPIC -pedantic  -Wno-missing-field-initializers -std=c99 -D_GNU_SOURCE -fvisibility=hidden #-Wall -W
 JERS_LDFLAGS=$(LD_FLAGS) -rdynamic
 
 INC=-I./ -I ../deps/
