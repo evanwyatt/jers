@@ -8,6 +8,7 @@ Wants=network-online.target
 [Service]
 ExecStart=/usr/bin/jers_agentd --daemon
 ExecReload=/bin/kill -HUP $MAINPID
+KillMode=process
 
 RestartSec=5s
 Restart=on-success
