@@ -384,11 +384,6 @@ int command_add_job(client * c, void * args) {
 
 	/* Have they requested a particular jobid? */
 	if (s->jobid) {
-		if (server.recovery.in_progress == 0 && c->uid) {
-			sendError(c, JERS_ERR_NOPERM, "Only root can specify a jobid");
-			return -1;
-		}
-
 		j = findJob(s->jobid);
 
 		if (j != NULL) {

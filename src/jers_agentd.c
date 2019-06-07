@@ -384,43 +384,33 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 		 *   are in a forked child.  */
 
 		/* Resize if needed */
-		int to_add = 7 + j->env_count;
+		int to_add = 8 + j->argc + j->env_count;
 
-		if (to_add >= j->u->env_size - j->u->env_count) {
+		if (to_add >= j->u->env_size - j->u->env_count)
 			j->u->users_env = realloc(j->u->users_env, sizeof(char *) * (j->u->env_count + to_add + 1));
-		}
 
 		/* Add the users variables first */
-		for (i = 0; i < j->env_count; i++) {
+		for (i = 0; i < j->env_count; i++)
 			j->u->users_env[j->u->env_count++] = j->envs[i];
-		}
 
 		/* Now our generic job ones */
 		int len;
-		len = asprintf(&j->u->users_env[j->u->env_count],"JERS_JOBID=%d ", j->jobid);
-		j->u->users_env[j->u->env_count++][len-1] = '\0';
+		len = asprintf(&j->u->users_env[j->u->env_count++],"JERS_JOBID=%d", j->jobid);
+		len = asprintf(&j->u->users_env[j->u->env_count++],"JERS_QUEUE=%s", j->queue);
+		len = asprintf(&j->u->users_env[j->u->env_count++],"JERS_JOBNAME=%s", j->name);
+		len = asprintf(&j->u->users_env[j->u->env_count++],"JERS_STDOUT=%s", j->stdout ? j->stdout : "/dev/null");
+		len = asprintf(&j->u->users_env[j->u->env_count++],"JERS_STDERR=%s", j->stderr ? j->stderr : j->stdout ? j->stdout : "/dev/null");
+		len = asprintf(&j->u->users_env[j->u->env_count++],"JERS_ARGC=%d", j->argc);
 
-		len = asprintf(&j->u->users_env[j->u->env_count],"JERS_QUEUE=%s ", j->queue);
-		j->u->users_env[j->u->env_count++][len-1] = '\0';
-
-		len = asprintf(&j->u->users_env[j->u->env_count],"JERS_JOBNAME=%s ", j->name);
-		j->u->users_env[j->u->env_count++][len-1] = '\0';
-
-		len = asprintf(&j->u->users_env[j->u->env_count],"JERS_STDOUT=%s ", j->stdout ? j->stdout : "/dev/null");
-		j->u->users_env[j->u->env_count++][len-1] = '\0';
-
-		len = asprintf(&j->u->users_env[j->u->env_count],"JERS_STDERR=%s ", j->stderr ? j->stderr : j->stdout ? j->stdout : "/dev/null");
-		j->u->users_env[j->u->env_count++][len-1] = '\0';
+		for (i = 0; i < j->argc; i++)
+			len = asprintf(&j->u->users_env[j->u->env_count++],"JERS_ARGV%d=%s", i, j->argv[i]);
 
 		/* A lot of things rely on having TMPDIR set */
-		len = asprintf(&j->u->users_env[j->u->env_count],"TMPDIR=/tmp");
-		j->u->users_env[j->u->env_count++][len-1] = '\0';
-
+		len = asprintf(&j->u->users_env[j->u->env_count++],"TMPDIR=/tmp");
 		j->u->users_env[j->u->env_count] = NULL;
 
-		if (!j->shell) {
+		if (!j->shell)
 			j->shell = j->u->shell;
-		}
 
 		dup2(stdin_fd, STDIN_FILENO);
 		dup2(stdout_fd, STDOUT_FILENO);
