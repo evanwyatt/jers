@@ -439,8 +439,10 @@ int command_add_job(client * c, void * args) {
 	/* Request looks good. Allocate a new job structure and jobid */
 	j = calloc(sizeof(struct job), 1);
 
-	if (j->jobid == 0)
+	if (s->jobid == 0)
 		j->jobid = getNextJobID();
+	else
+		j->jobid = s->jobid;
 
 	/* Fill out the job structure */
 	j->jobname = s->name;
