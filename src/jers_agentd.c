@@ -400,7 +400,7 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 		len = asprintf(&j->u->users_env[j->u->env_count++],"JERS_JOBNAME=%s", j->name);
 		len = asprintf(&j->u->users_env[j->u->env_count++],"JERS_STDOUT=%s", j->stdout ? j->stdout : "/dev/null");
 		len = asprintf(&j->u->users_env[j->u->env_count++],"JERS_STDERR=%s", j->stderr ? j->stderr : j->stdout ? j->stdout : "/dev/null");
-		len = asprintf(&j->u->users_env[j->u->env_count++],"JERS_ARGC=%d", j->argc);
+		len = asprintf(&j->u->users_env[j->u->env_count++],"JERS_ARGC=%ld", j->argc);
 
 		for (i = 0; i < j->argc; i++)
 			len = asprintf(&j->u->users_env[j->u->env_count++],"JERS_ARGV%d=%s", i, j->argv[i]);
