@@ -114,7 +114,6 @@ void flushEvent(void) {
 	flush_journal(0);
 
 	end = getTimeMS();
-	print_msg(JERS_LOG_DEBUG, "state sync event took: %ldms\n", end - start);
 }
 
 void checkJobsEvent(void) {
@@ -131,21 +130,15 @@ void cleanupEvent(void) {
 
 	cleaned += cleanupJobs(server.max_cleanup);
 
-	if (cleaned >= server.max_cleanup) {
-		print_msg(JERS_LOG_DEBUG, "Cleaned %d deleted objects", cleaned);
+	if (cleaned >= server.max_cleanup)
 		return;
-	}
 
 	cleaned += cleanupQueues(server.max_cleanup - cleaned);
 
-	if (cleaned >= server.max_cleanup) {
-		print_msg(JERS_LOG_DEBUG, "Cleaned %d deleted objects", cleaned);
+	if (cleaned >= server.max_cleanup)
 		return;
-	}
 
 	cleanupResources(server.max_cleanup - cleaned);
-
-	print_msg(JERS_LOG_DEBUG, "Cleaned %d deleted objects", cleaned);
 }
 
 void backgroundSaveEvent(void) {

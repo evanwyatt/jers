@@ -36,12 +36,17 @@
 int __comp(const void * a_, const void * b_) {
 	const struct job * a = *((struct job **) a_);
 	const struct job * b = *((struct job **) b_);
+	int32_t r;
 
-	if (a->queue->priority > b->queue->priority)
-		return 1;
+	r = b->queue->priority - a->queue->priority;
 
-	if (a->priority > b->priority)
-		return 1;
+	if (r)
+		return r;
+
+	r = b->priority - a->priority;
+
+	if (r)
+		return r;
 
 	return (a->jobid - b->jobid);
 }
