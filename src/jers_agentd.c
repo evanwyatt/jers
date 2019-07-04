@@ -592,6 +592,24 @@ int send_start(struct runningJob * j) {
 	return 0;
 }
 
+int send_job_initfail(jobid_t jobid, int status) {
+	resp_t r;
+
+	print_msg(JERS_LOG_WARNING, "JOBID %d failed to initialise: %d (%s)", jobid, status, getFailString(status));
+
+	initMessage(&r, AGENT_JOB_COMPLETED, 1);
+
+	respAddMap(&r);
+	addIntField(&r, JOBID, jobid);
+	addIntField(&r, FINISHTIME, time(NULL));
+	addIntField(&r, EXITCODE, status | JERS_EXIT_FAIL);
+	respCloseMap(&r);
+
+	send_msg(&r);
+
+	return 0;
+}
+
 int send_completion(struct runningJob * j) {
 	resp_t r;
 
@@ -763,15 +781,15 @@ void check_children(void) {
 		 * - Anything else indicates it failed to start correctly */
 
 		if (child_status) {
-			int fail_status = 255;
+			int fail_status = JERS_FAIL_UNKNOWN | JERS_EXIT_FAIL;
 
 			if (WIFEXITED(child_status))
-				fail_status = WEXITSTATUS(child_status);
+				fail_status = WEXITSTATUS(child_status) | JERS_EXIT_FAIL;
 			else if (WIFSIGNALED(child_status))
-				fail_status = JERS_FAIL_SIG;
+				fail_status = WTERMSIG(child_status) | JERS_EXIT_SIGNAL;
 
-			fprintf(stderr, "Job %d failed to start: %d\n", j->jobID, fail_status);
-			j->job_completion.exitcode = fail_status | JERS_EXIT_FAIL;
+			print_msg(JERS_LOG_WARNING, "Job %d failed to start: %08x\n", j->jobID, fail_status);
+			j->job_completion.exitcode = fail_status;
 			j->job_completion.finish_time = time(NULL);
 			send_completion(j);
 			continue;
@@ -833,7 +851,7 @@ struct runningJob * spawn_job(struct jersJobSpawn * j, int * fail_status) {
 
 	if (pid == -1) {
 		fprintf(stderr, "FAILED TO FORK(): %s\n", strerror(errno));
-		*fail_status = JERS_FAIL_START;
+		*fail_status = JERS_FAIL_INIT;
 		free(job);
 		return NULL;
 	} else if (pid == 0) {
@@ -897,9 +915,9 @@ void start_command(msg_t * m) {
 	}
 
 	if (status) {
-		// Send start failed message
-		print_msg(JERS_LOG_WARNING, "JOBID %d failed to start: %d (%s)", j.jobid, status, getFailString(status));
-		//TODO - Send error message
+		/* The job failed to initalise, so never forked.
+		 * We need to send a fail message here, as we don't have a child to check later */
+		send_job_initfail(j.jobid, status);
 	}
 
 	free(j.name);
