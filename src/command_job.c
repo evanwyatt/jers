@@ -629,6 +629,7 @@ int command_mod_job(client *c, void *args) {
 	int state = 0;
 	int dirty = 0;
 	int hold = 0;
+	int completed = 0;
 
 	if (mj->jobid == 0) {
 		sendError(c, JERS_ERR_NOJOB, NULL);
@@ -652,9 +653,18 @@ int command_mod_job(client *c, void *args) {
 	state = j->state;
 	hold = (j->state == JERS_JOB_HOLDING);
 
-	if ((j->state == JERS_JOB_COMPLETED || j->state == JERS_JOB_EXITED) && mj->restart != 1) {
-		sendError(c, JERS_ERR_INVARG, "Unable to modify a completed job without restart flag");
-		return 0;
+	if ((j->state == JERS_JOB_COMPLETED || j->state == JERS_JOB_EXITED || j->state == JERS_JOB_UNKNOWN) && mj->restart != 1) {
+		/* If a job is completed, we are allowed to run a subset of 'mod' actions.
+		 * Actions that are not allowed, unless the restart flag is set:
+		 *  - Hold
+		 *  - Defer
+		 */
+		if (mj->defer_time != -1 || mj->hold != -1) {
+			sendError(c, JERS_ERR_INVARG, "Unable to modify a completed job without restart flag");
+			return 0;
+		}
+
+		completed = 1;
 	}
 
 	if (j->state == JERS_JOB_RUNNING || j->internal_state &JERS_FLAG_JOB_STARTED) {
@@ -751,26 +761,30 @@ int command_mod_job(client *c, void *args) {
 	}
 
 	/* Need to clear some fields if this job has previously been completed */
-	if (j->state == JERS_JOB_COMPLETED || j->state == JERS_JOB_EXITED || j->state == JERS_JOB_UNKNOWN) {
-		j->exitcode = 0;
-		j->signal = 0;
-		j->start_time = 0;
-		j->finish_time = 0;
-		j->fail_reason = 0;
+	if (completed) {
+		if (mj->restart == 1) {
+			j->exitcode = 0;
+			j->signal = 0;
+			j->start_time = 0;
+			j->finish_time = 0;
+			j->fail_reason = 0;
 
-		dirty = 1;
+			dirty = 1;
+		}
 	}
 
+	/* Update the state to reflect any changes */
 	if (j->defer_time)
 		state = JERS_JOB_DEFERRED;
 	else if (hold)
 		state = JERS_JOB_HOLDING;
-	else
+	else if (!completed)
 		state = JERS_JOB_PENDING;
 
-	changeJobState(j, state, dirty);
+	if (state != j->state)
+		dirty = 1;
 
-	j->revision++;
+	changeJobState(j, state, dirty);
 
 	return sendClientReturnCode(c, "0");
 }
