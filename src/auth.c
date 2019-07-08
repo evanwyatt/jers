@@ -83,7 +83,7 @@ int validateUserAction(client * c, int required_perm) {
 	c->user = lookup_user(c->uid, 0);
 
 	if (c->user == NULL) {
-		print_msg(JERS_LOG_WARNING, "Failed to find user uid %ld for permissions lookup", c->uid);
+		print_msg(JERS_LOG_WARNING, "Failed to find user uid %d for permissions lookup", c->uid);
 		return 1;
 	}
 

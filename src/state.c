@@ -763,7 +763,7 @@ void stateSaveToDisk(int block) {
 			print_msg(JERS_LOG_WARNING, "Background save: Failed to write marker to journal: %s\n", strerror(errno));
 		}
 
-		print_msg(JERS_LOG_DEBUG, "Background save complete. Jobs:%d Queues:%d Resources:%d",
+		print_msg(JERS_LOG_DEBUG, "Background save complete. Jobs:%ld Queues:%ld Resources:%ld",
 			server.flush_jobs, server.flush_queues, server.flush_resources);
 
 		fdatasync(server.state_fd);
@@ -1062,12 +1062,12 @@ int stateLoadJobs(void) {
 		error_die("Failed to glob() job files from %s : %s\n", pattern, strerror(errno));
 	}
 
-	print_msg(JERS_LOG_INFO, "Loading %d jobs from disk", jobFiles.gl_pathc);
+	print_msg(JERS_LOG_INFO, "Loading %ld jobs from disk", jobFiles.gl_pathc);
 
 	for (i = 0; i < jobFiles.gl_pathc; i++)
 		stateLoadJob(jobFiles.gl_pathv[i]);
 
-	print_msg(JERS_LOG_INFO, "Loaded %d jobs", jobFiles.gl_pathc);
+	print_msg(JERS_LOG_INFO, "Loaded %ld jobs", jobFiles.gl_pathc);
 
 	globfree(&jobFiles);
 	return 0;
@@ -1183,12 +1183,12 @@ int stateLoadQueues(void) {
 		error_die("Failed to glob() queue files from %s : %s\n", pattern, strerror(errno));
 	}
 
-	print_msg(JERS_LOG_INFO, "Loading %d queues from disk", qFiles.gl_pathc);
+	print_msg(JERS_LOG_INFO, "Loading %ld queues from disk", qFiles.gl_pathc);
 
 	for (i = 0; i < qFiles.gl_pathc; i++)
 		stateLoadQueue(qFiles.gl_pathv[i]);
 
-	print_msg(JERS_LOG_INFO, "Loaded %d queues from disk", qFiles.gl_pathc);
+	print_msg(JERS_LOG_INFO, "Loaded %ld queues from disk", qFiles.gl_pathc);
 
 	globfree(&qFiles);
 	return 0;
@@ -1289,12 +1289,12 @@ int stateLoadResources(void) {
 		error_die("Failed to glob() resource files from %s : %s\n", pattern, strerror(errno));
 	}
 
-	print_msg(JERS_LOG_INFO, "Loading %d resources from disk", resFiles.gl_pathc);
+	print_msg(JERS_LOG_INFO, "Loading %ld resources from disk", resFiles.gl_pathc);
 
 	for (i = 0; i < resFiles.gl_pathc; i++)
 		stateLoadRes(resFiles.gl_pathv[i]);
 
-	print_msg(JERS_LOG_INFO, "Loaded %d resources.", resFiles.gl_pathc);
+	print_msg(JERS_LOG_INFO, "Loaded %ld resources.", resFiles.gl_pathc);
 
 	globfree(&resFiles);
 	return 0;

@@ -645,7 +645,7 @@ int command_mod_job(client *c, void *args) {
 
 	if (unlikely(server.recovery.in_progress)) {
 		if (j->revision >= server.recovery.revision) {
-			print_msg(JERS_LOG_DEBUG, "Skipping recovery of job_mod job %ld rev:%ld trans rev:%ld", j->jobid, j->revision, server.recovery.revision);
+			print_msg(JERS_LOG_DEBUG, "Skipping recovery of job_mod job %d rev:%ld trans rev:%ld", j->jobid, j->revision, server.recovery.revision);
 			return 0;
 		}
 	}

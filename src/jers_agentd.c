@@ -996,7 +996,7 @@ void recon_command(msg_t * m) {
 	print_msg(JERS_LOG_INFO, "=== Start Recon ===\n");
 
 	while (j) {
-		print_msg(JERS_LOG_INFO, "JobID: %d PID:%d ExitCode:%d StartTime:%d FinishTime:%d\n", j->jobID, j->pid, j->job_completion.exitcode, j->start_time, j->job_completion.finish_time);
+		print_msg(JERS_LOG_INFO, "JobID: %d PID:%d ExitCode:%d StartTime:%ld FinishTime:%ld\n", j->jobID, j->pid, j->job_completion.exitcode, j->start_time, j->job_completion.finish_time);
 
 		/* Add job to recon message request */
 		respAddMap(&r);

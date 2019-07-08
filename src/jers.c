@@ -119,7 +119,7 @@ int show_filter(int argc, char * argv[]) {
 	printf("-   ID    -     Queue    -        Name          -   State   -\n");
 
 	for (i = 0; i < job_ret.count; i++) {
-		char * state;
+		char * state = "UNKNOWN";
 
 		switch(job_ret.jobs[i].state) {
 			case JERS_JOB_RUNNING:  state = "RUNNING"; break;
