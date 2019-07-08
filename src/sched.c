@@ -107,7 +107,7 @@ void releaseDeferred(void) {
 
 	while (j) {
 		if (j->state == JERS_JOB_DEFERRED && now >= j->defer_time) {
-			changeJobState(j, JERS_JOB_PENDING, 0);
+			changeJobState(j, JERS_JOB_PENDING, NULL, 0);
 			j->defer_time = 0;
 			released++;
 		}

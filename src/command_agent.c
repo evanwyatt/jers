@@ -117,12 +117,12 @@ void command_agent_recon(agent * a, msg_t * msg) {
 		if (finish_time) {
 			j->finish_time = finish_time;
 			j->exitcode = exitcode;
-			changeJobState(j, JERS_JOB_COMPLETED, 1);
+			changeJobState(j, JERS_JOB_COMPLETED, NULL, 1);
 		}
 
 		if (pid) {
 			j->pid = pid;
-			changeJobState(j, JERS_JOB_RUNNING, 0);
+			changeJobState(j, JERS_JOB_RUNNING, NULL, 0);
 		}
 	}
 
@@ -163,7 +163,7 @@ void command_agent_jobstart(agent * a, msg_t * msg) {
 		return;
 	}
 
-	changeJobState(j, JERS_JOB_RUNNING, 0);
+	changeJobState(j, JERS_JOB_RUNNING, NULL, 0);
 
 	j->internal_state &= ~JERS_FLAG_JOB_STARTED;
 	j->pend_reason = 0;
@@ -244,7 +244,7 @@ void command_agent_jobcompleted(agent * a, msg_t * msg) {
 
 	memcpy(&j->usage, &usage, sizeof(struct rusage));
 
-	changeJobState(j, j->exitcode ? JERS_JOB_EXITED : JERS_JOB_COMPLETED, 1);
+	changeJobState(j, j->exitcode ? JERS_JOB_EXITED : JERS_JOB_COMPLETED, NULL, 1);
 
 	if (exitcode)
 		server.stats.total.exited++;

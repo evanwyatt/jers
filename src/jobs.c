@@ -146,7 +146,7 @@ int addJob(struct job * j, int state, int dirty) {
 
 	HASH_ADD_INT(server.jobTable, jobid, j);
 
-	changeJobState(j, state, dirty);
+	changeJobState(j, state, NULL, dirty);
 
 	return 0;
 }

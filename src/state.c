@@ -352,7 +352,7 @@ void stateReplayJournal(void) {
 	for (j = server.jobTable; j; j = j->hh.next) {
 		if (j->state == JERS_JOB_RUNNING || j->internal_state & JERS_FLAG_JOB_STARTED) {
 			j->internal_state &= ~JERS_FLAG_JOB_STARTED;
-			changeJobState(j, JERS_JOB_UNKNOWN, 1);
+			changeJobState(j, JERS_JOB_UNKNOWN, NULL, 1);
 			print_msg(JERS_LOG_WARNING, "Job %d is now unknown", j->jobid);
 		}
 	}
@@ -1305,11 +1305,8 @@ void setJobDirty(struct job * j) {
 	j->dirty = 1;
 }
 
-void changeJobState(struct job * j, int new_state, int dirty) {
-	int old_state = j->state;
-
-	/* Adjust the old state */
-	switch (old_state) {
+static inline void decrement_state(struct job *j) {
+	switch (j->state) {
 		case JERS_JOB_RUNNING:
 			server.stats.jobs.running--;
 			j->queue->stats.running--;
@@ -1345,10 +1342,10 @@ void changeJobState(struct job * j, int new_state, int dirty) {
 			j->queue->stats.unknown--;
 			break;
 	}
+}
 
-	/* And the new state */
-
-	switch (new_state) {
+static inline void increment_state(struct job *j) {
+	switch (j->state) {
 		case JERS_JOB_RUNNING:
 			server.stats.jobs.running++;
 			j->queue->stats.running++;
@@ -1389,8 +1386,20 @@ void changeJobState(struct job * j, int new_state, int dirty) {
 			server.stats.jobs.unknown++;
 			j->queue->stats.unknown++;
 	}
+}
 
-	j->state = new_state;
+void changeJobState(struct job *j, int new_state, struct queue *new_queue, int dirty) {
+	if (j->state != new_state || new_queue != NULL) {
+		/* Update the job state and appropriate counts */
+		decrement_state(j);
+
+		if (new_queue != NULL)
+			j->queue = new_queue;
+
+		j->state = new_state;
+		increment_state(j);
+	}
+
 	j->revision++;
 
 	/* Mark it as dirty */

@@ -694,11 +694,6 @@ int command_mod_job(client *c, void *args) {
 		dirty = 1;
 	}
 
-	if (q) {
-		j->queue = q;
-		dirty = 1;
-	}
-
 	if (mj->priority != -1) {
 		j->priority = mj->priority;
 
@@ -781,10 +776,10 @@ int command_mod_job(client *c, void *args) {
 	else if (!completed)
 		state = JERS_JOB_PENDING;
 
-	if (state != j->state)
+	if (q || state != j->state)
 		dirty = 1;
 
-	changeJobState(j, state, dirty);
+	changeJobState(j, state, q, dirty);
 
 	return sendClientReturnCode(c, "0");
 }
@@ -806,7 +801,7 @@ int command_del_job(client * c, void * args) {
 	}
 
 	j->internal_state |= JERS_FLAG_DELETED;
-	changeJobState(j, 0, 0);
+	changeJobState(j, 0, NULL, 0);
 	server.stats.total.deleted++;
 
 	return sendClientReturnCode(c, "0");

@@ -361,7 +361,7 @@ int stateDelQueue(struct queue * q);
 int stateDelResource(struct resource * r);
 
 void setJobDirty(struct job * j);
-void changeJobState(struct job * j, int new_state, int dirty);
+void changeJobState(struct job * j, int new_state, struct queue *new_queue, int dirty);
 
 int validateUserAction(client * c, int action);
 
