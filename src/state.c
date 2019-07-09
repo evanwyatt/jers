@@ -42,10 +42,13 @@
 #include <sys/uio.h>
 #include <time.h>
 #include <glob.h>
+#include <libgen.h>
 
 #define STATE_DIV_FACTOR 10000
 
 int resourceStringToResource(const char * string, struct jobResource * res);
+void flushDir(char *path);
+void flushStateDirs(void);
 
 /* Functions to save/recover the state to/from disk
  *   The state journals (journal.yymmdd) are written to when commands are received
@@ -79,6 +82,7 @@ int openStateFile(time_t now) {
 	if (lseek(fd, 0, SEEK_END) == -1)
 		error_die("Failed to seek to the end of state file %s: %s", state_file, strerror(errno));
 
+	flushDir(server.state_dir);
 	free(state_file);
 
 	return fd;
@@ -596,6 +600,9 @@ void stateSaveToDiskChild(struct job ** jobs, struct queue ** queues, struct res
 
 	for (i = 0; i < server.flush_jobs; i++)
 		stateSaveJob(jobs[i]);
+
+	/* Flush any directory we might have touched */
+	flushStateDirs();
 }
 
 /* This function is responsible for commiting dirty objects to disk.
@@ -853,6 +860,60 @@ void createDir(char * path) {
 	return;
 }
 
+/* Flush the specified directory */
+void flushDir(char *path) {
+	struct stat buf;
+	char *temp = NULL;
+
+	if (stat(path, &buf) == -1) {
+		print_msg(JERS_LOG_WARNING, "flushDir: Failed to stat() %s: %s", path, strerror(errno));
+		return;
+	}
+
+	/* If this is not a directory, strip off the filename */
+	if (buf.st_mode & S_IFMT != S_IFDIR) {
+		temp = strdup(path);
+		path = dirname(temp);
+	}
+
+	/* Open the directory to get a fd */
+	int fd = open(path, O_RDONLY);
+
+	if (fd < 0) {
+		print_msg(JERS_LOG_WARNING, "flushDir: Failed to open directory %s: %s", path, strerror(errno));
+		return;
+	}
+
+	fdatasync(fd);
+	close(fd);
+
+	if (temp)
+		free(temp);
+}
+
+/* Flush all the state directories */
+void flushStateDirs(void) {
+	char tmp[PATH_MAX];
+	int highest_dir = server.max_jobid / STATE_DIV_FACTOR;
+	int i;
+
+	flushDir(server.state_dir);
+
+	sprintf(tmp, "%s/resources", server.state_dir);
+	flushDir(tmp);
+
+	sprintf(tmp, "%s/queues", server.state_dir);
+	flushDir(tmp);
+
+	int len = sprintf(tmp, "%s/jobs", server.state_dir);
+	flushDir(tmp);
+
+	for (i = 0; i <= highest_dir; i++) {
+		sprintf(tmp + len, "/%d", i);
+		flushDir(tmp);
+	}
+}
+
 /* Initialise the state directories, ensuring all needed directories exist, etc. */
 
 void stateInit(void) {
@@ -867,7 +928,7 @@ void stateInit(void) {
 	int len = sprintf(tmp, "%s/jobs", server.state_dir);
 	createDir(tmp);
 
-	for (i = 0; i < highest_dir; i++) {
+	for (i = 0; i <= highest_dir; i++) {
 		sprintf(tmp + len, "/%d", i);
 		createDir(tmp);
 	}
@@ -880,6 +941,7 @@ void stateInit(void) {
 	sprintf(tmp, "%s/resources", server.state_dir);
 	createDir(tmp);
 
+	flushStateDirs();
 }
 
 /* Read through the current state files converting the commands
