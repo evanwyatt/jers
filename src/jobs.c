@@ -34,29 +34,29 @@
  * 0 is returned if no ids are available */
 
 jobid_t getNextJobID(void) {
-	static jobid_t start_jobid = 0;
+	jobid_t id = server.start_jobid;
 	jobid_t i;
-
-	jobid_t id = start_jobid;
 	struct job * tmp_job = NULL;
 
-	for (i = 0; i < server.highest_jobid; i++) {
-		if (++id >= server.highest_jobid)
+	for (i = 0; i < server.max_jobid; i++) {
+		if (++id > server.max_jobid)
 			id = 1;
 
 		tmp_job = findJob(id);
 
 		if (!tmp_job) {
-			start_jobid = id;
+			server.start_jobid = id;
 			return id;
 		}
 	}
 
 	/* No ids available, try cleaning up some deleted jobs and try again
 	 * - Only try again if we were able to clean up some jobs */
-	print_msg(JERS_LOG_WARNING, "No jobids available. Attemping to cleanup jobs.");
-	if (cleanupJobs(5))
+	print_msg(JERS_LOG_WARNING, "No jobids available.");
+	if (cleanupJobs(5)) {
+		print_msg(JERS_LOG_WARNING, "Attempting to cleanup jobs");
 		return getNextJobID();
+	}
 
 	return 0;
 }

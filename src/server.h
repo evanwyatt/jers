@@ -64,7 +64,7 @@
 #define DEFAULT_CONFIG_SCHEDMAX 250
 #define DEFAULT_CONFIG_MAXJOBS UNLIMITED_JOBS
 #define DEFAULT_CONFIG_MAXCLEAN 50
-#define DEFAULT_CONFIG_HIGHJOBID 9999999
+#define DEFAULT_CONFIG_MAXJOBID 9999999
 #define DEFAULT_CONFIG_SOCKETPATH "/var/run/jers/jers.socket"
 #define DEFAULT_CONFIG_AGENTSOCKETPATH "/var/run/jers/agent.socket"
 #define DEFAULT_CONFIG_FLUSHDEFER 1
@@ -282,7 +282,8 @@ struct jersServer {
 	char slow_logging;		// Write slow commands to a slow log
 	int slow_threshold_ms;	// milliseconds before a cmd is considered slow.
 
-	jobid_t highest_jobid;	// Highest possible jobID
+	jobid_t max_jobid;		// Max jobID possible
+	jobid_t start_jobid;	// Jobid to start allocating from
 
 	int event_fd;
 

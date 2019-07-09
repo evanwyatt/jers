@@ -98,7 +98,7 @@ void loadConfig(char * config) {
 	server.sched_max = DEFAULT_CONFIG_SCHEDMAX;
 	server.max_run_jobs = DEFAULT_CONFIG_MAXJOBS;
 	server.max_cleanup = DEFAULT_CONFIG_MAXCLEAN;
-	server.highest_jobid = DEFAULT_CONFIG_HIGHJOBID;
+	server.max_jobid = DEFAULT_CONFIG_MAXJOBID;
 	server.socket_path = strdup(DEFAULT_CONFIG_SOCKETPATH);
 	server.agent_socket_path = strdup(DEFAULT_CONFIG_AGENTSOCKETPATH);
 
@@ -157,7 +157,7 @@ void loadConfig(char * config) {
 		} else if (strcmp(key, "max_system_jobs") == 0) {
 			server.max_run_jobs = atoi(value);
 		} else if (strcmp(key, "max_jobid") == 0) {
-			server.highest_jobid = atoi(value);
+			server.max_jobid = atoi(value);
 		} else if (strcmp(key, "max_clean_job") == 0) {
 			server.max_cleanup = atoi(value);
 		} else if (strcmp(key, "client_listen_socket") == 0) {

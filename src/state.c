@@ -861,7 +861,7 @@ void stateInit(void) {
 	print_msg(JERS_LOG_DEBUG, "Initialising state directories");
 
 	/* Job dirs first. */
-	int highest_dir = server.highest_jobid / STATE_DIV_FACTOR;
+	int highest_dir = server.max_jobid / STATE_DIV_FACTOR;
 	int i;
 
 	int len = sprintf(tmp, "%s/jobs", server.state_dir);
@@ -1036,6 +1036,9 @@ int stateLoadJob(char * fileName) {
 
 	free(line);
 	fclose(f);
+
+	if (j->jobid > server.start_jobid)
+		server.start_jobid = j->jobid;
 
 	return 0;
 }

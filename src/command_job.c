@@ -444,6 +444,11 @@ int command_add_job(client * c, void * args) {
 	else
 		j->jobid = s->jobid;
 
+	if (j->jobid == 0) {
+		sendError(c, JERS_ERR_NOJOB, "No available Job IDs");
+		return -1;
+	}
+
 	/* Fill out the job structure */
 	j->jobname = s->name;
 	j->queue = q;
