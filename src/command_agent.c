@@ -97,7 +97,7 @@ void command_agent_recon(agent * a, msg_t * msg) {
 			}
 		}
 
-		print_msg(JERS_LOG_INFO, "Recon - JobID:%d StartTime:%ld FinishTime:%ld JobPID:%ld ExitCode:%d", jobid, start_time, finish_time, pid, exitcode);
+		print_msg(JERS_LOG_INFO, "Recon - JobID:%d StartTime:%ld FinishTime:%ld JobPID:%d ExitCode:%d", jobid, start_time, finish_time, pid, exitcode);
 
 		/* Update the details of the job */
 		struct job * j = findJob(jobid);

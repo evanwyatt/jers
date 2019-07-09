@@ -217,7 +217,7 @@ void convertJournalEntry(msg_t * msg, buff_t * message_buffer,char * entry) {
 	server.recovery.jobid = jobid;
 	server.recovery.revision = revision;
 
-	print_msg(JERS_LOG_DEBUG, "Replaying cmd:%s uid:%d time:%d jobid:%d revision:%ld", command, uid, timestamp_s, jobid, revision);
+	print_msg(JERS_LOG_DEBUG, "Replaying cmd:%s uid:%d time:%ld jobid:%d revision:%ld", command, uid, timestamp_s, jobid, revision);
 }
 
 void replayTransaction(char * line) {
@@ -660,7 +660,7 @@ void stateSaveToDisk(int block) {
 			/* Clear our active flush counts  */
 			server.flush_jobs = server.flush_queues = server.flush_resources = 0;
 
-			print_msg(JERS_LOG_DEBUG, "Background save complete. Took %dms\n", now - startTime);
+			print_msg(JERS_LOG_DEBUG, "Background save complete. Took %ldms\n", now - startTime);
 
 			server.flush.pid = 0;
 			startTime = 0;
