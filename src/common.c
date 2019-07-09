@@ -292,6 +292,17 @@ int matches(const char * pattern, const char * string) {
 	}
 }
 
+/* Check whether a name (resource, queue) is valid
+ * A valid name is essentially just a posix 'fully portable filename' ie: A-Z a-z 0-9 . _ - */
+int check_name(char *name) {
+	static char *allowed = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-";
+
+	if (strspn(name, allowed) != strlen(name))
+		return 1;
+
+	return 0;
+}
+
 static int load_users_env(char * username, struct user * u) {
 	int pipefd[2];
 	int status;

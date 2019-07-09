@@ -114,6 +114,11 @@ int command_add_resource(client *c, void *args) {
 		return 1;
 	}
 
+	if (check_name(ra->name)) {
+		sendError(c, JERS_ERR_INVARG, "Invalid resource name");
+		return 1;
+	}
+
 	r = findResource(ra->name);
 
 	if (r != NULL) {

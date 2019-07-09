@@ -123,6 +123,11 @@ int command_add_queue(client * c, void * args) {
 
 	lowercasestring(qa->name);
 
+	if (check_name(qa->name)) {
+		sendError(c, JERS_ERR_INVARG, "Invalid queue name");
+		return 1;
+	}
+
 	q = findQueue(qa->name);
 
 	if (q != NULL) {
