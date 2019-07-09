@@ -602,7 +602,7 @@ int command_get_job(client *c, void * args) {
 						/* Match the tag first */
 						if (strcmp(j->tags[k].key, s->filters.tags[i].key) == 0) {
 							/* Match the value */
-							if (matches(j->tags[k].value, s->filters.tags[i].value) == 0)
+							if (matches(s->filters.tags[i].value, j->tags[k].value) == 0)
 								break;
 						}
 					}
