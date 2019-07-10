@@ -188,5 +188,7 @@ void loadConfig(char * config) {
 		error_die("Failed to load config file: %s\n", strerror(errno));
 	}
 
+	fclose(f);
+
 	return;
 }

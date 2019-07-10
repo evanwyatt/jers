@@ -874,6 +874,7 @@ void flushDir(char *path) {
 
 	if (fstat(fd, &buf) == -1) {
 		print_msg(JERS_LOG_WARNING, "flushDir: Failed to stat() %s: %s", path, strerror(errno));
+		close(fd);
 		return;
 	}
 
