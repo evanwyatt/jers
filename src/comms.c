@@ -195,7 +195,7 @@ void handleClientDisconnect(client * c) {
 /* Accept a new client connection, adding to our existing list of clients and adding it
  * to our event polling */
 
-void handleClientConnection(void) {
+int handleClientConnection(void) {
 	client * c = NULL;
 	int client_fd = -1;
 
@@ -206,7 +206,7 @@ void handleClientConnection(void) {
 			if (errno == EINTR)
 				continue;
 			print_msg(JERS_LOG_INFO, "accept() failed: %s", strerror(errno));
-			return;
+			return 1;
 		}
 
 		break;
@@ -217,7 +217,7 @@ void handleClientConnection(void) {
 	if (fcntl(client_fd, F_SETFL, flags | O_NONBLOCK) != 0) {
 		print_msg(JERS_LOG_WARNING, "failed to set client socket as nonblocking");
 		close(client_fd);
-		return;
+		return 1;
 	}
 
 	c = calloc(sizeof(client), 1);
@@ -235,7 +235,7 @@ void handleClientConnection(void) {
 		print_msg(JERS_LOG_WARNING, "Closing connection to client");
 		close(client_fd);
 		free(c);
-		return;
+		return 1;
 	}
 
 	c->uid = creds.uid;
@@ -252,13 +252,13 @@ void handleClientConnection(void) {
 	if (setReadable(&c->connection) != 0) {
 		print_msg(JERS_LOG_WARNING, "Failed to set client as readable: %s", strerror(errno));
 		handleClientDisconnect(c);
-		return;
+		return 1;
 	}
 
-	return;
+	return 0;
 }
 
-void handleAgentConnection(void) {
+int handleAgentConnection(void) {
 	int agent_fd;
 	agent * a = NULL;
 
@@ -271,7 +271,7 @@ void handleAgentConnection(void) {
 			if (errno == EINTR)
 				continue;
 			print_msg(JERS_LOG_INFO, "accept() failed for agent: %s", strerror(errno));
-			return;
+			return 1;
 		}
 
 		break;
@@ -282,7 +282,7 @@ void handleAgentConnection(void) {
 	if (fcntl(agent_fd, F_SETFL, flags | O_NONBLOCK) != 0) {
 		print_msg(JERS_LOG_WARNING, "failed to set agent socket as nonblocking");
 		close(agent_fd);
-		return;
+		return 1;
 	}
 
 	a = calloc(sizeof(agent), 1);
@@ -303,7 +303,7 @@ void handleAgentConnection(void) {
 
 	print_msg(JERS_LOG_INFO, "New agent connection initalised");
 
-	return;
+	return 0;
 }
 
 /* The agent has disappeared.
@@ -351,7 +351,7 @@ void handleAgentDisconnect(agent * a) {
 }
 
 /* Handle read activity on a agent socket */
-void handleAgentRead(agent * a) {
+int handleAgentRead(agent * a) {
 	int len = 0;
 
 	buffResize(&a->requests, 0);
@@ -360,22 +360,24 @@ void handleAgentRead(agent * a) {
 
 	if (len < 0) {
  		if ((errno == EAGAIN || errno == EWOULDBLOCK))
-			return;
+			return 0;
 
 		print_msg(JERS_LOG_WARNING, "failed to read from agent: %s\n", strerror(errno));
 		handleAgentDisconnect(a);
-		return;
+		return 1;
 	} else if (len == 0) {
 		/* Disconnected */
 		handleAgentDisconnect(a);
-		return;
+		return 1;
 	}
 
 	a->requests.used += len;
+
+	return 0;
 }
 
 /* Handle read activity on a client socket */
-void handleClientRead(client * c) {
+int handleClientRead(client * c) {
 	int len = 0;
 
 	buffResize(&c->request, 0);
@@ -383,21 +385,23 @@ void handleClientRead(client * c) {
 	len = _recv(c->connection.socket, c->request.data + c->request.used, c->request.size - c->request.used);
 	if (len < 0) {
  		if ((errno == EAGAIN || errno == EWOULDBLOCK))
-			return;
+			return 0;
 
 		print_msg(JERS_LOG_WARNING, "failed to read from client: %s\n", strerror(errno));
 		handleClientDisconnect(c);
-		return;
+		return 1;
 	} else if (len == 0) {
 		/* Disconnected */
 		handleClientDisconnect(c);
-		return;
+		return 1;
 	}
 
 	/* Got some data from the client.
 	 * Update the buffer and length in the
 	 * reader, so we can try to parse this request */
 	c->request.used += len;
+
+	return 0;
 }
 
 void handleAgentWrite(agent * a) {
@@ -417,26 +421,28 @@ void handleAgentWrite(agent * a) {
 		setReadable(&a->connection);
 	}
 }
-void handleClientWrite(client * c) {
+int handleClientWrite(client * c) {
 	int len = 0;
 
 	len = _send(c->connection.socket, c->response.data + c->response_sent, c->response.used - c->response_sent);
 
 	if (len == -1) {
 		print_msg(JERS_LOG_WARNING, "send to client failed: %s", strerror(errno));
-		//TODO: free client
-		return;
+		handleClientDisconnect(c);
+		return 1;
 	}
 
 	c->response_sent += len;
 
-	/* If we have sent all out data, remove EPOLLOUT
+	/* If we have sent all our data, remove EPOLLOUT
 	 * from the event. Leave readable on, as we might read another request
 	 * from the client, or process their disconnect */
 	if (c->response_sent == c->response.used) {
 		setReadable(&c->connection);
 		c->response_sent = c->response.used = 0;
 	}
+
+	return 0;
 }
 
 /* A readable event could be a connection from a client/agent,
@@ -444,13 +450,19 @@ void handleClientWrite(client * c) {
 
 void handleReadable(struct epoll_event * e) {
 	struct connectionType * connection = e->data.ptr;
+	int status = 0;
 
 	switch (connection->type) {
-		case CLIENT_CONN: handleClientConnection(); break;
-		case AGENT_CONN:  handleAgentConnection(); break;
-		case CLIENT:      handleClientRead(connection->ptr); break;
-		case AGENT:       handleAgentRead(connection->ptr); break;
+		case CLIENT_CONN: status = handleClientConnection(); break;
+		case AGENT_CONN:  status = handleAgentConnection(); break;
+		case CLIENT:      status = handleClientRead(connection->ptr); break;
+		case AGENT:       status = handleAgentRead(connection->ptr); break;
 		default:          print_msg(JERS_LOG_WARNING, "Unexpected read event - Ignoring"); break;
+	}
+
+	if (status) {
+		/* Disconnected */
+		e->data.ptr = NULL;
 	}
 
 	return;
@@ -460,6 +472,10 @@ void handleReadable(struct epoll_event * e) {
 
 void handleWriteable(struct epoll_event * e) {
 	struct connectionType * connection = e->data.ptr;
+
+	/* Disconnected before handling the write event */
+	if (connection == NULL)
+		return;
 
 	switch (connection->type) {
 		case CLIENT: handleClientWrite(connection->ptr); break;
