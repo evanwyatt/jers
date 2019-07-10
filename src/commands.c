@@ -158,7 +158,7 @@ void runComplexCommand(client * c) {
 		stateSaveCmd(c->uid, c->msg.command, c->msg.reader.msg_cpy, c->msg.jobid, c->msg.revision);
 
 	if (likely(command_to_run->free_func != NULL))
-		command_to_run->free_func(args);
+		command_to_run->free_func(args, status);
 
 	end = getTimeMS();
 
@@ -335,7 +335,7 @@ void replayCommand(msg_t * msg) {
 				error_die("Failed to replay command");
 
 			if (commands[i].free_func)
-				commands[i].free_func(args);
+				commands[i].free_func(args, 0);
 
 			done = 1;
 			break;

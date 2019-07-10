@@ -378,8 +378,6 @@ int command_add_job(client * c, void * args) {
 			sendError(c, JERS_ERR_NOQUEUE, NULL);
 			return -1;
 		}
-
-		free(s->queue);
 	}
 
 	/* Have they requested a particular jobid? */
@@ -749,8 +747,6 @@ int command_mod_job(client *c, void *args) {
 
 		resources = convertResourceStrings(mj->res_count, mj->resources);
 
-		freeStringArray(mj->res_count, &mj->resources);
-
 		if (resources == NULL) {
 			sendError(c, JERS_ERR_NORES, NULL);
 			return -1;
@@ -937,14 +933,29 @@ int command_del_tag(client * c, void * args) {
 	return sendClientReturnCode(c, "0");
 }
 
-void free_add_job(void * args) {
+void free_add_job(void * args, int status) {
 	jersJobAdd * ja = args;
 
+	if (status) {
+		free(ja->name);
+		free(ja->shell);
+		free(ja->stdout);
+		free(ja->stderr);
+		free(ja->wrapper);
+		free(ja->pre_cmd);
+		free(ja->post_cmd);
+
+		freeStringArray(ja->argc, &ja->argv);
+		freeStringArray(ja->env_count, &ja->envs);
+		freeStringMap(ja->tag_count, (key_val_t **)&ja->tags);
+	}
+
+	free(ja->queue);
 	freeStringArray(ja->res_count, &ja->resources);
 	free(ja);
 }
 
-void free_get_job(void * args) {
+void free_get_job(void * args, int status) {
 	jersJobFilter * jf = args;
 
 	free(jf->filters.job_name);
@@ -954,30 +965,42 @@ void free_get_job(void * args) {
 	free(jf);
 }
 
-void free_mod_job(void * args) {
+void free_mod_job(void * args, int status) {
 	jersJobMod * jm = args;
+
+	if (status) {
+		free(jm->name);
+		freeStringArray(jm->env_count, &jm->envs);
+		freeStringMap(jm->tag_count, (key_val_t **)&jm->tags);
+	}
 
 	freeStringArray(jm->res_count, &jm->resources);
 	free(jm->queue);
 	free(jm);
 }
 
-void free_del_job(void * args) {
+void free_del_job(void * args, int status) {
 	jersJobDel * jd = args;
 	free(jd);
 }
 
-void free_sig_job(void * args) {
+void free_sig_job(void * args, int status) {
 	jersJobSig * js = args;
 	free(js);
 }
 
-void free_set_tag(void * args) {
+void free_set_tag(void * args, int status) {
 	jersTagSet * ts = args;
+
+	if (status) {
+		free(ts->key);
+		free(ts->value);
+	}
+
 	free(ts);
 }
 
-void free_del_tag(void * args) {
+void free_del_tag(void * args, int status) {
 	jersTagDel * td = args;
 	free(td->key);
 	free(td);

@@ -43,7 +43,7 @@ typedef struct command {
 	int flags;    // Bitmask of command flags
 	int (*cmd_func)(client * c, void *);
 	void * (*deserialize_func)(msg_t *);
-	void (*free_func)(void *);
+	void (*free_func)(void *, int);
 } command_t;
 
 typedef struct {
@@ -95,24 +95,24 @@ void* deserialize_del_resource(msg_t *);
 void* deserialize_set_tag(msg_t *);
 void* deserialize_del_tag(msg_t *);
 
-void free_add_job(void *);
-void free_get_job(void *);
-void free_mod_job(void *);
-void free_del_job(void *);
-void free_sig_job(void *);
+void free_add_job(void *, int);
+void free_get_job(void *, int);
+void free_mod_job(void *, int);
+void free_del_job(void *, int);
+void free_sig_job(void *, int);
 
-void free_add_queue(void *);
-void free_get_queue(void *);
-void free_mod_queue(void *);
-void free_del_queue(void *);
+void free_add_queue(void *, int);
+void free_get_queue(void *, int);
+void free_mod_queue(void *, int);
+void free_del_queue(void *, int);
 
-void free_add_resource(void *);
-void free_get_resource(void *);
-void free_mod_resource(void *);
-void free_del_resource(void *);
+void free_add_resource(void *, int);
+void free_get_resource(void *, int);
+void free_mod_resource(void *, int);
+void free_del_resource(void *, int);
 
-void free_set_tag(void *);
-void free_del_tag(void *);
+void free_set_tag(void *, int);
+void free_del_tag(void *, int);
 
 /* Magic values */
 

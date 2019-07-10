@@ -261,24 +261,31 @@ int command_del_resource(client *c, void *args) {
 	return sendClientReturnCode(c, "0");
 }
 
-void free_add_resource(void * args) {
+void free_add_resource(void * args, int status) {
 	jersResourceAdd * ra = args;
+
+	if (status) {
+		free(ra->name);
+	}
+
 	free(ra);
 }
 
-void free_get_resource(void * args) {
+void free_get_resource(void * args, int status) {
 	jersResourceFilter * rf = args;
 
 	free(rf->filters.name);
 	free(rf);
 }
 
-void free_mod_resource(void * args) {
+void free_mod_resource(void * args, int status) {
 	jersResourceMod * rm = args;
+
+	free(rm->name);
 	free(rm);
 }
 
-void free_del_resource(void * args) {
+void free_del_resource(void * args, int status) {
 	jersResourceDel * rd = args;
 
 	free(rd->name);

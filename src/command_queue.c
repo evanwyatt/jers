@@ -272,7 +272,13 @@ int command_mod_queue(client *c, void * args) {
 
 	if (qm->desc && (q->desc == NULL || strcmp(q->desc, qm->desc) == 0)) {
 		free(q->desc);
-		q->desc = strdup(qm->desc);
+		q->desc = qm->desc;
+		q->dirty = 1;
+	}
+
+	if (qm->node) {
+		free(q->host);
+		q->host = qm->node;
 		q->dirty = 1;
 	}
 
@@ -335,26 +341,38 @@ int command_del_queue(client *c, void *args) {
 	return sendClientReturnCode(c, "0");
 }
 
-void free_add_queue(void * args) {
+void free_add_queue(void * args, int status) {
 	jersQueueAdd *q = args;
+
+	if (status) {
+		free(q->name);
+		free(q->desc);
+		free(q->node);
+	}
+
 	free(q);
 }
 
-void free_get_queue(void * args) {
+void free_get_queue(void * args, int status) {
 	jersQueueFilter *qf = args;
 
 	free(qf->filters.name);
 	free(qf);
 }
 
-void free_mod_queue(void * args) {
+void free_mod_queue(void * args, int status) {
 	jersQueueMod * qm = args;
 	
+	if (status) {
+		free(qm->desc);
+		free(qm->node);
+	}
+
 	free(qm->name);
 	free(qm);
 }
 
-void free_del_queue(void * args) {
+void free_del_queue(void * args, int status) {
 	jersQueueDel * qd = args;
 	free(qd->name);
 	free(qd);
