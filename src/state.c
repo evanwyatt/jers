@@ -865,7 +865,14 @@ void flushDir(char *path) {
 	struct stat buf;
 	char *temp = NULL;
 
-	if (stat(path, &buf) == -1) {
+	int fd = open(path, O_RDONLY);
+
+	if (fd < 0) {
+		print_msg(JERS_LOG_WARNING, "flushDir: Failed to open %s: %s", path, strerror(errno));
+		return;
+	}
+
+	if (fstat(fd, &buf) == -1) {
 		print_msg(JERS_LOG_WARNING, "flushDir: Failed to stat() %s: %s", path, strerror(errno));
 		return;
 	}
@@ -874,21 +881,22 @@ void flushDir(char *path) {
 	if (buf.st_mode & S_IFMT != S_IFDIR) {
 		temp = strdup(path);
 		path = dirname(temp);
-	}
 
-	/* Open the directory to get a fd */
-	int fd = open(path, O_RDONLY);
+		close(fd);
 
-	if (fd < 0) {
-		print_msg(JERS_LOG_WARNING, "flushDir: Failed to open directory %s: %s", path, strerror(errno));
-		return;
+		fd = open(path, O_RDONLY);
+
+		if (fd < 0) {
+			print_msg(JERS_LOG_WARNING, "flushDir: Failed to open directory %s: %s", path, strerror(errno));
+			free(temp);
+			return;
+		}
 	}
 
 	fdatasync(fd);
 	close(fd);
 
-	if (temp)
-		free(temp);
+	free(temp);
 }
 
 /* Flush all the state directories */

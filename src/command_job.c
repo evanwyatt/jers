@@ -446,6 +446,8 @@ int command_add_job(client * c, void * args) {
 
 	if (j->jobid == 0) {
 		sendError(c, JERS_ERR_NOJOB, "No available Job IDs");
+		free(j);
+		free(resources);
 		return -1;
 	}
 
