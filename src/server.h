@@ -29,12 +29,16 @@
 #ifndef _JERS_SERVER_H
 #define _JERS_SERVER_H
 
+#if defined(__linux__)
+#define _XOPEN_SOURCE 700
+#endif
+
 #include <unistd.h>
 #include <sys/types.h>
 #include <limits.h>
 #include <time.h>
 #include <signal.h>
- #include <sys/resource.h>
+#include <sys/resource.h>
 
 #include <uthash.h>
 
@@ -234,7 +238,7 @@ struct jersServer {
 	int sched_max;
 	int max_run_jobs;
 
-	int max_cleanup; // Maximum deleted objects to cleanup per cycle
+	uint32_t max_cleanup; // Maximum deleted objects to cleanup per cycle
 
 	char * config_file;
 

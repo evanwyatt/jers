@@ -71,7 +71,7 @@ void command_agent_recon(agent * a, msg_t * msg) {
 		time_t finish_time = 0;
 		pid_t pid = 0;
 		int exitcode = 0;
-		struct rusage usage = {0};
+		struct rusage usage = {{0}};
 
 		for (int k = 0; k < msg->items[0].field_count; k++) {
 			switch(msg->items[i].fields[k].number) {
@@ -124,6 +124,9 @@ void command_agent_recon(agent * a, msg_t * msg) {
 			j->pid = pid;
 			changeJobState(j, JERS_JOB_RUNNING, NULL, 0);
 		}
+
+		/* Update the usage info */
+		memcpy(&j->usage, &usage, sizeof(struct rusage));
 	}
 
 	/* Make sure this is committed to disk */
@@ -145,6 +148,8 @@ void command_agent_jobstart(agent * a, msg_t * msg) {
 	pid_t pid = -1;
 	time_t start_time = 0;
 	struct job * j = NULL;
+
+	(void) a;
 
 	for (i = 0; i < msg->items[0].field_count; i++) {
 		switch(msg->items[0].fields[i].number) {
@@ -187,7 +192,9 @@ void command_agent_jobcompleted(agent * a, msg_t * msg) {
 	time_t finish_time = 0;
 	int i;
 	struct job * j = NULL;
-	struct rusage usage = {0};
+	struct rusage usage = {{0}};
+
+	(void) a;
 
 	for (i = 0; i < msg->items[0].field_count; i++) {
 		switch(msg->items[0].fields[i].number) {

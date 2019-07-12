@@ -547,10 +547,12 @@ void handlerSigsegv(int signum, siginfo_t *info, void *context) {
 }
 
 void clearCacheHandler(int signum) {
+	(void) signum;
 	clear_cache = 1;
 }
 
 void hupHandler(int signum) {
+	(void) signum;
 	reopen_logfile = 1;
 }
 

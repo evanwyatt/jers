@@ -105,8 +105,6 @@ void loadConfig(char * config) {
 	server.flush.defer = DEFAULT_CONFIG_FLUSHDEFER;
 	server.flush.defer_ms = DEFAULT_CONFIG_FLUSHDEFERMS;
 
-	server.logging_mode = JERS_LOG_DEBUG;
-
 	while ((len = getline(&line, &line_size, f)) != -1) {
 		line[strcspn(line, "\n")] = '\0';
 
@@ -176,6 +174,20 @@ void loadConfig(char * config) {
 			getGroups(value, &server.permissions.setuid);
 		} else if (strcmp(key, "queue_group") == 0) {
 			getGroups(value, &server.permissions.queue);
+		} else if (strcmp(key, "logging_mode") == 0) {
+			if (strcmp(value, "DEBUG") == 0)
+				server.logging_mode = JERS_LOG_DEBUG;
+			else if (strcmp(value, "INFO") == 0)
+				server.logging_mode = JERS_LOG_INFO;
+			else if (strcmp(value, "WARNING") == 0)
+				server.logging_mode = JERS_LOG_WARNING;
+			else if (strcmp(value, "CRITICAL") == 0)
+				server.logging_mode = JERS_LOG_CRITICAL;
+			else {
+				print_msg(JERS_LOG_WARNING, "Unknown logging mode '%s' specified in config file. Defaulting to 'INFO'", value);
+				server.logging_mode = JERS_LOG_INFO;
+			}
+			
 		} else {
 			print_msg(JERS_LOG_WARNING, "Skipping unknown config key: %s\n", key);
 			continue;

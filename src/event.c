@@ -108,12 +108,7 @@ void checkDeferEvent(void) {
 }
 
 void flushEvent(void) {
-	int64_t start = getTimeMS();
-	int64_t end;
-
 	flush_journal(0);
-
-	end = getTimeMS();
 }
 
 void checkJobsEvent(void) {

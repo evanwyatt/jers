@@ -86,7 +86,7 @@ static const char * getErrString(int jers_error) {
 }
 
 static int customInit(char * custom_config) {
-	
+	(void) custom_config;
 	return 0;
 }
 
@@ -731,6 +731,8 @@ JERS_EXPORT int jersGetQueue(char * name, jersQueueFilter * filter, jersQueueInf
 	if (jersInitAPI(NULL)) 
 		return 0;
 
+	(void) filter;
+
 	info->count = 0;
 	info->queues = NULL;
 
@@ -928,6 +930,8 @@ JERS_EXPORT int jersAddResource(char *name, int count) {
 JERS_EXPORT int jersGetResource(char * name, jersResourceFilter *filter, jersResourceInfo *info) {
 	if (jersInitAPI(NULL))
 		return 1;
+
+	(void) filter;
 
 	info->count = 0;
 	info->resources = NULL;

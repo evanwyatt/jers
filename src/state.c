@@ -89,14 +89,13 @@ int openStateFile(time_t now) {
 }
 
 time_t getRollOver(time_t now) {
-	time_t result;
-	struct tm * tm = localtime(&now);
+	struct tm * _tm = localtime(&now);
 
 	/* Clear out everything but the year/month/day */
-	tm->tm_sec = tm->tm_min = tm->tm_hour = 0;
-	tm->tm_mday++; //mktime will normalize the result. ie. 40 October is changed into 9 November
+	_tm->tm_sec = _tm->tm_min = _tm->tm_hour = 0;
+	_tm->tm_mday++; //mktime will normalize the result. ie. 40 October is changed into 9 November
 
-	return mktime(tm);
+	return mktime(_tm);
 }
 
 /* Function to save the current command to disk (& flush it, if in sync mode)
@@ -117,8 +116,6 @@ time_t getRollOver(time_t now) {
 int stateSaveCmd(uid_t uid, char * cmd, char * msg, jobid_t jobid, int64_t revision) {
 	off_t start_offset;
 	struct timespec now;
-	int64_t i;
-	char name[64];
 	static time_t next_rollover = 0;
 
 	clock_gettime(CLOCK_REALTIME_COARSE, &now);
@@ -192,7 +189,7 @@ void convertJournalEntry(msg_t * msg, buff_t * message_buffer,char * entry) {
 	jobid_t jobid;
 	int64_t revision;
 	int field_count = 0;
-	off_t msg_offset = 0;
+	int msg_offset = 0;
 
 	memset(msg, 0, sizeof(msg_t));
 
@@ -201,7 +198,7 @@ void convertJournalEntry(msg_t * msg, buff_t * message_buffer,char * entry) {
 	if (buffResize(message_buffer, strlen(entry)) != 0)
 		error_die("Failed to allocate memory for journal buffer");
 
-	field_count = sscanf(entry, " %ld.%d\t%d\t%64s\t%d\t%ld\t%n", &timestamp_s, &timestamp_ms, &uid, command, &jobid, &revision, &msg_offset);
+	field_count = sscanf(entry, " %ld.%d\t%d\t%64s\t%u\t%ld\t%n", &timestamp_s, &timestamp_ms, (int *)&uid, command, &jobid, &revision, &msg_offset);
 
 	if (field_count != 6)
 		error_die("Failed to load journal entry. Got %d fields, wanted 6\n", field_count);
@@ -316,9 +313,11 @@ void stateReplayJournal(void) {
 		error_die("Failed to glob() journal files %s : %s\n", pattern, strerror(errno));
 	}
 
-	for (i = journalGlob.gl_pathc - 1; i >= 0 ; i--) {
-		if ((offset = checkForLastCommit(journalGlob.gl_pathv[i])) >= 0)
-			break;
+	if (journalGlob.gl_pathc) {
+		for (i = journalGlob.gl_pathc - 1; i >= 0 ; i--) {
+			if ((offset = checkForLastCommit(journalGlob.gl_pathv[i])) >= 0)
+				break;
+		}
 	}
 
 	/* If we didn't find any offset, we need to replay everything we have */
@@ -792,20 +791,12 @@ void stateSaveToDisk(int block) {
  * 'line' is modified and the pointers returned should not be freed */
 
 int loadKeyValue (char * line, char **key, char ** value, int * index) {
-	char * comment = NULL;
 	char * l_key = NULL;
 	char * l_value = NULL;
 	char * temp;
 
 	/* Remove a trailing newline if present */
 	line[strcspn(line, "\n")] = '\0';
-
-	///* Remove any '#' comments from the line */
-	//if ((comment = strchr(line, '#'))) {
-	//	*comment = '\0';
-	//}
-
-	//removeWhitespace(line);
 
 	if (!*line) {
 		/* Empty line*/
@@ -879,7 +870,7 @@ void flushDir(char *path) {
 	}
 
 	/* If this is not a directory, strip off the filename */
-	if (buf.st_mode & S_IFMT != S_IFDIR) {
+	if ((buf.st_mode &S_IFMT) != S_IFDIR) {
 		temp = strdup(path);
 		path = dirname(temp);
 

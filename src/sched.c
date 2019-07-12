@@ -53,7 +53,6 @@ int __comp(const void * a_, const void * b_) {
 
 void sendStartCmd(struct job * j) {
 	resp_t r;
-	size_t length;
 
 	print_msg(JERS_LOG_INFO, "Sending start message for JobID:%-7d Queue:%s QueuePriority:%d Priority:%d", j->jobid, j->queue->name, j->queue->priority, j->priority);
 
