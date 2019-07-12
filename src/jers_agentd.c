@@ -27,6 +27,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#if defined(__linux__)
+#define _XOPEN_SOURCE 700
+#endif
+
+#define UNUSED(x) (void)(x)
+
 #include <stdio.h>
 #include <unistd.h>
 #include <time.h>
@@ -373,6 +379,9 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 	}
 
 	if (jobPid == 0) {
+		int k = 0;
+		char * argv[j->argc + 3];
+
 		setsid();
 
 		if (j->nice)
@@ -394,19 +403,19 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 			j->u->users_env[j->u->env_count++] = j->envs[i];
 
 		/* Now our generic job ones */
-		int len;
-		len = asprintf(&j->u->users_env[j->u->env_count++],"JERS_JOBID=%d", j->jobid);
-		len = asprintf(&j->u->users_env[j->u->env_count++],"JERS_QUEUE=%s", j->queue);
-		len = asprintf(&j->u->users_env[j->u->env_count++],"JERS_JOBNAME=%s", j->name);
-		len = asprintf(&j->u->users_env[j->u->env_count++],"JERS_STDOUT=%s", j->stdout ? j->stdout : "/dev/null");
-		len = asprintf(&j->u->users_env[j->u->env_count++],"JERS_STDERR=%s", j->stderr ? j->stderr : j->stdout ? j->stdout : "/dev/null");
-		len = asprintf(&j->u->users_env[j->u->env_count++],"JERS_ARGC=%ld", j->argc);
+		if (asprintf(&j->u->users_env[j->u->env_count++],"JERS_JOBID=%d", j->jobid) <= 0) goto spawn_exit;
+		if (asprintf(&j->u->users_env[j->u->env_count++],"JERS_QUEUE=%s", j->queue) <= 0) goto spawn_exit;
+		if (asprintf(&j->u->users_env[j->u->env_count++],"JERS_JOBNAME=%s", j->name) <= 0) goto spawn_exit;
+		if (asprintf(&j->u->users_env[j->u->env_count++],"JERS_STDOUT=%s", j->stdout ? j->stdout : "/dev/null") <= 0) goto spawn_exit;
+		if (asprintf(&j->u->users_env[j->u->env_count++],"JERS_STDERR=%s", j->stderr ? j->stderr : j->stdout ? j->stdout : "/dev/null") <= 0) goto spawn_exit;
+		if (asprintf(&j->u->users_env[j->u->env_count++],"JERS_ARGC=%ld", j->argc) <= 0) goto spawn_exit;
 
 		for (i = 0; i < j->argc; i++)
-			len = asprintf(&j->u->users_env[j->u->env_count++],"JERS_ARGV%d=%s", i, j->argv[i]);
+			if (asprintf(&j->u->users_env[j->u->env_count++],"JERS_ARGV%d=%s", i, j->argv[i]) <= 0) goto spawn_exit;
 
 		/* A lot of things rely on having TMPDIR set */
-		len = asprintf(&j->u->users_env[j->u->env_count++],"TMPDIR=/tmp");
+		if (asprintf(&j->u->users_env[j->u->env_count++],"TMPDIR=/tmp") <= 0) goto spawn_exit;
+
 		j->u->users_env[j->u->env_count] = NULL;
 
 		if (!j->shell)
@@ -415,9 +424,6 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 		dup2(stdin_fd, STDIN_FILENO);
 		dup2(stdout_fd, STDOUT_FILENO);
 		dup2(stderr_fd, STDERR_FILENO);
-
-		int k = 0;
-		char * argv[j->argc + 3];
 
 		argv[k++] = j->shell;
 
@@ -437,7 +443,9 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 		execvpe(argv[0], argv, j->u->users_env);
 		perror("execv failed for child");
 		/* Will only get here if something goes horribly wrong with execvpe().*/
+spawn_exit:
 		_exit(JERS_FAIL_START);
+
 	}
 
 	struct jobCompletion job_completion = {0};
@@ -987,6 +995,8 @@ void recon_command(msg_t * m) {
 	resp_t r;
 	struct runningJob * j = agent.jobs;
 
+	UNUSED(m);
+
 	/* The master daemon is requesting a list of all the jobs we have in memory.
 	 * We will remove the jobs in memory only when the master daemon confirms it's processed the recon message */
 
@@ -1041,6 +1051,8 @@ void recon_command(msg_t * m) {
 
 void recon_complete(msg_t * m) {
 	struct runningJob * j = agent.jobs;
+
+	UNUSED(m);
 
 	while (j) {
 		if (j->pid == -1) {
@@ -1133,6 +1145,7 @@ int parseOpts(int argc, char * argv[]) {
 }
 
 void shutdownHandler(int signum) {
+	(void) signum;
 	shutdown_requested = 1;
 }
 

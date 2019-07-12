@@ -813,8 +813,6 @@ int command_del_job(client * c, void * args) {
 int command_sig_job(client * c, void * args) {
 	jersJobSig * js = args;
 	struct job * j = NULL;
-	resp_t r;
-	int rc = 0;
 
 	j = findJob(js->jobid);
 
@@ -958,6 +956,8 @@ void free_add_job(void * args, int status) {
 void free_get_job(void * args, int status) {
 	jersJobFilter * jf = args;
 
+	UNUSED(status);
+
 	free(jf->filters.job_name);
 	free(jf->filters.queue_name);
 	freeStringMap(jf->filters.tag_count, (key_val_t **)&jf->filters.tags);
@@ -981,11 +981,13 @@ void free_mod_job(void * args, int status) {
 
 void free_del_job(void * args, int status) {
 	jersJobDel * jd = args;
+	UNUSED(status);
 	free(jd);
 }
 
 void free_sig_job(void * args, int status) {
 	jersJobSig * js = args;
+	UNUSED(status);
 	free(js);
 }
 
@@ -1002,6 +1004,7 @@ void free_set_tag(void * args, int status) {
 
 void free_del_tag(void * args, int status) {
 	jersTagDel * td = args;
+	UNUSED(status);
 	free(td->key);
 	free(td);
 }
