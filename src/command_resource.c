@@ -140,11 +140,10 @@ int command_add_resource(client *c, void *args) {
 
 	r->name = ra->name;
 	r->count = ra->count;
-	r->revision = 1;
 
 	addRes(r, 1);
 
-	return sendClientReturnCode(c, "0");
+	return sendClientReturnCode(c, &r->obj, "0");
 }
 
 int command_get_resource(client *c, void *args) {
@@ -188,7 +187,7 @@ int command_get_resource(client *c, void *args) {
 		}
 	}
 
-	return sendClientMessage(c, &response);	
+	return sendClientMessage(c, NULL, &response);	
 }
 
 int command_mod_resource(client *c, void *args) {
@@ -208,16 +207,16 @@ int command_mod_resource(client *c, void *args) {
 	}
 
 	if (unlikely(server.recovery.in_progress)) {
-		if (r->revision >= server.recovery.revision) {
-			print_msg(JERS_LOG_DEBUG, "Skipping recovery of resource_mod resource %s rev:%ld trans rev:%ld", r->name, r->revision, server.recovery.revision);
+		if (r->obj.revision >= server.recovery.revision) {
+			print_msg(JERS_LOG_DEBUG, "Skipping recovery of resource_mod resource %s rev:%ld trans rev:%ld", r->name, r->obj.revision, server.recovery.revision);
 			return 0;
 		}
 	}
 
 	r->count = rm->count;
-	r->revision++;
+	updateObject(&r->obj, 1);
 
-	return sendClientReturnCode(c, "0");
+	return sendClientReturnCode(c, &r->obj, "0");
 }
 
 int command_del_resource(client *c, void *args) {
@@ -258,7 +257,7 @@ int command_del_resource(client *c, void *args) {
 	/* Mark it as deleted and dirty. It will be cleaned up later */
 	r->internal_state |= JERS_FLAG_DELETED;
 
-	return sendClientReturnCode(c, "0");
+	return sendClientReturnCode(c, NULL, "0");
 }
 
 void free_add_resource(void * args, int status) {

@@ -158,7 +158,6 @@ int command_add_queue(client * c, void * args) {
 	q->priority = qa->priority != -1 ? qa->priority : JERS_QUEUE_DEFAULT_PRIORITY;
 	q->state = qa->state != -1 ? qa->state : JERS_QUEUE_DEFAULT_STATE;
 	q->agent = NULL;
-	q->revision = 1;
 
 	addQueue(q, qa->default_queue, 1);
 
@@ -179,7 +178,7 @@ int command_add_queue(client * c, void * args) {
 		}
 	}
 
-	return sendClientReturnCode(c, "0");
+	return sendClientReturnCode(c, &q->obj, "0");
 }
 
 void serialize_jersQueue(resp_t * r, struct queue * q) {
@@ -223,7 +222,7 @@ int command_get_queue(client *c, void *args) {
 		respAddArray(&r);
 		serialize_jersQueue(&r, q);
 		respCloseArray(&r);
-		return sendClientMessage(c, &r);
+		return sendClientMessage(c, NULL, &r);
 	}
 
 	initMessage(&r, "RESP", 1);
@@ -244,12 +243,13 @@ int command_get_queue(client *c, void *args) {
 
 	respCloseArray(&r);
 
-	return sendClientMessage(c, &r);
+	return sendClientMessage(c, NULL, &r);
 }
 
 int command_mod_queue(client *c, void * args) {
 	jersQueueMod * qm = args;
 	struct queue * q = NULL;
+	int dirty = 0;
 
 	if (qm->name == NULL) {
 		sendError(c, JERS_ERR_INVARG, "No queue provided");
@@ -264,8 +264,8 @@ int command_mod_queue(client *c, void * args) {
 	}
 
 	if (unlikely(server.recovery.in_progress)) {
-		if (q->revision >= server.recovery.revision) {
-			print_msg(JERS_LOG_DEBUG, "Skipping recovery of queue_mod queue %s rev:%ld trans rev:%ld", q->name, q->revision, server.recovery.revision);
+		if (q->obj.revision >= server.recovery.revision) {
+			print_msg(JERS_LOG_DEBUG, "Skipping recovery of queue_mod queue %s rev:%ld trans rev:%ld", q->name, q->obj.revision, server.recovery.revision);
 			return 0;
 		}
 	}
@@ -273,34 +273,33 @@ int command_mod_queue(client *c, void * args) {
 	if (qm->desc && (q->desc == NULL || strcmp(q->desc, qm->desc) == 0)) {
 		free(q->desc);
 		q->desc = qm->desc;
-		q->dirty = 1;
+		dirty = 1;
 	}
 
 	if (qm->node) {
 		free(q->host);
 		q->host = qm->node;
-		q->dirty = 1;
+		dirty = 1;
 	}
 
 	if (qm->state != -1 && q->state != qm->state) {
 		q->state = qm->state;
-		q->dirty = 1;
+		dirty = 1;
 	}
 
 	if (qm->job_limit != -1 && q->job_limit != qm->job_limit) {
 		q->job_limit = qm->job_limit;
-		q->dirty = 1;
+		dirty = 1;
 	}
 
 	if (qm->priority != -1 && q->priority != qm->priority) {
 		q->priority = qm->priority;
-		q->dirty = 1;
+		dirty = 1;
 	}
 
-	server.dirty_queues = 1;
-	q->revision++;
+	updateObject(&q->obj, dirty);
 
-	return sendClientReturnCode(c, "0");
+	return sendClientReturnCode(c, &q->obj, "0");
 }
 
 int command_del_queue(client *c, void *args) {
@@ -338,7 +337,7 @@ int command_del_queue(client *c, void *args) {
 
 	q->internal_state |= JERS_FLAG_DELETED;
 
-	return sendClientReturnCode(c, "0");
+	return sendClientReturnCode(c, NULL, "0");
 }
 
 void free_add_queue(void * args, int status) {

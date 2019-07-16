@@ -392,6 +392,8 @@ int stateSaveJob(struct job * j) {
 		return 1;
 	}
 
+	fprintf(f, "REVISION %ld\n", j->obj.revision);
+
 	fprintf(f, "JOBNAME %s\n", escapeString(j->jobname, NULL));
 	fprintf(f, "QUEUENAME %s\n", escapeString(j->queue->name, NULL));
 	fprintf(f, "SUBMITTIME %ld\n", j->submit_time);
@@ -465,8 +467,6 @@ int stateSaveJob(struct job * j) {
 	if (j->signal)
 		fprintf(f,"SIGNAL %d\n", j->signal);
 
-	fprintf(f, "REVISION %ld\n", j->revision);
-
 	/* Usage */
 	if (j->finish_time) {
 		fprintf(f, "USAGE_UTIME_SEC %ld\n", j->usage.ru_utime.tv_sec);
@@ -513,7 +513,7 @@ int stateSaveQueue(struct queue * q) {
 	fprintf(f, "JOBLIMIT %d\n", q->job_limit);
 	fprintf(f, "PRIORITY %d\n", q->priority);
 	fprintf(f, "HOST %s\n", q->host);
-	fprintf(f, "REVISION %ld\n", q->revision);
+	fprintf(f, "REVISION %ld\n", q->obj.revision);
 
 	if (server.defaultQueue == q)
 		fprintf(f, "DEFAULT 1\n");
@@ -556,7 +556,7 @@ int stateSaveResource(struct resource * r) {
 	}
 
 	fprintf(f, "COUNT %d\n", r->count);
-	fprintf(f, "REVISION %ld\n", r->revision);
+	fprintf(f, "REVISION %ld\n", r->obj.revision);
 
 	fflush(f);
 	fsync(fileno(f));
@@ -700,9 +700,9 @@ void stateSaveToDisk(int block) {
 		dirtyJobs = malloc(sizeof(struct job *) * (HASH_COUNT(server.jobTable) + 1));
 
 		for (j = server.jobTable; j != NULL; j = j->hh.next) {
-			if (j->dirty) {
+			if (j->obj.dirty) {
 				dirtyJobs[i++] = j;
-				j->dirty = 0;
+				j->obj.dirty = 0;
 				j->internal_state |= JERS_FLAG_FLUSHING;
 			}
 		}
@@ -718,9 +718,9 @@ void stateSaveToDisk(int block) {
 		dirtyQueues = malloc(sizeof(struct queue *) * (HASH_COUNT(server.queueTable) + 1));
 
 		for (q = server.queueTable; q != NULL; q = q->hh.next) {
-			if (q->dirty) {
+			if (q->obj.dirty) {
 				dirtyQueues[i++] = q;
-				q->dirty = 0;
+				q->obj.dirty = 0;
 				q->internal_state |= JERS_FLAG_FLUSHING;
 			}
 		}
@@ -736,9 +736,9 @@ void stateSaveToDisk(int block) {
 		dirtyResources = malloc(sizeof(struct resource *) * (HASH_COUNT(server.resTable) + 1));
 
 		for (r = server.resTable; r != NULL; r = r->hh.next) {
-			if (r->dirty) {
+			if (r->obj.dirty) {
 				dirtyResources[i++] = r;
-				r->dirty = 0;
+				r->obj.dirty = 0;
 				r->internal_state |= JERS_FLAG_FLUSHING;
 			}
 		}
@@ -972,6 +972,7 @@ int stateLoadJob(char * fileName) {
 
 	struct job * j = calloc(sizeof(struct job), 1);
 	j->jobid = jobid;
+	j->obj.type = JERS_OBJECT_JOB;
 
 	while((len = getline(&line, &line_size, f)) != -1) {
 
@@ -1057,7 +1058,7 @@ int stateLoadJob(char * fileName) {
 		} else if (strcmp(key, "SIGNAL") == 0) {
 			j->signal = atoi(value);
 		} else if (strcmp(key, "REVISION") == 0) {
-			j->revision = atol(value);
+			j->obj.revision = atol(value);
 		} else if (strcmp(key, "USAGE_UTIME_SEC") == 0) {
 			j->usage.ru_utime.tv_sec = atol(value);
 		} else if (strcmp(key, "USAGE_UTIME_USEC") == 0) {
@@ -1175,6 +1176,7 @@ int stateLoadQueue(char * fileName) {
 	q->job_limit = JERS_QUEUE_DEFAULT_LIMIT;
 	q->priority = JERS_QUEUE_DEFAULT_PRIORITY;
 	q->state = JERS_QUEUE_DEFAULT_STATE;
+	q->obj.type = JERS_OBJECT_QUEUE;
 
 	/* Read the contents and get the details */
 	ssize_t len;
@@ -1199,7 +1201,7 @@ int stateLoadQueue(char * fileName) {
 		} else if (strcasecmp(key, "HOST") == 0) {
 			q->host = strdup(value);
 		} else if (strcmp(key, "REVISION") == 0) {
-			q->revision = atol(value);
+			q->obj.revision = atol(value);
 		} else {
 			print_msg(JERS_LOG_WARNING, "stateLoadQueue: skipping unknown config '%s' for queue %s\n", key, name);
 		}
@@ -1292,6 +1294,7 @@ int stateLoadRes(char * file_name) {
 
 	r = calloc(sizeof(struct resource), 1);
 	r->name = strdup(name);
+	r->obj.type = JERS_OBJECT_RESOURCE;
 
 	/* Read the contents and get the details */
 	ssize_t len;
@@ -1311,7 +1314,7 @@ int stateLoadRes(char * file_name) {
 		if (strcasecmp(key, "COUNT") == 0) {
 			r->count = atoi(value);
 		} else if (strcmp(key, "REVISION") == 0) {
-			r->revision = atol(value);
+			r->obj.revision = atol(value);
 		} else {
 			print_msg(JERS_LOG_WARNING, "stateLoadRes: skipping unknown config '%s' for resource %s\n", key, name);
 		}
@@ -1363,11 +1366,6 @@ int stateLoadResources(void) {
 
 	globfree(&resFiles);
 	return 0;
-}
-
-void setJobDirty(struct job * j) {
-	server.dirty_jobs = 1;
-	j->dirty = 1;
 }
 
 static inline void decrement_state(struct job *j) {
@@ -1465,11 +1463,21 @@ void changeJobState(struct job *j, int new_state, struct queue *new_queue, int d
 		increment_state(j);
 	}
 
-	j->revision++;
+	updateObject(&j->obj, dirty);
+}
 
-	/* Mark it as dirty */
-	if (dirty)
-		setJobDirty(j);
+void updateObject(jers_object * obj, int dirty) {
+	obj->revision++;
+
+	if (dirty) {
+		obj->dirty = 1;
+
+		switch(obj->type) {
+			case JERS_OBJECT_JOB: server.dirty_jobs = 1; break;
+			case JERS_OBJECT_QUEUE: server.dirty_queues = 1; break;
+			case JERS_OBJECT_RESOURCE: server.dirty_resources = 1; break;
+		}
+	}
 }
 
 void flush_journal(int force) {

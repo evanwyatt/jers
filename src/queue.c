@@ -46,11 +46,8 @@ int addQueue(struct queue * q, int def, int dirty) {
 	if (def)
 		server.defaultQueue = q;
 
-	if (dirty) {
-		q->dirty = 1;
-		server.dirty_queues++;
-	}
-
+	q->obj.type = JERS_OBJECT_QUEUE;
+	updateObject(&q->obj, dirty);
 	return 0;
 }
 
@@ -88,7 +85,7 @@ int cleanupQueues(uint32_t max_clean) {
 			continue;
 
 		/* Don't clean up queues flagged dirty or as being flushed */
-		if (q->dirty || q->internal_state &JERS_FLAG_FLUSHING)
+		if (q->obj.dirty || q->internal_state &JERS_FLAG_FLUSHING)
 			continue;
 
 		/* Got a queue to remove */

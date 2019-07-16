@@ -30,8 +30,8 @@
 #include "server.h"
 #include "cmd_defs.h"
 
-int sendClientReturnCode(client * c, const char * ret);
-int sendClientMessage(client * c, resp_t *r);
+int sendClientReturnCode(client *c, jers_object * obj, const char *ret);
+int sendClientMessage(client *c, jers_object *obj, resp_t *r);
 void sendAgentMessage(agent * a, resp_t * r);
 void sendError(client * c, int error, const char * msg);
 

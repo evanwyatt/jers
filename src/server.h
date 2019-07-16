@@ -109,9 +109,22 @@ typedef struct _agent {
 	struct _agent * prev;
 } agent;
 
-struct queue {
-	char *name;
+enum jers_object_type {
+	JERS_OBJECT_JOB = 1,
+	JERS_OBJECT_QUEUE,
+	JERS_OBJECT_RESOURCE
+};
+
+typedef struct _jers_object {
+	int type;
 	int64_t revision;
+	int dirty;
+} jers_object;
+
+struct queue {
+	jers_object obj;
+	char *name;
+
 	char *desc;
 	int job_limit;
 	int state;
@@ -120,20 +133,19 @@ struct queue {
 	char * host;
 	agent * agent;
 
+	int32_t internal_state;
+
 	struct jobStats stats;
 
-	int dirty;
-	int32_t internal_state;
 	UT_hash_handle hh;
 };
 
 struct resource {
+	jers_object obj;
+
 	char *name;
-	int64_t revision;
 	int32_t count;
 	int32_t in_use;
-
-	int dirty;
 	int32_t internal_state;
 
 	UT_hash_handle hh;
@@ -145,8 +157,9 @@ struct jobResource {
 };
 
 struct job {
+	jers_object obj;
+
 	jobid_t jobid;
-	int64_t revision;
 	char * jobname;
 	struct queue * queue;
 
@@ -182,7 +195,6 @@ struct job {
 	struct rusage usage;
 
 	int32_t state;
-	int32_t internal_state;
 
 	int pend_reason;
 	int fail_reason;
@@ -199,7 +211,8 @@ struct job {
 	int res_count;
 	struct jobResource * req_resources;
 
-	int dirty;
+	int32_t internal_state;
+
 	UT_hash_handle hh;
 };
 
@@ -365,8 +378,8 @@ int stateDelJob(struct job * j);
 int stateDelQueue(struct queue * q);
 int stateDelResource(struct resource * r);
 
-void setJobDirty(struct job * j);
 void changeJobState(struct job * j, int new_state, struct queue *new_queue, int dirty);
+void updateObject(jers_object * obj, int dirty);
 
 int validateUserAction(client * c, int action);
 
