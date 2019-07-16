@@ -293,7 +293,7 @@ void stateReplayJournal(void) {
 	print_msg(JERS_LOG_INFO, "Recovering state from journal files");
 
 	int rc = 0;
-	int64_t i;
+	size_t i;
 	glob_t journalGlob;
 	char pattern[PATH_MAX];
 	off_t offset = -1;
@@ -314,8 +314,8 @@ void stateReplayJournal(void) {
 	}
 
 	if (journalGlob.gl_pathc) {
-		for (i = journalGlob.gl_pathc - 1; i >= 0 ; i--) {
-			if ((offset = checkForLastCommit(journalGlob.gl_pathv[i])) >= 0)
+		for (i = journalGlob.gl_pathc; i > 0 ; i--) {
+			if ((offset = checkForLastCommit(journalGlob.gl_pathv[i - 1])) >= 0)
 				break;
 		}
 	}
@@ -323,15 +323,15 @@ void stateReplayJournal(void) {
 	/* If we didn't find any offset, we need to replay everything we have */
 	if (offset == -1) {
 		offset = 0;
-		i = 0;
+		i = 1;
 	}
 
 	/* We know which journal to start from, start replaying */
-	if (i >= 0) {
+	if (i > 0) {
 		server.recovery.in_progress = 1;
 
-		for (; i < journalGlob.gl_pathc; i++) {
-			replayJournal(journalGlob.gl_pathv[i], offset);
+		for (; i <= journalGlob.gl_pathc; i++) {
+			replayJournal(journalGlob.gl_pathv[i - 1], offset);
 			offset = -1;
 		}
 	}

@@ -34,6 +34,8 @@
 
 #include <uthash.h>
 
+#define UNUSED(x) (void)(x)
+
 #ifdef __linux
 #define USE_SETPROCTITLE
 #define INIT_SETPROCTITLE_REPLACEMENT

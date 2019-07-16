@@ -102,6 +102,9 @@ int show_filter(int argc, char * argv[]) {
 	jersJobFilter filter = {0};
 	jersJobInfo job_ret = {0};
 
+	(void)argc;
+	(void)argv;
+
 	filter.filter_fields |= JERS_FILTER_QUEUE;
 	filter.filters.queue_name = "local_queue";
 

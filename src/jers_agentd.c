@@ -31,6 +31,8 @@
 #define _XOPEN_SOURCE 700
 #endif
 
+#define UNUSED(x) (void)(x)
+
 #include <stdio.h>
 #include <unistd.h>
 #include <time.h>
@@ -993,7 +995,7 @@ void recon_command(msg_t * m) {
 	resp_t r;
 	struct runningJob * j = agent.jobs;
 
-	(void) m;
+	UNUSED(m);
 
 	/* The master daemon is requesting a list of all the jobs we have in memory.
 	 * We will remove the jobs in memory only when the master daemon confirms it's processed the recon message */
@@ -1050,7 +1052,7 @@ void recon_command(msg_t * m) {
 void recon_complete(msg_t * m) {
 	struct runningJob * j = agent.jobs;
 
-	(void) m;
+	UNUSED(m);
 
 	while (j) {
 		if (j->pid == -1) {

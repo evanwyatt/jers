@@ -517,6 +517,8 @@ void handlerSigsegv(int signum, siginfo_t *info, void *context) {
 	void * btrace[100];
 	int btrace_size = 0;
 
+	UNUSED(context);
+
 	/* We still use fprintf here, as we are going to crash anyway */
 	fprintf(stderr, "====================================================================\n");
 	fprintf(stderr, " JERS v%d.%d.%d CRASH - Signal '%s' (Signum:%d)\n", JERS_MAJOR, JERS_MINOR, JERS_PATCH, strsignal(signum), signum);

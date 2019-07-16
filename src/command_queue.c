@@ -355,7 +355,7 @@ void free_add_queue(void * args, int status) {
 
 void free_get_queue(void * args, int status) {
 	jersQueueFilter *qf = args;
-	(void) status;
+	UNUSED(status);
 	free(qf->filters.name);
 	free(qf);
 }
@@ -374,7 +374,7 @@ void free_mod_queue(void * args, int status) {
 
 void free_del_queue(void * args, int status) {
 	jersQueueDel * qd = args;
-	(void) status;
+	UNUSED(status);
 	free(qd->name);
 	free(qd);
 }

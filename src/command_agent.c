@@ -149,7 +149,7 @@ void command_agent_jobstart(agent * a, msg_t * msg) {
 	time_t start_time = 0;
 	struct job * j = NULL;
 
-	(void) a;
+	UNUSED(a);
 
 	for (i = 0; i < msg->items[0].field_count; i++) {
 		switch(msg->items[0].fields[i].number) {
@@ -194,7 +194,7 @@ void command_agent_jobcompleted(agent * a, msg_t * msg) {
 	struct job * j = NULL;
 	struct rusage usage = {{0}};
 
-	(void) a;
+	UNUSED(a);
 
 	for (i = 0; i < msg->items[0].field_count; i++) {
 		switch(msg->items[0].fields[i].number) {

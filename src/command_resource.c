@@ -273,21 +273,21 @@ void free_add_resource(void * args, int status) {
 
 void free_get_resource(void * args, int status) {
 	jersResourceFilter * rf = args;
-	(void) status;
+	UNUSED(status);
 	free(rf->filters.name);
 	free(rf);
 }
 
 void free_mod_resource(void * args, int status) {
 	jersResourceMod * rm = args;
-	(void) status;
+	UNUSED(status);
 	free(rm->name);
 	free(rm);
 }
 
 void free_del_resource(void * args, int status) {
 	jersResourceDel * rd = args;
-	(void) status;
+	UNUSED(status);
 	free(rd->name);
 	free(rd);
 }
