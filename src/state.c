@@ -181,7 +181,7 @@ off_t checkForLastCommit(char * journal) {
 
 /* Convert a journal entry into a message that can be used for recovering state */
 
-void convertJournalEntry(msg_t * msg, buff_t * message_buffer,char * entry) {
+void convertJournalEntry(msg_t *msg, buff_t *message_buffer, char *entry) {
 	time_t timestamp_s;
 	int timestamp_ms;
 	uid_t uid;
@@ -200,8 +200,10 @@ void convertJournalEntry(msg_t * msg, buff_t * message_buffer,char * entry) {
 
 	field_count = sscanf(entry, " %ld.%d\t%d\t%64s\t%u\t%ld\t%n", &timestamp_s, &timestamp_ms, (int *)&uid, command, &jobid, &revision, &msg_offset);
 
-	if (field_count != 6)
+	if (field_count != 6) {
+		print_msg(JERS_LOG_CRITICAL, "Failed entry (len:%d): %s", strlen(entry), entry);
 		error_die("Failed to load journal entry. Got %d fields, wanted 6\n", field_count);
+	}
 
 	strcpy(message_buffer->data, entry + msg_offset);
 
@@ -392,6 +394,7 @@ int stateSaveJob(struct job * j) {
 		return 1;
 	}
 
+	fprintf(f, "# SAVETIME %d\n", time(NULL));
 	fprintf(f, "REVISION %ld\n", j->obj.revision);
 
 	fprintf(f, "JOBNAME %s\n", escapeString(j->jobname, NULL));
@@ -509,6 +512,8 @@ int stateSaveQueue(struct queue * q) {
 		return 1;
 	}
 
+	fprintf(f, "# SAVETIME %d\n", time(NULL));
+
 	fprintf(f, "DESC %s\n", q->desc);
 	fprintf(f, "JOBLIMIT %d\n", q->job_limit);
 	fprintf(f, "PRIORITY %d\n", q->priority);
@@ -554,6 +559,8 @@ int stateSaveResource(struct resource * r) {
 		fprintf(stderr, "Failed to open resource file %s : %s\n", filename, strerror(errno));
 		return 1;
 	}
+
+	fprintf(f, "# SAVETIME %d\n", time(NULL));
 
 	fprintf(f, "COUNT %d\n", r->count);
 	fprintf(f, "REVISION %ld\n", r->obj.revision);
