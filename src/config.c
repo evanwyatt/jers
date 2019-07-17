@@ -177,11 +177,11 @@ void loadConfig(char * config) {
 		} else if (strcmp(key, "logging_mode") == 0) {
 			if (strcmp(value, "DEBUG") == 0)
 				server.logging_mode = JERS_LOG_DEBUG;
-			else if (strcmp(value, "INFO") == 0)
+			else if (strcasecmp(value, "INFO") == 0)
 				server.logging_mode = JERS_LOG_INFO;
-			else if (strcmp(value, "WARNING") == 0)
+			else if (strcasecmp(value, "WARNING") == 0)
 				server.logging_mode = JERS_LOG_WARNING;
-			else if (strcmp(value, "CRITICAL") == 0)
+			else if (strcasecmp(value, "CRITICAL") == 0)
 				server.logging_mode = JERS_LOG_CRITICAL;
 			else {
 				print_msg(JERS_LOG_WARNING, "Unknown logging mode '%s' specified in config file. Defaulting to 'INFO'", value);
