@@ -222,9 +222,9 @@ struct gid_array {
 };
 
 struct jersServer {
-	int state_fd;
 	char * state_dir;
 	int state_count;
+	int readonly;
 
 	int daemon;
 
@@ -321,11 +321,16 @@ struct jersServer {
 	} flush;
 
 	struct journal {
+		int fd;
+		off_t len;
+		off_t limit;
+		off_t size;
+		off_t extend_block_size;
 		off_t last_commit;
-		//Will need to save the journal this was for, we might roll over journals?
 	} journal;
 };
 
+#define JOURNAL_EXTEND_DEFAULT 524288 // 512kb
 
 /* The internal_state field is a bitmap of flags */
 #define JERS_FLAG_DELETED  0x0001  // Job has been deleted and will be cleaned up

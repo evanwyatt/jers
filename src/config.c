@@ -89,7 +89,7 @@ void loadConfig(char * config) {
 	}
 
 	/* Populate the defaults before we start parsing the config file */
-	server.state_fd = -1;
+	server.journal.fd = -1;
 	server.state_dir = strdup(DEFAULT_CONFIG_STATEDIR);
 	server.background_save_ms = DEFAULT_CONFIG_BACKGROUNDSAVEMS;
 	server.logging_mode = DEFAULT_CONFIG_LOGGINGMODE;
@@ -101,6 +101,8 @@ void loadConfig(char * config) {
 	server.max_jobid = DEFAULT_CONFIG_MAXJOBID;
 	server.socket_path = strdup(DEFAULT_CONFIG_SOCKETPATH);
 	server.agent_socket_path = strdup(DEFAULT_CONFIG_AGENTSOCKETPATH);
+
+	server.journal.extend_block_size = JOURNAL_EXTEND_DEFAULT;
 
 	server.flush.defer = DEFAULT_CONFIG_FLUSHDEFER;
 	server.flush.defer_ms = DEFAULT_CONFIG_FLUSHDEFERMS;

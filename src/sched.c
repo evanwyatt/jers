@@ -190,6 +190,27 @@ void checkJobs(void) {
 		jobs_to_start = server.max_run_jobs - server.stats.jobs.running;
 	}
 
+	/* If we are in readonly mode, tag all jobs that would have been eligble to run
+	 * with a readonly pend reason */
+
+	if (unlikely(server.readonly)) {
+		for (i = 0; i < server.candidate_pool_jobs; i++) {
+			checked++;
+			j = server.candidate_pool[i];
+
+			if (j == NULL)
+				continue;
+
+			if (j->state != JERS_JOB_PENDING || j->internal_state &JERS_FLAG_JOB_STARTED)
+				continue;
+
+			j->pend_reason = JERS_PEND_READONLY;
+			continue;
+		}
+
+		return;
+	}
+
 	for (i = 0; i < server.candidate_pool_jobs; i++) {
 		checked++;
 		j = server.candidate_pool[i];

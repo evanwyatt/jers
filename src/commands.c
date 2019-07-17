@@ -138,8 +138,17 @@ void runComplexCommand(client * c) {
 
 	if (validateUserAction(c, command_to_run->perm) != 0) {
 		sendError(c, JERS_ERR_NOPERM, NULL);
-		print_msg(JERS_LOG_DEBUG, "User %d not authorized to run %s", c->uid, c->msg.command);
+		print_msg(JERS_LOG_INFO, "User %d not authorized to run %s", c->uid, c->msg.command);
 		return;
+	}
+
+	/* Don't allow update commands when in readonly mode. - Just return an error to the caller */
+	if (unlikely(server.readonly)) {
+		if (command_to_run->flags &CMDFLG_REPLAY) {
+			sendError(c, JERS_ERR_READONLY, NULL);
+			print_msg(JERS_LOG_INFO, "Not running update command %s from user %d - Readonly mode.", c->msg.command, c->uid);
+			return;
+		}
 	}
 
 	if (likely(command_to_run->deserialize_func != NULL)) {
@@ -154,8 +163,9 @@ void runComplexCommand(client * c) {
 	int status = command_to_run->cmd_func(c, args);
 
 	/* Write to the journal if the transaction was an update and successful */
-	if (command_to_run->flags &CMDFLG_REPLAY && status == 0)
+	if (command_to_run->flags &CMDFLG_REPLAY && status == 0) {
 		stateSaveCmd(c->uid, c->msg.command, c->msg.reader.msg_cpy, c->msg.jobid, c->msg.revision);
+	}
 
 	if (likely(command_to_run->free_func != NULL))
 		command_to_run->free_func(args, status);
