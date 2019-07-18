@@ -594,3 +594,62 @@ void setup_handlers(void(*shutdownHandler)(int)) {
 
 	return;
 }
+/* Why isn't this provided somewhere? */
+struct _sig_names {
+	const char *name;
+	const int number;
+};
+
+/* Not all these signal will be defined on every system... Fix when it causes a problem */
+const struct _sig_names sig_names[] = {
+	{"SIGHUP", SIGHUP},
+	{"SIGINT", SIGINT},
+	{"SIGQUIT", SIGQUIT},
+	{"SIGILL", SIGILL},
+	{"SIGTRAP", SIGTRAP},
+	{"SIGABRT", SIGABRT},
+	{"SIGBUS", SIGBUS},
+	{"SIGFPE", SIGFPE},
+	{"SIGKILL", SIGKILL},
+	{"SIGUSR1", SIGUSR1},
+	{"SIGSEGV", SIGSEGV},
+	{"SIGUSR2", SIGUSR2},
+	{"SIGPIPE", SIGPIPE},
+	{"SIGALRM", SIGALRM},
+	{"SIGTERM", SIGTERM},
+	{"SIGSTKFLT", SIGSTKFLT},
+	{"SIGCHLD", SIGCHLD},
+	{"SIGCONT", SIGCONT},
+	{"SIGSTOP", SIGSTOP},
+	{"SIGTSTP", SIGTSTP},
+	{"SIGTTIN", SIGTTIN},
+	{"SIGTTOU", SIGTTOU},
+	{"SIGURG", SIGURG},
+	{"SIGXCPU", SIGXCPU},
+	{"SIGXFSZ", SIGXFSZ},
+	{"SIGVTALRM", SIGVTALRM},
+	{"SIGPROF", SIGPROF},
+	{"SIGWINCH", SIGWINCH},
+	{"SIGIO", SIGIO},
+	{"SIGPWR", SIGPWR},
+	{"SIGSYS", SIGSYS},
+	{NULL, 0}
+};
+
+const char * getSignalName(int signal) {
+	for (int i = 0; sig_names[i].name; i++) {
+		if (sig_names[i].number == signal)
+			return sig_names[i].name;
+	}
+
+	return NULL;
+}
+
+int getSignalNumber(const char *name) {
+	for (int i = 0; sig_names[i].name; i++) {
+		if (strcasecmp(sig_names[i].name, name) == 0)
+			return sig_names[i].number;
+	}
+
+	return -1;
+}

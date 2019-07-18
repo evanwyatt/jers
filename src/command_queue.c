@@ -270,7 +270,7 @@ int command_mod_queue(client *c, void * args) {
 		}
 	}
 
-	if (qm->desc && (q->desc == NULL || strcmp(q->desc, qm->desc) == 0)) {
+	if (qm->desc) {
 		free(q->desc);
 		q->desc = qm->desc;
 		dirty = 1;

@@ -106,5 +106,8 @@ int check_name(char *name);
 struct user * lookup_user(uid_t uid, int load_env);
 void freeUserCache(void);
 
+const char * getSignalName(int signal);
+int getSignalNumber(const char *name);
+
 void setup_handlers(void(*shutdownHandler)(int));
 #endif

@@ -584,7 +584,7 @@ int stateSaveJob(struct job * j) {
 	if (j->tag_count) {
 		fprintf(f, "TAG_COUNT %d\n", j->tag_count);
 		for (i = 0; i < j->tag_count; i++)
-			fprintf(f, "TAG[%d] %s\t%s\n", i, j->tags[i].key, escapeString(j->tags[i].value, NULL));
+			fprintf(f, "TAG[%d] %s\t%s\n", i, j->tags[i].key, j->tags[i].value ? escapeString(j->tags[i].value, NULL) : "");
 	}
 
 	if (j->res_count) {
