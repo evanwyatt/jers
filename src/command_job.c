@@ -378,6 +378,11 @@ int command_add_job(client * c, void * args) {
 			sendError(c, JERS_ERR_NOQUEUE, NULL);
 			return -1;
 		}
+
+		if (!(q->state &JERS_QUEUE_FLAG_OPEN)) {
+			sendError(c, JERS_ERR_INVSTATE, "Queue is closed");
+			return -1;
+		}
 	}
 
 	/* Have they requested a particular jobid? */
