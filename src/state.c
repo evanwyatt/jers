@@ -47,12 +47,98 @@
 #define STATE_DIV_FACTOR 10000
 
 int resourceStringToResource(const char * string, struct jobResource * res);
-void flushDir(char *path);
-void flushStateDirs(void);
+int flushDir(char *path);
+int flushStateDirs(void);
 
 /* Functions to save/recover the state to/from disk
  *   The state journals (journal.yymmdd) are written to when commands are received
  *   These commands are then applied to the job/queue/res files as needed */
+
+static off_t findJournalEnd(int fd) {
+	char data[1024];
+	int len;
+	off_t offset = 0;
+
+	while ((len = read(fd, data,sizeof(data))) > 0) {
+		if (data[len - 1] == 0) {
+			/* This chunk should contain the last record */
+			int i;
+			for (i = 0; i < len && data[i]; i++) {}
+
+			if (i >= len)
+				error_die("Failed to locate end of journal");
+
+			offset += i;
+			break;
+		}
+
+		offset += len;
+	}
+
+	print_msg(JERS_LOG_DEBUG, "Found EOJ at offset %ld", offset);
+	return offset;
+}
+
+/* To ensure we don't run out of space when writing journal entries, space is pre-allocated.
+ *  We ensure we have 2 'extend' blocks at the end of journal:
+ *  One is used for writing new journal entries, the other is reserved for if we 
+ *  go into 'readonly' mode. This second block allows us to write job start/completion messages
+ *  which might have a triggered before readonly mode was activated. */
+
+static int extendJournal(void) {
+	off_t new_size = server.journal.size + server.journal.extend_block_size;
+	ssize_t fill_size = 0;
+	ssize_t written = 0;
+	off_t offset = server.journal.size;
+	static char *data = NULL;
+	static ssize_t data_size = 0;
+
+	if (server.journal.limit == 0)
+		new_size += server.journal.extend_block_size;
+
+	/* Need to actually write something to the journal to get the new space allocated */
+	fill_size = new_size - server.journal.size;
+
+	print_msg(JERS_LOG_DEBUG, "Attempting to add %ld bytes to the journal. New size: %ld", fill_size, new_size);
+
+	if (data_size < fill_size) {
+		data = realloc(data, fill_size);
+		memset(data, 0, fill_size);
+	}
+
+	while (fill_size) {
+		if ((written = pwrite(server.journal.fd, data, fill_size, offset)) == -1) {
+			if (errno == ENOSPC) {
+				/* No space is left on the device, we need to switch into a read only mode */
+				if (server.readonly == 0) {
+					print_msg(JERS_LOG_CRITICAL, "*********************************************");
+					print_msg(JERS_LOG_CRITICAL, "* Failed to extend journal - Device is full *");
+					print_msg(JERS_LOG_CRITICAL, "*        Switching to READONLY mode!        *");
+					print_msg(JERS_LOG_CRITICAL, "*********************************************");
+					server.readonly = 1;
+				}
+
+				return 1;
+			} else if (errno != EINTR) {
+				/* Another error occurred trying to fill in the file */
+				error_die("Failed to extend journal file: %s", strerror(errno));
+			}
+		}
+
+		fill_size -= written;
+		offset += written;
+	}
+
+	if (server.readonly) {
+		print_msg(JERS_LOG_INFO, "Turning off readonly mode - journal extended.");
+		server.readonly = 0;
+	}
+
+	server.journal.size = new_size;
+	server.journal.limit = server.journal.size - server.journal.extend_block_size;
+
+	return 0;
+}
 
 int openStateFile(time_t now) {
 	char * state_file = NULL;
@@ -60,6 +146,7 @@ int openStateFile(time_t now) {
 	int flags = O_CREAT | O_RDWR;
 	int mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP;
 	struct tm * tm = NULL;
+	struct stat buf;
 
 	tm = localtime(&now);
 
@@ -74,17 +161,41 @@ int openStateFile(time_t now) {
 	if (state_file == NULL)
 		error_die("Failed to open new state file: %s", strerror(errno));
 
-	if ((fd = open(state_file, flags, mode)) < 0)
-		error_die("Failed to open state file %s: %s", state_file, strerror(errno));
+	if ((fd = open(state_file, flags | O_EXCL, mode)) < 0) {
+		if (errno != EEXIST)
+			error_die("Failed to open state file %s: %s", state_file, strerror(errno));
+		
+		/* The journal already existed.
+		 * We need to find the end of the last written record. */
+		if ((fd = open(state_file, flags, mode)) < 0)
+			error_die("Failed to open state file %s: %s", state_file, strerror(errno));
 
-	/* Seek to the end of the file to append to it.
-	 * We don't open the file with O_APPEND as we can't do a offset write (pwrite) */
-	if (lseek(fd, 0, SEEK_END) == -1)
-		error_die("Failed to seek to the end of state file %s: %s", state_file, strerror(errno));
+		server.journal.len = findJournalEnd(fd);
 
-	flushDir(server.state_dir);
+		if (lseek(fd, server.journal.len, SEEK_SET) != server.journal.len)
+			error_die("Failed to seek to end of journal %s: %s", state_file, strerror(errno));
+
+		/* Get the size */
+		if (fstat(fd, &buf) != 0)
+			error_die("Failed to stat journal file %s: %s", state_file, strerror(errno));
+
+		server.journal.size = buf.st_size;
+
+		/* Work out the limit of this journal */
+		server.journal.limit = server.journal.size - server.journal.extend_block_size;
+
+		if (server.journal.limit <= 0)
+			server.journal.limit = server.journal.len; // Ensure the next allocation will increase the size
+
+		flushDir(server.state_dir);
+	} else {
+		/* Created a new journal file */
+		server.journal.len = 0;
+		server.journal.size = 0;
+		server.journal.limit = 0;
+	}
+
 	free(state_file);
-
 	return fd;
 }
 
@@ -116,32 +227,67 @@ time_t getRollOver(time_t now) {
 int stateSaveCmd(uid_t uid, char * cmd, char * msg, jobid_t jobid, int64_t revision) {
 	off_t start_offset;
 	struct timespec now;
+	int len = 0;
 	static time_t next_rollover = 0;
+	static char *msg_string = NULL;
+	static int msg_size = 0;
 
 	clock_gettime(CLOCK_REALTIME_COARSE, &now);
 
 	if (now.tv_sec >= next_rollover) {
 		/* Write the End of journal marker and close the current file */
-		if (server.state_fd > 0) {
-			write(server.state_fd, "$\n", 2);
-			fdatasync(server.state_fd);
-			close(server.state_fd);
+		if (server.journal.fd > 0) {
+			write(server.journal.fd, "$\n", 2);
+			fdatasync(server.journal.fd);
+			close(server.journal.fd);
 		}
 
 		/* Work out the next rollover */
 		if ((next_rollover = getRollOver(now.tv_sec)) < 0)
 			error_die("Failed to determine next journal rollover time");
 
-		server.state_fd = openStateFile(now.tv_sec);
+		server.journal.fd = openStateFile(now.tv_sec);
+
+		if (server.journal.size == 0 || server.journal.len >= server.journal.limit) {
+			if (extendJournal())
+				return 1;
+		}
 	}
 
 	/* Save the offset of this new record, so we can write the '*' later if needed */
-	start_offset = lseek(server.state_fd, 0, SEEK_CUR);
+	start_offset = lseek(server.journal.fd, 0, SEEK_CUR);
 
-	dprintf(server.state_fd, " %ld.%03d\t%d\t%s\t%d\t%ld\t%s\n", now.tv_sec, (int)(now.tv_nsec / 1000000), uid, cmd, jobid, revision, msg ? escapeString(msg, NULL):"");
+	/* Expand the msg */
+	while (1) {
+		len = snprintf(msg_string, msg_size, " %ld.%03d\t%d\t%s\t%d\t%ld\t%s\n", now.tv_sec, (int)(now.tv_nsec / 1000000), uid, cmd, jobid, revision, msg ? escapeString(msg, NULL):"");
+
+		if (len < msg_size)
+			break;
+
+		msg_size = len + 64;
+		msg_string = realloc(msg_string, msg_size);
+
+		if (msg_string == NULL)
+			error_die("Failed to allocate memory for journal message: %s", strerror(errno));
+	}
+
+	/* Do we need to extend the journal? */
+	if (server.journal.len + len >= server.journal.limit) {
+		extendJournal();
+		// Even if extendJournal fails, we want to write this message out. 
+	}
+
+	len = write(server.journal.fd, msg_string, len);
+
+	if (len == -1) {
+		print_msg(JERS_LOG_CRITICAL, "Failed to write to journal file: %s", strerror(errno));
+		return 1;
+	}
+
+	server.journal.len += len;
 
 	if (server.flush.defer == 0)
-		fdatasync(server.state_fd);
+		fdatasync(server.journal.fd);
 	else
 		server.flush.dirty++;
 
@@ -181,7 +327,7 @@ off_t checkForLastCommit(char * journal) {
 
 /* Convert a journal entry into a message that can be used for recovering state */
 
-void convertJournalEntry(msg_t * msg, buff_t * message_buffer,char * entry) {
+void convertJournalEntry(msg_t *msg, buff_t *message_buffer, char *entry) {
 	time_t timestamp_s;
 	int timestamp_ms;
 	uid_t uid;
@@ -200,8 +346,10 @@ void convertJournalEntry(msg_t * msg, buff_t * message_buffer,char * entry) {
 
 	field_count = sscanf(entry, " %ld.%d\t%d\t%64s\t%u\t%ld\t%n", &timestamp_s, &timestamp_ms, (int *)&uid, command, &jobid, &revision, &msg_offset);
 
-	if (field_count != 6)
+	if (field_count != 6) {
+		print_msg(JERS_LOG_CRITICAL, "Failed entry (len:%d): %s", strlen(entry), entry);
 		error_die("Failed to load journal entry. Got %d fields, wanted 6\n", field_count);
+	}
 
 	strcpy(message_buffer->data, entry + msg_offset);
 
@@ -230,6 +378,9 @@ void replayTransaction(char * line) {
 
 	/* End of journal marker, nothing to do here */
 	if (line[0] == '$')
+		return;
+
+	if (line[0] == 0)
 		return;
 
 	if (buffNew(&buff, 0) != 0)
@@ -392,6 +543,9 @@ int stateSaveJob(struct job * j) {
 		return 1;
 	}
 
+	fprintf(f, "# SAVETIME %ld\n", time(NULL));
+	fprintf(f, "REVISION %ld\n", j->obj.revision);
+
 	fprintf(f, "JOBNAME %s\n", escapeString(j->jobname, NULL));
 	fprintf(f, "QUEUENAME %s\n", escapeString(j->queue->name, NULL));
 	fprintf(f, "SUBMITTIME %ld\n", j->submit_time);
@@ -465,8 +619,6 @@ int stateSaveJob(struct job * j) {
 	if (j->signal)
 		fprintf(f,"SIGNAL %d\n", j->signal);
 
-	fprintf(f, "REVISION %ld\n", j->revision);
-
 	/* Usage */
 	if (j->finish_time) {
 		fprintf(f, "USAGE_UTIME_SEC %ld\n", j->usage.ru_utime.tv_sec);
@@ -482,8 +634,16 @@ int stateSaveJob(struct job * j) {
 		fprintf(f, "USAGE_NIVCSW %ld\n", j->usage.ru_nivcsw);
 	}
 
-	fflush(f);
-	fsync(fileno(f));
+	if (fflush(f)) {
+		fclose(f);
+		return 1;
+	}
+
+	if (fsync(fileno(f))) {
+		fclose(f);
+		return 1;
+	}
+
 	fclose(f);
 
 	if (rename(new_filename, filename) != 0) {
@@ -509,17 +669,27 @@ int stateSaveQueue(struct queue * q) {
 		return 1;
 	}
 
+	fprintf(f, "# SAVETIME %ld\n", time(NULL));
+
 	fprintf(f, "DESC %s\n", q->desc);
 	fprintf(f, "JOBLIMIT %d\n", q->job_limit);
 	fprintf(f, "PRIORITY %d\n", q->priority);
 	fprintf(f, "HOST %s\n", q->host);
-	fprintf(f, "REVISION %ld\n", q->revision);
+	fprintf(f, "REVISION %ld\n", q->obj.revision);
 
 	if (server.defaultQueue == q)
 		fprintf(f, "DEFAULT 1\n");
 
-	fflush(f);
-	fsync(fileno(f));
+	if (fflush(f)) {
+		fclose(f);
+		return 1;
+	}
+
+	if (fsync(fileno(f))) {
+		fclose(f);
+		return 1;
+	}
+
 	fclose(f);
 
 	if (rename(new_filename, filename) != 0) {
@@ -555,11 +725,21 @@ int stateSaveResource(struct resource * r) {
 		return 1;
 	}
 
-	fprintf(f, "COUNT %d\n", r->count);
-	fprintf(f, "REVISION %ld\n", r->revision);
+	fprintf(f, "# SAVETIME %ld\n", time(NULL));
 
-	fflush(f);
-	fsync(fileno(f));
+	fprintf(f, "COUNT %d\n", r->count);
+	fprintf(f, "REVISION %ld\n", r->obj.revision);
+
+	if (fflush(f)) {
+		fclose(f);
+		return 1;
+	}
+
+	if (fsync(fileno(f))) {
+		fclose(f);
+		return 1;
+	}
+
 	fclose(f);
 
 	if (rename(new_filename, filename) != 0) {
@@ -580,7 +760,7 @@ int stateDelResource(struct resource * r) {
 	return 0;
 }
 
-void stateSaveToDiskChild(struct job ** jobs, struct queue ** queues, struct resource ** resources) {
+int stateSaveToDiskChild(struct job ** jobs, struct queue ** queues, struct resource ** resources) {
 	int64_t i;
 
 	setproctitle("jersd_state_save");
@@ -588,20 +768,29 @@ void stateSaveToDiskChild(struct job ** jobs, struct queue ** queues, struct res
 	print_msg(JERS_LOG_DEBUG, "Background save jobs:%p queues:%p resources:%p", jobs, queues, resources);
 
 	/* Save the queues and resources first, to avoid having to handle
-	 * situations where we might have have to recover jobs that reference
+	 * situations where we might have to recover jobs that reference
 	 * queues and resources that don't exist */
 
-	for (i = 0; i < server.flush_resources; i++)
-		stateSaveResource(resources[i]);
+	for (i = 0; i < server.flush_resources; i++) {
+		if (stateSaveResource(resources[i]))
+			return 1;
+	}
 
-	for (i = 0; i < server.flush_queues; i++)
-		stateSaveQueue(queues[i]);
+	for (i = 0; i < server.flush_queues; i++) {
+		if (stateSaveQueue(queues[i]))
+			return 1;
+	}
 
-	for (i = 0; i < server.flush_jobs; i++)
-		stateSaveJob(jobs[i]);
+	for (i = 0; i < server.flush_jobs; i++) {
+		if (stateSaveJob(jobs[i]))
+			return 1;
+	}
 
 	/* Flush any directory we might have touched */
-	flushStateDirs();
+	if (flushStateDirs())
+		return 1;
+
+	return 0;
 }
 
 /* This function is responsible for commiting dirty objects to disk.
@@ -627,7 +816,7 @@ void stateSaveToDisk(int block) {
 			if (WIFEXITED(rc)) {
 				status = WEXITSTATUS(rc);
 				if (status)
-					error_die("Background save failed. ExitCode:%d", status);
+					print_msg(JERS_LOG_CRITICAL, "Background save failed. ExitCode:%d", status);
 			}
 			else if (WIFSIGNALED(rc)) {
 				signo = WTERMSIG(rc);
@@ -636,37 +825,60 @@ void stateSaveToDisk(int block) {
 				error_die("Background save failed - Unknown reason.");
 			}
 
-			/* Here if the background process finished sucessfully */
-
 			/* Clear the flushing flag on the objects */
 			if (server.flush_jobs) {
 				int64_t i;
 				for (i = 0; i < server.flush_jobs; i++)
 					dirtyJobs[i]->internal_state &= ~JERS_FLAG_FLUSHING;
-
-				free(dirtyJobs);
 			}
 
 			if (server.flush_queues) {
 				int64_t i;
 				for (i = 0; i < server.flush_queues; i++)
 					dirtyQueues[i]->internal_state &= ~JERS_FLAG_FLUSHING;
-
-				free(dirtyQueues);
 			}
 
 			if (server.flush_resources) {
 				int64_t i;
 				for (i = 0; i < server.flush_resources; i++)
 					dirtyResources[i]->internal_state &= ~JERS_FLAG_FLUSHING;
+			}
 
-				free(dirtyResources);
+			/* If the background save failed, set them all back as dirty */
+			if (unlikely(status)) {
+				if (server.flush_jobs) {
+					int64_t i;
+					for (i = 0; i < server.flush_jobs; i++)
+						dirtyJobs[i]->obj.dirty = 1;
+
+					server.dirty_jobs = 1;
+				}
+
+				if (server.flush_queues) {
+					int64_t i;
+					for (i = 0; i < server.flush_queues; i++)
+						dirtyQueues[i]->obj.dirty = 1;
+
+					server.dirty_queues = 1;
+				}
+
+				if (server.flush_resources) {
+					int64_t i;
+					for (i = 0; i < server.flush_resources; i++)
+						dirtyResources[i]->obj.dirty = 1;
+
+					server.dirty_resources = 1;
+				}
 			}
 
 			/* Clear our active flush counts  */
 			server.flush_jobs = server.flush_queues = server.flush_resources = 0;
 
-			print_msg(JERS_LOG_DEBUG, "Background save complete. Took %ldms\n", now - startTime);
+			free(dirtyJobs);
+			free(dirtyQueues);
+			free(dirtyResources);
+
+			print_msg(JERS_LOG_DEBUG, "Background save %s. Took %ldms\n", status ? "FAILED":"complete", now - startTime);
 
 			server.flush.pid = 0;
 			startTime = 0;
@@ -687,6 +899,14 @@ void stateSaveToDisk(int block) {
 	if (server.dirty_jobs == 0 && server.dirty_queues == 0 && server.dirty_resources == 0)
 		return;
 
+	if (server.readonly) {
+		/* Try extending the journal to see if we can get out of readonly mode */
+		if (extendJournal()) {
+			print_msg(JERS_LOG_WARNING, "Skipping background save - READONLY mode");
+			return;
+		}
+	}
+
 	print_msg(JERS_LOG_DEBUG, "Starting background save to disk");
 
 	/* Check for dirty objects - saving the references to flush to disk.
@@ -700,9 +920,9 @@ void stateSaveToDisk(int block) {
 		dirtyJobs = malloc(sizeof(struct job *) * (HASH_COUNT(server.jobTable) + 1));
 
 		for (j = server.jobTable; j != NULL; j = j->hh.next) {
-			if (j->dirty) {
+			if (j->obj.dirty) {
 				dirtyJobs[i++] = j;
-				j->dirty = 0;
+				j->obj.dirty = 0;
 				j->internal_state |= JERS_FLAG_FLUSHING;
 			}
 		}
@@ -718,9 +938,9 @@ void stateSaveToDisk(int block) {
 		dirtyQueues = malloc(sizeof(struct queue *) * (HASH_COUNT(server.queueTable) + 1));
 
 		for (q = server.queueTable; q != NULL; q = q->hh.next) {
-			if (q->dirty) {
+			if (q->obj.dirty) {
 				dirtyQueues[i++] = q;
-				q->dirty = 0;
+				q->obj.dirty = 0;
 				q->internal_state |= JERS_FLAG_FLUSHING;
 			}
 		}
@@ -736,9 +956,9 @@ void stateSaveToDisk(int block) {
 		dirtyResources = malloc(sizeof(struct resource *) * (HASH_COUNT(server.resTable) + 1));
 
 		for (r = server.resTable; r != NULL; r = r->hh.next) {
-			if (r->dirty) {
+			if (r->obj.dirty) {
 				dirtyResources[i++] = r;
-				r->dirty = 0;
+				r->obj.dirty = 0;
 				r->internal_state |= JERS_FLAG_FLUSHING;
 			}
 		}
@@ -758,23 +978,27 @@ void stateSaveToDisk(int block) {
 	}
 
 	if (server.flush.pid == 0) {
-		stateSaveToDiskChild(dirtyJobs, dirtyQueues, dirtyResources);
+		int status = stateSaveToDiskChild(dirtyJobs, dirtyQueues, dirtyResources);
 		free(dirtyJobs);
 		free(dirtyQueues);
 		free(dirtyResources);
 
-		/* Now we need to mark the journal that we commited all those transactions to disk */
-		if (pwrite(server.state_fd, "*", 1, server.journal.last_commit) != 1) {
-			/* This isn't too catastrophic, we might just end up replaying extra transactions if we crash */
-			print_msg(JERS_LOG_WARNING, "Background save: Failed to write marker to journal: %s\n", strerror(errno));
+		if (status == 0) {
+			/* Now we need to mark the journal that we commited all those transactions to disk */
+			if (pwrite(server.journal.fd, "*", 1, server.journal.last_commit) != 1) {
+				/* This isn't too catastrophic, we might just end up replaying extra transactions if we crash */
+				print_msg(JERS_LOG_WARNING, "Background save: Failed to write marker to journal: %s\n", strerror(errno));
+			}
+
+			print_msg(JERS_LOG_DEBUG, "Background save complete. Jobs:%ld Queues:%ld Resources:%ld",
+				server.flush_jobs, server.flush_queues, server.flush_resources);
+
+			fdatasync(server.journal.fd);
+		} else {
+			print_msg(JERS_LOG_WARNING, "Background save: Failed.\n");
 		}
-
-		print_msg(JERS_LOG_DEBUG, "Background save complete. Jobs:%ld Queues:%ld Resources:%ld",
-			server.flush_jobs, server.flush_queues, server.flush_resources);
-
-		fdatasync(server.state_fd);
 		/* We are the forked child, just exit */
-		_exit(0);
+		_exit(status);
 	}
 
 	/* Parent process - All done for now. We'll check on the child later if we aren't told to block */
@@ -852,7 +1076,7 @@ void createDir(char * path) {
 }
 
 /* Flush the specified directory */
-void flushDir(char *path) {
+int flushDir(char *path) {
 	struct stat buf;
 	char *temp = NULL;
 
@@ -860,13 +1084,13 @@ void flushDir(char *path) {
 
 	if (fd < 0) {
 		print_msg(JERS_LOG_WARNING, "flushDir: Failed to open %s: %s", path, strerror(errno));
-		return;
+		return 1;
 	}
 
 	if (fstat(fd, &buf) == -1) {
 		print_msg(JERS_LOG_WARNING, "flushDir: Failed to stat() %s: %s", path, strerror(errno));
 		close(fd);
-		return;
+		return 1;
 	}
 
 	/* If this is not a directory, strip off the filename */
@@ -881,37 +1105,47 @@ void flushDir(char *path) {
 		if (fd < 0) {
 			print_msg(JERS_LOG_WARNING, "flushDir: Failed to open directory %s: %s", path, strerror(errno));
 			free(temp);
-			return;
+			return 1;
 		}
 	}
 
-	fdatasync(fd);
+	if (fdatasync(fd))
+		return 1;
+
 	close(fd);
 
 	free(temp);
+	return 0;
 }
 
 /* Flush all the state directories */
-void flushStateDirs(void) {
+int flushStateDirs(void) {
 	char tmp[PATH_MAX];
 	int highest_dir = server.max_jobid / STATE_DIV_FACTOR;
 	int i;
 
-	flushDir(server.state_dir);
+	if (flushDir(server.state_dir))
+		return 1;
 
 	sprintf(tmp, "%s/resources", server.state_dir);
-	flushDir(tmp);
+	if (flushDir(tmp))
+		return 1;
 
 	sprintf(tmp, "%s/queues", server.state_dir);
-	flushDir(tmp);
+	if (flushDir(tmp))
+		return 1;
 
 	int len = sprintf(tmp, "%s/jobs", server.state_dir);
-	flushDir(tmp);
+	if (flushDir(tmp))
+		return 1;
 
 	for (i = 0; i <= highest_dir; i++) {
 		sprintf(tmp + len, "/%d", i);
-		flushDir(tmp);
+	if (flushDir(tmp))
+		return 1;
 	}
+
+	return 0;
 }
 
 /* Initialise the state directories, ensuring all needed directories exist, etc. */
@@ -972,6 +1206,7 @@ int stateLoadJob(char * fileName) {
 
 	struct job * j = calloc(sizeof(struct job), 1);
 	j->jobid = jobid;
+	j->obj.type = JERS_OBJECT_JOB;
 
 	while((len = getline(&line, &line_size, f)) != -1) {
 
@@ -1057,7 +1292,7 @@ int stateLoadJob(char * fileName) {
 		} else if (strcmp(key, "SIGNAL") == 0) {
 			j->signal = atoi(value);
 		} else if (strcmp(key, "REVISION") == 0) {
-			j->revision = atol(value);
+			j->obj.revision = atol(value);
 		} else if (strcmp(key, "USAGE_UTIME_SEC") == 0) {
 			j->usage.ru_utime.tv_sec = atol(value);
 		} else if (strcmp(key, "USAGE_UTIME_USEC") == 0) {
@@ -1175,6 +1410,7 @@ int stateLoadQueue(char * fileName) {
 	q->job_limit = JERS_QUEUE_DEFAULT_LIMIT;
 	q->priority = JERS_QUEUE_DEFAULT_PRIORITY;
 	q->state = JERS_QUEUE_DEFAULT_STATE;
+	q->obj.type = JERS_OBJECT_QUEUE;
 
 	/* Read the contents and get the details */
 	ssize_t len;
@@ -1199,7 +1435,7 @@ int stateLoadQueue(char * fileName) {
 		} else if (strcasecmp(key, "HOST") == 0) {
 			q->host = strdup(value);
 		} else if (strcmp(key, "REVISION") == 0) {
-			q->revision = atol(value);
+			q->obj.revision = atol(value);
 		} else {
 			print_msg(JERS_LOG_WARNING, "stateLoadQueue: skipping unknown config '%s' for queue %s\n", key, name);
 		}
@@ -1292,6 +1528,7 @@ int stateLoadRes(char * file_name) {
 
 	r = calloc(sizeof(struct resource), 1);
 	r->name = strdup(name);
+	r->obj.type = JERS_OBJECT_RESOURCE;
 
 	/* Read the contents and get the details */
 	ssize_t len;
@@ -1311,7 +1548,7 @@ int stateLoadRes(char * file_name) {
 		if (strcasecmp(key, "COUNT") == 0) {
 			r->count = atoi(value);
 		} else if (strcmp(key, "REVISION") == 0) {
-			r->revision = atol(value);
+			r->obj.revision = atol(value);
 		} else {
 			print_msg(JERS_LOG_WARNING, "stateLoadRes: skipping unknown config '%s' for resource %s\n", key, name);
 		}
@@ -1363,11 +1600,6 @@ int stateLoadResources(void) {
 
 	globfree(&resFiles);
 	return 0;
-}
-
-void setJobDirty(struct job * j) {
-	server.dirty_jobs = 1;
-	j->dirty = 1;
 }
 
 static inline void decrement_state(struct job *j) {
@@ -1465,18 +1697,28 @@ void changeJobState(struct job *j, int new_state, struct queue *new_queue, int d
 		increment_state(j);
 	}
 
-	j->revision++;
+	updateObject(&j->obj, dirty);
+}
 
-	/* Mark it as dirty */
-	if (dirty)
-		setJobDirty(j);
+void updateObject(jers_object * obj, int dirty) {
+	obj->revision++;
+
+	if (dirty) {
+		obj->dirty = 1;
+
+		switch(obj->type) {
+			case JERS_OBJECT_JOB: server.dirty_jobs = 1; break;
+			case JERS_OBJECT_QUEUE: server.dirty_queues = 1; break;
+			case JERS_OBJECT_RESOURCE: server.dirty_resources = 1; break;
+		}
+	}
 }
 
 void flush_journal(int force) {
 	if (!force && !server.flush.dirty)
 		return;
 
-	fdatasync(server.state_fd);
+	fdatasync(server.journal.fd);
 	server.flush.lastflush = time(NULL);
 	server.flush.dirty = 0;
 }

@@ -99,9 +99,9 @@ void removeAgent(agent * a) {
 
 void serverShutdown(void) {
 	/* Lets do a final flush of our state file before we try anything else*/
-	if (server.state_fd >= 0) {
+	if (server.journal.fd >= 0) {
 		print_msg(JERS_LOG_INFO, "Performing final flush of state file");
-		fdatasync(server.state_fd);
+		fdatasync(server.journal.fd);
 	}
 
 	/* Close our sockets */
@@ -177,7 +177,7 @@ int main (int argc, char * argv[]) {
 
 	print_msg(JERS_LOG_INFO, "jersd v%d.%d.%d starting.", JERS_MAJOR, JERS_MINOR, JERS_PATCH);
 
-	server.state_fd = -1;
+	server.journal.fd = -1;
 	server.agent_connection.socket = -1;
 	server.client_connection.socket = -1;
 

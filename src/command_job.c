@@ -504,12 +504,11 @@ int command_add_job(client * c, void * args) {
 	addIntField(&response, JOBID, j->jobid);
 	respCloseMap(&response);
 
-	if (sendClientMessage(c, &response) != 0)
-		return 0;
-
 	/* Populate the out jobid field */
 	c->msg.jobid = j->jobid;
-	c->msg.revision = 1;
+
+	if (sendClientMessage(c, &j->obj, &response) != 0)
+		return 0;
 
 	print_msg(JERS_LOG_DEBUG, "SUBMIT - JOBID %d created", j->jobid);
 
@@ -624,7 +623,7 @@ int command_get_job(client *c, void * args) {
 		respCloseArray(&r);
 	}
 
-	return sendClientMessage(c, &r);
+	return sendClientMessage(c, NULL, &r);
 }
 
 int command_mod_job(client *c, void *args) {
@@ -649,8 +648,8 @@ int command_mod_job(client *c, void *args) {
 	}
 
 	if (unlikely(server.recovery.in_progress)) {
-		if (j->revision >= server.recovery.revision) {
-			print_msg(JERS_LOG_DEBUG, "Skipping recovery of job_mod job %d rev:%ld trans rev:%ld", j->jobid, j->revision, server.recovery.revision);
+		if (j->obj.revision >= server.recovery.revision) {
+			print_msg(JERS_LOG_DEBUG, "Skipping recovery of job_mod job %d rev:%ld trans rev:%ld", j->jobid, j->obj.revision, server.recovery.revision);
 			return 0;
 		}
 	}
@@ -784,7 +783,7 @@ int command_mod_job(client *c, void *args) {
 
 	changeJobState(j, state, q, dirty);
 
-	return sendClientReturnCode(c, "0");
+	return sendClientReturnCode(c, &j->obj, "0");
 }
 
 int command_del_job(client * c, void * args) {
@@ -806,8 +805,9 @@ int command_del_job(client * c, void * args) {
 	j->internal_state |= JERS_FLAG_DELETED;
 	changeJobState(j, 0, NULL, 0);
 	server.stats.total.deleted++;
+	server.deleted++;
 
-	return sendClientReturnCode(c, "0");
+	return sendClientReturnCode(c, NULL, "0");
 }
 
 int command_sig_job(client * c, void * args) {
@@ -830,7 +830,7 @@ int command_sig_job(client * c, void * args) {
 			j->signal = js->signum;
 			j->exitcode = 128 + j->signal;
 
-			return sendClientReturnCode(c, "0");
+			return sendClientReturnCode(c, NULL, "0");
 		}
 
 		sendError(c, JERS_ERR_INVSTATE, "Job is not running");
@@ -839,7 +839,7 @@ int command_sig_job(client * c, void * args) {
 
 	/* signo == 0 wants to just test the job is running */
 	if (js->signum == 0)
-		return sendClientReturnCode(c, "0");
+		return sendClientReturnCode(c, NULL, "0");
 
 	/* Send the requested signal to the job (via the agent) */
 	resp_t sig_message;
@@ -852,7 +852,7 @@ int command_sig_job(client * c, void * args) {
 
 	sendAgentMessage(j->queue->agent, &sig_message);
 
-	return sendClientReturnCode(c, "0");
+	return sendClientReturnCode(c, NULL, "0");
 }
 
 int command_set_tag(client * c, void * args) {
@@ -891,9 +891,9 @@ int command_set_tag(client * c, void * args) {
 		j->tags[i].value = ts->value;
 	}
 
-	setJobDirty(j);
+	updateObject(&j->obj, 1);
 
-	return sendClientReturnCode(c, "0");
+	return sendClientReturnCode(c, &j->obj, "0");
 }
 
 int command_del_tag(client * c, void * args) {
@@ -926,9 +926,9 @@ int command_del_tag(client * c, void * args) {
 
 	j->tag_count--;
 
-	setJobDirty(j);
+	updateObject(&j->obj, 1);
 
-	return sendClientReturnCode(c, "0");
+	return sendClientReturnCode(c, &j->obj, "0");
 }
 
 void free_add_job(void * args, int status) {

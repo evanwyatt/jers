@@ -110,6 +110,9 @@ int cleanupJobs(uint32_t max_clean) {
 	jobid_t cleaned_up = 0;
 	struct job *j, *tmp;
 
+	if (server.deleted == 0)
+		return 0;
+
 	if (max_clean == 0)
 		max_clean = 10;
 
@@ -118,13 +121,14 @@ int cleanupJobs(uint32_t max_clean) {
 			continue;
 
 		/* Don't clean up jobs flagged dirty or as being flushed */
-		if (j->dirty || j->internal_state &JERS_FLAG_FLUSHING)
+		if (j->obj.dirty || j->internal_state &JERS_FLAG_FLUSHING)
 			continue;
 
 		/* Got a job to remove */
 		stateDelJob(j);
 		HASH_DEL(server.jobTable, j);
 		freeJob(j);
+		server.deleted--;
 
 		if (++cleaned_up >= max_clean)
 			break;
@@ -146,6 +150,7 @@ int addJob(struct job * j, int state, int dirty) {
 
 	HASH_ADD_INT(server.jobTable, jobid, j);
 
+	j->obj.type = JERS_OBJECT_JOB;
 	changeJobState(j, state, NULL, dirty);
 
 	return 0;

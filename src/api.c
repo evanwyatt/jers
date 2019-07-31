@@ -301,6 +301,7 @@ JERS_EXPORT void jersFreeJobInfo (jersJobInfo * info) {
 		free(job->post_command);
 		free(job->stdout);
 		free(job->stderr);
+		free(job->node);
 
 		for (j = 0; j < job->argc; j++)
 			free(job->argv[j]);
@@ -453,12 +454,12 @@ JERS_EXPORT int jersGetJob(jobid_t jobid, jersJobFilter * filter, jersJobInfo * 
 	if (readResponse())
 		return 1;
 
-	int64_t i;
+	if (msg.item_count) {
+		job_info->jobs = calloc(sizeof(jersJob) *  msg.item_count, 1);
 
-	job_info->jobs = calloc(sizeof(jersJob) *  msg.item_count, 1);
-
-	for (i = 0; i < msg.item_count; i++) {
-		deserialize_jersJob(&msg.items[i], &job_info->jobs[i]);
+		for (int64_t i = 0; i < msg.item_count; i++) {
+			deserialize_jersJob(&msg.items[i], &job_info->jobs[i]);
+		}
 	}
 
 	job_info->count = msg.item_count;

@@ -109,9 +109,22 @@ typedef struct _agent {
 	struct _agent * prev;
 } agent;
 
-struct queue {
-	char *name;
+enum jers_object_type {
+	JERS_OBJECT_JOB = 1,
+	JERS_OBJECT_QUEUE,
+	JERS_OBJECT_RESOURCE
+};
+
+typedef struct _jers_object {
+	int type;
 	int64_t revision;
+	int dirty;
+} jers_object;
+
+struct queue {
+	jers_object obj;
+	char *name;
+
 	char *desc;
 	int job_limit;
 	int state;
@@ -120,20 +133,19 @@ struct queue {
 	char * host;
 	agent * agent;
 
+	int32_t internal_state;
+
 	struct jobStats stats;
 
-	int dirty;
-	int32_t internal_state;
 	UT_hash_handle hh;
 };
 
 struct resource {
+	jers_object obj;
+
 	char *name;
-	int64_t revision;
 	int32_t count;
 	int32_t in_use;
-
-	int dirty;
 	int32_t internal_state;
 
 	UT_hash_handle hh;
@@ -145,8 +157,9 @@ struct jobResource {
 };
 
 struct job {
+	jers_object obj;
+
 	jobid_t jobid;
-	int64_t revision;
 	char * jobname;
 	struct queue * queue;
 
@@ -182,7 +195,6 @@ struct job {
 	struct rusage usage;
 
 	int32_t state;
-	int32_t internal_state;
 
 	int pend_reason;
 	int fail_reason;
@@ -199,7 +211,8 @@ struct job {
 	int res_count;
 	struct jobResource * req_resources;
 
-	int dirty;
+	int32_t internal_state;
+
 	UT_hash_handle hh;
 };
 
@@ -209,9 +222,9 @@ struct gid_array {
 };
 
 struct jersServer {
-	int state_fd;
 	char * state_dir;
 	int state_count;
+	int readonly;
 
 	int daemon;
 
@@ -239,6 +252,7 @@ struct jersServer {
 	int max_run_jobs;
 
 	uint32_t max_cleanup; // Maximum deleted objects to cleanup per cycle
+	uint32_t deleted;     // Number of jobs pending cleanup
 
 	char * config_file;
 
@@ -308,11 +322,16 @@ struct jersServer {
 	} flush;
 
 	struct journal {
+		int fd;
+		off_t len;
+		off_t limit;
+		off_t size;
+		off_t extend_block_size;
 		off_t last_commit;
-		//Will need to save the journal this was for, we might roll over journals?
 	} journal;
 };
 
+#define JOURNAL_EXTEND_DEFAULT 524288 // 512kb
 
 /* The internal_state field is a bitmap of flags */
 #define JERS_FLAG_DELETED  0x0001  // Job has been deleted and will be cleaned up
@@ -365,8 +384,8 @@ int stateDelJob(struct job * j);
 int stateDelQueue(struct queue * q);
 int stateDelResource(struct resource * r);
 
-void setJobDirty(struct job * j);
 void changeJobState(struct job * j, int new_state, struct queue *new_queue, int dirty);
+void updateObject(jers_object * obj, int dirty);
 
 int validateUserAction(client * c, int action);
 

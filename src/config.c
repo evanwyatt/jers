@@ -89,7 +89,7 @@ void loadConfig(char * config) {
 	}
 
 	/* Populate the defaults before we start parsing the config file */
-	server.state_fd = -1;
+	server.journal.fd = -1;
 	server.state_dir = strdup(DEFAULT_CONFIG_STATEDIR);
 	server.background_save_ms = DEFAULT_CONFIG_BACKGROUNDSAVEMS;
 	server.logging_mode = DEFAULT_CONFIG_LOGGINGMODE;
@@ -101,6 +101,8 @@ void loadConfig(char * config) {
 	server.max_jobid = DEFAULT_CONFIG_MAXJOBID;
 	server.socket_path = strdup(DEFAULT_CONFIG_SOCKETPATH);
 	server.agent_socket_path = strdup(DEFAULT_CONFIG_AGENTSOCKETPATH);
+
+	server.journal.extend_block_size = JOURNAL_EXTEND_DEFAULT;
 
 	server.flush.defer = DEFAULT_CONFIG_FLUSHDEFER;
 	server.flush.defer_ms = DEFAULT_CONFIG_FLUSHDEFERMS;
@@ -177,11 +179,11 @@ void loadConfig(char * config) {
 		} else if (strcmp(key, "logging_mode") == 0) {
 			if (strcmp(value, "DEBUG") == 0)
 				server.logging_mode = JERS_LOG_DEBUG;
-			else if (strcmp(value, "INFO") == 0)
+			else if (strcasecmp(value, "INFO") == 0)
 				server.logging_mode = JERS_LOG_INFO;
-			else if (strcmp(value, "WARNING") == 0)
+			else if (strcasecmp(value, "WARNING") == 0)
 				server.logging_mode = JERS_LOG_WARNING;
-			else if (strcmp(value, "CRITICAL") == 0)
+			else if (strcasecmp(value, "CRITICAL") == 0)
 				server.logging_mode = JERS_LOG_CRITICAL;
 			else {
 				print_msg(JERS_LOG_WARNING, "Unknown logging mode '%s' specified in config file. Defaulting to 'INFO'", value);

@@ -33,11 +33,8 @@
 int addRes(struct resource * r, int dirty) {
 	HASH_ADD_STR(server.resTable, name, r);
 
-	if (dirty) {
-		r->dirty = 1;
-		server.dirty_resources++;
-	}
-
+	r->obj.type = JERS_OBJECT_RESOURCE;
+	updateObject(&r->obj, dirty);
 	return 0;
 }
 
@@ -67,7 +64,7 @@ int cleanupResources(uint32_t max_clean) {
 			continue;
 
 		/* Don't clean up resources flagged dirty or as being flushed */
-		if (r->dirty || r->internal_state &JERS_FLAG_FLUSHING)
+		if (r->obj.dirty || r->internal_state &JERS_FLAG_FLUSHING)
 			continue;
 
 		/* Got a resources to remove */

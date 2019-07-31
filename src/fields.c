@@ -118,8 +118,10 @@ int isFieldSet(unsigned char * bitmap, int field_no) {
 }
 
 void freeStringArray(int count, char *** array) {
-	int i;
-	for (i = 0; i < count; i++)
+	if (array == NULL)
+		return;
+
+	for (int i = 0; i < count; i++)
 		free((*array)[i]);
 
 	free(*array);
@@ -129,6 +131,9 @@ void freeStringArray(int count, char *** array) {
 }
 
 void freeStringMap(int count, key_val_t ** keys) {
+	if (keys == NULL)
+		return;
+
 	for (int i = 0; i < count; i++) {
 		free((*keys)[i].key);
 		free((*keys)[i].value);
