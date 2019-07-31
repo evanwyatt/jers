@@ -252,6 +252,7 @@ struct jersServer {
 	int max_run_jobs;
 
 	uint32_t max_cleanup; // Maximum deleted objects to cleanup per cycle
+	uint32_t deleted;     // Number of jobs pending cleanup
 
 	char * config_file;
 

@@ -110,6 +110,9 @@ int cleanupJobs(uint32_t max_clean) {
 	jobid_t cleaned_up = 0;
 	struct job *j, *tmp;
 
+	if (server.deleted == 0)
+		return 0;
+
 	if (max_clean == 0)
 		max_clean = 10;
 
@@ -125,6 +128,7 @@ int cleanupJobs(uint32_t max_clean) {
 		stateDelJob(j);
 		HASH_DEL(server.jobTable, j);
 		freeJob(j);
+		server.deleted--;
 
 		if (++cleaned_up >= max_clean)
 			break;
