@@ -594,6 +594,7 @@ void setup_handlers(void(*shutdownHandler)(int)) {
 
 	return;
 }
+
 /* Why isn't this provided somewhere? */
 struct _sig_names {
 	const char *name;
@@ -652,4 +653,56 @@ int getSignalNumber(const char *name) {
 	}
 
 	return -1;
+}
+
+/* Returned a buffer containing the hex encoding of 'input' of length 'input_len'
+ * If 'output' is NULL, a buffer will be allocated and returned - This should be freed by the caller
+ * If 'output' is non-null, it is expected to be big enough to store the result. ie. (input_len *2) + 1 */
+char * hexEncode(const unsigned char *input, int input_len, char *output) {
+	const char *_hex = "0123456780ABCDEF";
+	char *ret = output ? output : malloc((input_len * 2) + 1);
+
+	if (ret == NULL)
+		return NULL;
+
+	char *tmp = ret;
+
+	for (int i = 0; i < input_len; i++) {
+		*tmp++ = _hex[(*input>>4) &0xF];
+		*tmp++ = _hex[(*input++) &0xF];
+	}
+
+	*tmp = 0;
+
+	return ret;
+}
+
+/* Split a line from a config file into key/value. */
+
+int splitConfigLine(char *line, char **key, char **value) {
+	/* Remove any comments and trailing/leading whitespace */
+	char * comment = strchr(line, '#');
+
+	if (comment != NULL)
+		*comment = '\0';
+
+	removeWhitespace(line);
+
+	*key = *value = NULL;
+
+	/* Blank Line*/
+	if (*line == '\0')
+		return 1;
+
+	/* The key and value are seperated by a space */
+	*key = line;
+	*value = strchr(line, ' ');
+
+	**value = '\0';
+	(*value)++;
+
+	removeWhitespace(*key);
+	removeWhitespace(*value);
+
+	return 0;
 }

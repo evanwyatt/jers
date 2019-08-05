@@ -48,6 +48,9 @@
 #include <sys/socket.h>
 #include <sys/epoll.h>
 #include <sys/un.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
 #include <grp.h>
 #include <sys/prctl.h>
 
@@ -58,15 +61,21 @@
 #include "buffer.h"
 #include "fields.h"
 #include "cmd_defs.h"
+#include "auth.h"
 
 #define MAX_EVENTS 1024
 #define INITIAL_SIZE 0x1000
 #define REQUESTS_THRESHOLD 0x010000
 #define DEFAULT_DIR "/tmp"
+#define DEFAULT_CONFIG_FILE "/etc/jers/jers_agentd.conf"
+#define DEFAULT_AGENT_SOCKET "/run/jers/agent.sock"
+#define DEFAULT_DAEMON_PORT 7000
+#define RECONNECT_WAIT 20 // Seconds
 
 int initMessage(resp_t * r, const char * resp_name, int version);
 void error_die(char *, ...);
 const char * getFailString(int);
+void disconnectFromDaemon(void);
 
 char * server_log = "jers_agentd";
 int server_log_mode = JERS_LOG_DEBUG;
@@ -106,8 +115,19 @@ struct agent {
 	int daemon;
 	int in_recon;
 
+	unsigned char secret_hash[SECRET_HASH_SIZE];
+	int secret;
+	char * nonce;
+
+	char * daemon_socket_path;
+
+	char * daemon_host;
+	int daemon_port;
+
 	int daemon_fd;
 	int event_fd;
+
+	time_t next_connect;
 
 	struct runningJob * jobs;
 	int64_t running_jobs;
@@ -141,6 +161,65 @@ struct jersJobSpawn {
 };
 
 struct agent agent;
+
+void loadConfig(char * config) {
+	FILE * f = NULL;
+	char * line = NULL;
+	size_t line_size = 0;
+	ssize_t len = 0;
+
+	/* Populate the defaults before we start parsing the config file */
+	agent.daemon_socket_path = strdup(DEFAULT_AGENT_SOCKET);
+
+	if (config == NULL)
+		config = DEFAULT_CONFIG_FILE;
+
+	f = fopen(config, "r");
+
+	if (f == NULL) {
+		if (errno == ENOENT) {
+			print_msg(JERS_LOG_WARNING, "No configuration file, using defaults");
+			return;
+		}
+
+		error_die("Failed to open config file: %s\n", strerror(errno));
+	}
+
+	while ((len = getline(&line, &line_size, f)) != -1) {
+		line[strcspn(line, "\n")] = '\0';
+		char *key, *value;
+
+		if (splitConfigLine(line, &key, &value))
+			continue;
+
+		if (key == NULL || value == NULL) {
+			print_msg(JERS_LOG_WARNING, "Skipping unknown line: %ld %s\n", strlen(line),line);
+			continue;
+		}
+	
+		if (strcmp(key, "daemon_socket") == 0) {
+			agent.daemon_socket_path = strdup(value);
+		} else if (strcmp(key, "daemon_port") == 0) {
+			agent.daemon_port = atoi(value);
+		} else if (strcmp(key, "daemon_host") == 0) {
+			agent.daemon_host = strdup(value);
+			if (agent.daemon_port == 0)
+				agent.daemon_port = DEFAULT_DAEMON_PORT;
+		} else {
+			print_msg(JERS_LOG_WARNING, "Skipping unknown config key: %s\n", key);
+			continue;
+		}
+	}
+
+	free(line);
+
+	if (feof(f) == 0)
+		error_die("Failed to load config file: %s\n", strerror(errno));
+
+	fclose(f);
+	return;
+}
+
 
 /* Open 'file', moving any existing file to 'file_YYYYMMDDhhmmss_nnn'
  * It will try 10 times over 10 seconds to create the logfile
@@ -674,11 +753,6 @@ int send_login(void) {
 	host[sizeof(host) - 1] = '\0';
 
 	initMessage(&r, AGENT_LOGIN, 1);
-
-	respAddMap(&r);
-	addStringField(&r, NODE, host);
-	respCloseMap(&r);
-
 	print_msg(JERS_LOG_INFO, "Sending login");
 	send_msg(&r);
 	return 0;
@@ -882,7 +956,7 @@ struct runningJob * spawn_job(struct jersJobSpawn * j, int * fail_status) {
 	return job;
 }
 
-void start_command(msg_t * m) {
+int start_command(msg_t * m) {
 	struct jersJobSpawn j = {0};
 	struct runningJob * started = NULL;
 	int i, status = 0;
@@ -939,10 +1013,10 @@ void start_command(msg_t * m) {
 	freeStringArray(j.argc, &j.argv);
 	freeStringArray(j.env_count, &j.envs);
 
-	return;
+	return 0;
 }
 
-void signal_command(msg_t * m) {
+int signal_command(msg_t * m) {
 	jobid_t id = 0;
 	int signum = 0;
 	int i;
@@ -961,7 +1035,7 @@ void signal_command(msg_t * m) {
 
 	if (id == 0) {
 		print_msg(JERS_LOG_WARNING, "No job passed to signal?");
-		return;
+		return 0;
 	}
 
 	j = agent.jobs;
@@ -974,28 +1048,67 @@ void signal_command(msg_t * m) {
 
 	if (j == NULL) {
 		print_msg(JERS_LOG_WARNING, "Got request to signal a job that is not running? %d", id);
-		return;
+		return 0;
 	}
 
 	if (j->job_pid == 0) {
 		fprintf(stderr, "Got request to signal job %d, but it hasn't sent us its PID yet...\n", j->jobID);
 		/* Set a flag so its killed as soon as we get the PID */
 		j->kill = signum;
-		return;
+		return 0;
 	}
 
 	if (kill(-j->job_pid, signum) != 0)
 		print_msg(JERS_LOG_WARNING, "Failed to signal JOBID:%d with SIGNUM:%d", id, signum);
 
-	return;
+	return 0;
 }
 
-void recon_command(msg_t * m) {
+int recon_command(msg_t * m) {
 	int32_t count = 0;
 	resp_t r;
+	char * hmac = NULL;
+	time_t datetime = 0;
+	char datetime_str[32];
+
 	struct runningJob * j = agent.jobs;
 
-	UNUSED(m);
+	msg_item * item = &m->items[0];
+
+	for (int i = 0; i < item->field_count; i++) {
+		switch(item->fields[i].number) {
+			case MSG_HMAC: hmac = getStringField(&item->fields[i]); break;
+			case DATETIME: datetime = getNumberField(&item->fields[i]); break;
+
+			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", item->fields[i].name); break;
+		}
+	}
+
+	if (agent.secret) {
+		/* Check the daemon we connected to knows the shared secret */
+		if (hmac == NULL) {
+			print_msg(JERS_LOG_CRITICAL, "HMAC not provided in recon request");
+			return 1;
+		}
+
+		if (datetime == 0) {
+			print_msg(JERS_LOG_CRITICAL, "DATETIME not provided in recon request");
+			return 1;
+		}
+		sprintf(datetime_str, "%ld", datetime);
+		const char * recon_verify[] = {agent.nonce, datetime_str, NULL};
+		char * verify_hmac = generateHMAC(recon_verify, agent.secret_hash, sizeof(agent.secret_hash));
+
+		if (verify_hmac == NULL) {
+			print_msg(JERS_LOG_CRITICAL, "Failed to generate HMAC during recon request.");
+			return 1;
+		}
+
+		if (strcasecmp(verify_hmac, hmac) != 0) {
+			print_msg(JERS_LOG_CRITICAL, "HMAC does not match - Disconnecting from daemon");
+			return 1;
+		}
+	}
 
 	/* The master daemon is requesting a list of all the jobs we have in memory.
 	 * We will remove the jobs in memory only when the master daemon confirms it's processed the recon message */
@@ -1044,12 +1157,13 @@ void recon_command(msg_t * m) {
 	agent.in_recon = 1;
 
 	print_msg(JERS_LOG_INFO, "=== End Recon %d jobs ===\n", count);
+	return 0;
 }
 
 /* Master daemon has acknowleged it has completed the recon 
  * We can now cleanup all the jobs that have completed. */
 
-void recon_complete(msg_t * m) {
+int recon_complete(msg_t * m) {
 	struct runningJob * j = agent.jobs;
 
 	UNUSED(m);
@@ -1065,23 +1179,86 @@ void recon_complete(msg_t * m) {
 	}
 
 	agent.in_recon = 0;
+	return 0;
+}
+
+/* We have been requested to authenticate.
+ * Use the shared secret we loaded earlier to generate a hmac of
+ * a client nonce we generate, and the current datetime */
+
+int auth_challenge(msg_t *m) {
+	char * nonce = NULL;
+	char time_now_str[32];
+	time_t time_now = time(NULL);
+	char * hmac = NULL;
+
+	msg_item * item = &m->items[0];
+
+	for (int i = 0; i < item->field_count; i++) {
+		switch(item->fields[i].number) {
+			case NONCE: nonce = getStringField(&item->fields[i]); break;
+
+			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", item->fields[i].name); break;
+		}
+	}
+
+	if (nonce == NULL) {
+		print_msg(JERS_LOG_WARNING, "Incorrectly formatted auth_challenge request received. (No nonce)");
+		return 1;
+	}
+
+	if (agent.secret == 0) {
+		//HACK:
+		if (loadSecret("/etc/jers/secret.key", agent.secret_hash)) {
+			print_msg(JERS_LOG_WARNING, "Unable to connect to main daemon during auth_challenge - No secret has been loaded");
+			return 1;
+		}
+
+		agent.secret = 1;
+	}
+
+	agent.nonce = generateNonce(NONCE_SIZE);
+
+	sprintf(time_now_str, "%ld", time_now);
+
+	const char *hmac_input[] = {nonce, agent.nonce, time_now_str, NULL};
+	hmac = generateHMAC(hmac_input, agent.secret_hash, sizeof(agent.secret_hash));
+
+	resp_t auth_resp;
+	initMessage(&auth_resp, AGENT_AUTH_RESP, 1);
+	respAddMap(&auth_resp);
+
+	addIntField(&auth_resp, DATETIME, time_now);
+	addStringField(&auth_resp, NONCE, agent.nonce);
+	addStringField(&auth_resp, MSG_HMAC, hmac);
+
+	respCloseMap(&auth_resp);
+	send_msg(&auth_resp);
+
+	free(hmac);
+
+	return 0;
+
 }
 
 /* Process a command */
-void process_message(msg_t * m) {
-
+int process_message(msg_t * m) {
+	int status = 0;
 	print_msg(JERS_LOG_DEBUG, "Got command '%s'", m->command);
 
-	if (strcmp(m->command, "START_JOB") == 0) {
-		start_command(m);
+	if (strcmp(m->command, AGENT_START_JOB) == 0) {
+		status = start_command(m);
 	} else if (strcmp(m->command, CMD_SIG_JOB) == 0) {
-		signal_command(m);
-	} else if (strcmp(m->command, "RECON_REQ") == 0) {
-		recon_command(m);
-	} else if (strcmp(m->command, "RECON_COMPLETE") == 0) {
-		recon_complete(m);
+		status = signal_command(m);
+	} else if (strcmp(m->command, AGENT_RECON_REQ) == 0) {
+		status = recon_command(m);
+	} else if (strcmp(m->command, AGENT_RECON_COMP) == 0) {
+		status = recon_complete(m);
+	} else if (strcmp(m->command, AGENT_AUTH_CHALLENGE) == 0) {
+		status = auth_challenge(m);
 	} else {
 		print_msg(JERS_LOG_WARNING, "Got an unexpected command message '%s'", m->command);
+		status = 1;
 	}
 
 	free_message(m);
@@ -1090,34 +1267,91 @@ void process_message(msg_t * m) {
 		m->reader.pos = 0;
 		respReadUpdate(&m->reader, agent.requests.data, agent.requests.used);
 	}
+
+	return status;
 }
 
 /* Loop through processing messages. */
 void process_messages(void) {
 	while (load_message(&agent.msg, &agent.requests) == 0) {
-		process_message(&agent.msg);
+		if (process_message(&agent.msg) != 0) {
+			// Trigger a disconnect from the main daemon process
+			disconnectFromDaemon();
+			break;
+		}
 	}
 }
 
-int connectjers(void) {
-	struct sockaddr_un addr;
-	int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+/* Connect to the main JERS daemon
+ * If a host is specified in the configuration file try that, otherwise
+ * connect locally using a unix socket */
 
-	if (fd < 0) {
-		print_msg(JERS_LOG_WARNING, "Failed to connect to JERS daemon (socket failed): %s", strerror(errno));
+int connectjers(void) {
+	int fd;
+	
+	if (time(NULL) < agent.next_connect) {
 		sleep(5);
 		return 1;
 	}
+	
+	fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
 
-	memset(&addr, 0, sizeof(addr));
-	addr.sun_family = AF_UNIX;
-	strncpy(addr.sun_path, "/run/jers/agent.sock", sizeof(addr.sun_path)-1); //TODO: remove hardcoded path
+	if (fd < 0) {
+		print_msg(JERS_LOG_WARNING, "Failed to connect to JERS daemon (socket failed): %s", strerror(errno));
+		goto connect_fail;
+	}
 
-	if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-		print_msg(JERS_LOG_WARNING, "Failed to connect to JERS daemon: %s", strerror(errno));
-		close(fd);
-		sleep(5);
-		return 1;
+	if (agent.daemon_host) {
+		/* Get the details of the host we are trying to connect to */
+		struct addrinfo hint = {.ai_family = AF_UNSPEC, .ai_socktype = SOCK_STREAM};
+		struct addrinfo *info, *p;
+		int status;
+		char port[8];
+		sprintf(port, "%d", agent.daemon_port);
+
+		print_msg(JERS_LOG_INFO, "Attempting to connect JERS daemon on host %s:%d", agent.daemon_host, agent.daemon_port);
+
+		/* Resolve the host to addresses we can connect to */
+		if ((status = getaddrinfo(agent.daemon_host, port, &hint, &info)) != 0) {
+			print_msg(JERS_LOG_WARNING, "Failed to resolve address of '%s': %s\n", agent.daemon_host, gai_strerror(status));
+			goto connect_fail;
+		}
+
+		/* Connect to the first address we can that is associated with that servername & port */
+		for(p = info; p != NULL; p = p->ai_next) {
+			if ((fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
+				print_msg(JERS_LOG_WARNING, "Failed to create socket: %s", strerror(errno));
+				continue;
+			}
+
+			if (connect(fd, p->ai_addr, p->ai_addrlen) == -1) {
+				print_msg(JERS_LOG_WARNING, "Failed to connect: %s", strerror(errno));
+				close(fd);
+				fd = -1;
+				continue;
+			}
+
+			break;
+		}
+
+		freeaddrinfo(info);
+
+		if (fd < 0) {
+			print_msg(JERS_LOG_WARNING, "Failed to connect to daemon host '%s:%d'", agent.daemon_host, agent.daemon_port);
+			goto connect_fail;
+		}
+	} else {
+		print_msg(JERS_LOG_INFO, "Attempting to connect locally to JERS daemon using UNIX socket");
+
+		struct sockaddr_un addr;
+		memset(&addr, 0, sizeof(addr));
+		addr.sun_family = AF_UNIX;
+		strncpy(addr.sun_path, agent.daemon_socket_path, sizeof(addr.sun_path)-1);
+
+		if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+			print_msg(JERS_LOG_WARNING, "Failed to connect to JERS daemon via unix socket: %s", strerror(errno));
+			goto connect_fail;
+		}
 	}
 
 	struct epoll_event ee;
@@ -1126,13 +1360,18 @@ int connectjers(void) {
 
 	if (epoll_ctl(agent.event_fd, EPOLL_CTL_ADD, fd, &ee)) {
 		print_msg(JERS_LOG_WARNING, "Failed to set epoll event on daemon socket: %s", strerror(errno));
+		goto connect_fail;
 	}
 
 	agent.daemon_fd = fd;
-
 	send_login();
 
 	return 0;
+
+connect_fail:
+	close(fd);
+	sleep(5);
+	return 1;
 }
 
 int parseOpts(int argc, char * argv[]) {
@@ -1142,6 +1381,19 @@ int parseOpts(int argc, char * argv[]) {
 	}
 
 	return 0;
+}
+
+void disconnectFromDaemon(void) {
+	struct epoll_event ee;
+
+	print_msg(JERS_LOG_WARNING, "Disconnecting from daemon");
+
+	if (epoll_ctl(agent.event_fd, EPOLL_CTL_DEL, agent.daemon_fd, &ee))
+		print_msg(JERS_LOG_WARNING, "Failed to remove daemon socket from epoll");
+
+	close(agent.daemon_fd);
+	agent.daemon_fd = -1;
+	agent.next_connect = time(NULL) + RECONNECT_WAIT;
 }
 
 void shutdownHandler(int signum) {
@@ -1155,6 +1407,8 @@ int main (int argc, char * argv[]) {
 	memset(&agent, 0, sizeof(struct agent));
 	parseOpts(argc, argv);
 
+	loadConfig(NULL);
+
 	setup_handlers(shutdownHandler);
 
 #ifdef INIT_SETPROCTITLE_REPLACEMENT
@@ -1164,8 +1418,13 @@ int main (int argc, char * argv[]) {
 	if (agent.daemon)
 		setLogfileName(server_log);
 
-	/* Connect to the main daemon */
-	print_msg(JERS_LOG_INFO, "Starting JERS_AGENTD");
+	print_msg(JERS_LOG_INFO, "\n"
+			"     _  ___  ___  ___                   \n"
+			"  _ | || __|| _ \\/ __|                  \n"
+			" | || || _| |   /\\__ \\                  \n"
+			"  \\__/ |___||_|_\\|___/  Version %d.%d.%d\n\n", JERS_MAJOR, JERS_MINOR, JERS_PATCH);
+
+	print_msg(JERS_LOG_INFO, "jers_agentd v%d.%d.%d starting.", JERS_MAJOR, JERS_MINOR, JERS_PATCH);
 
 	if (getuid() != 0)
 		error_die("JERS_AGENTD is required to be run as root");
@@ -1216,13 +1475,7 @@ int main (int argc, char * argv[]) {
 					// If we reconnect, the daemon should send a reconciliation message to us
 					// and we will send back the details of every job we have in memory.
 					print_msg(JERS_LOG_WARNING, "Got disconnected from JERS daemon. Will try to reconnect");
-					struct epoll_event ee;
-					if (epoll_ctl(agent.event_fd, EPOLL_CTL_DEL, agent.daemon_fd, &ee)) {
-						print_msg(JERS_LOG_WARNING, "Failed to remove daemon socket from epoll");
-					}
-
-					close(agent.daemon_fd);
-					agent.daemon_fd = -1;
+					disconnectFromDaemon();
 					break;
 				} else {
 					agent.requests.used += len;
@@ -1242,13 +1495,7 @@ int main (int argc, char * argv[]) {
 					// If we reconnect, the daemon should send a reconciliation message to us
 					// and we will send back the details of every job we have in memory.
 					print_msg(JERS_LOG_WARNING, "Got disconnected from JERS daemon (during send). Will try to reconnect");
-					struct epoll_event ee;
-					if (epoll_ctl(agent.event_fd, EPOLL_CTL_DEL, agent.daemon_fd, &ee)) {
-						print_msg(JERS_LOG_WARNING, "Failed to remove daemon socket from epoll");
-					}
-
-					close(agent.daemon_fd);
-					agent.daemon_fd = -1;
+					disconnectFromDaemon();
 					break;
 				}
 
@@ -1259,8 +1506,8 @@ int main (int argc, char * argv[]) {
 					ee.events = EPOLLIN;
 					ee.data.ptr = NULL;
 					if (epoll_ctl(agent.event_fd, EPOLL_CTL_MOD, agent.daemon_fd, &ee)) {
-                        print_msg(JERS_LOG_WARNING, "Failed to clear EPOLLOUT from daemon socket");
-                    }
+						print_msg(JERS_LOG_WARNING, "Failed to clear EPOLLOUT from daemon socket");
+					}
 
 					agent.responses_sent = agent.responses.used = 0;
 				}

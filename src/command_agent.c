@@ -30,39 +30,147 @@
 #include <server.h>
 #include <commands.h>
 
-void command_agent_login(agent * a, msg_t * msg) {
-	/* We should only have a NODE field */
-	if (msg->items[0].field_count != 1 || msg->items[0].fields[0].number != NODE) {
-		print_msg(JERS_LOG_WARNING, "Got invalid login from agent");
-		return;
-	}
-
-	a->host = getStringField(&msg->items[0].fields[0]);
-
+int command_agent_login(agent * a, msg_t * msg) {
+	UNUSED(msg);
 	print_msg(JERS_LOG_INFO, "Got login from agent on host %s", a->host);
 
 	/* Check the queues and link this agent against queues matching this host */
-
-	struct queue * q;
-	for (q = server.queueTable; q != NULL; q = q->hh.next) {
+	for (struct queue *q = server.queueTable; q != NULL; q = q->hh.next) {
 		if (strcmp(q->host, "localhost") == 0) {
-			if (strcmp(gethost(), a->host) == 0)
+			if (strcmp(gethost(), a->host) == 0) {
 				q->agent = a;
+				print_msg(JERS_LOG_DEBUG, "Assigned localhost queue '%s' to host %s", q->name, a->host);
+			}
 		} else if (strcmp(q->host, a->host) == 0) {
 			q->agent = a;
 		}
 	}
 
-	/* Request a reconciliation from the agent */
-	resp_t recon;
-	initMessage(&recon, "RECON_REQ", 1);
-	sendAgentMessage(a, &recon);
-	print_msg(JERS_LOG_INFO, "Requested recon from %s\n", a->host);
+	/* If we had a secret specified in the configuration file, send an auth challenge */
+	if (server.secret) {
+		resp_t auth_challenge;
+		char * nonce = generateNonce(NONCE_SIZE);
 
-	a->recon = 1;
+		if (nonce == NULL)
+			return 1;
+
+		initMessage(&auth_challenge, AGENT_AUTH_CHALLENGE, 1);
+		respAddMap(&auth_challenge);
+		addStringField(&auth_challenge, NONCE, nonce);
+
+		respCloseMap(&auth_challenge);
+		sendAgentMessage(a, &auth_challenge);
+
+		a->nonce = nonce;
+	} else {
+		/* Request a reconciliation from the agent */
+		resp_t recon;
+		initMessage(&recon, "RECON_REQ", 1);
+		sendAgentMessage(a, &recon);
+		print_msg(JERS_LOG_INFO, "Requested recon from %s\n", a->host);
+
+		a->recon = 1;
+	}
+
+	return 0;
 }
 
-void command_agent_recon(agent * a, msg_t * msg) {
+int command_agent_authresp(agent * a, msg_t * msg) {
+	char *c_nonce = NULL;
+	char *hmac = NULL;
+	time_t datetime = 0;
+	time_t time_now = time(NULL);
+	char datetime_str[16];
+	char *verify_hmac = NULL;
+
+	print_msg(JERS_LOG_INFO, "Got authresp message from agent on host: %s", a->host);
+
+	//Expecting a nonce and a hmac
+		for (int i = 0; i < msg->items[0].field_count; i++) {
+			switch(msg->items[0].fields[i].number) {
+				case NONCE : c_nonce = getStringField(&msg->items[0].fields[i]); break;
+				case DATETIME: datetime = getNumberField(&msg->items[0].fields[i]); break;
+				case MSG_HMAC  : hmac = getStringField(&msg->items[0].fields[i]); break;
+
+				default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", msg->items[0].fields[i].name); break;
+			}
+		}
+
+	if (c_nonce == NULL) {
+		print_msg(JERS_LOG_WARNING, "Agent authresp did not contain a client_nonce. - Disconnecting them");
+		goto auth_fail;
+	}
+
+	if (hmac == NULL) {
+		print_msg(JERS_LOG_WARNING, "Agent authresp did not contain a HMAC. - Disconnecting them");
+		goto auth_fail;
+	}
+
+	/* The datetime needs to be within our tolerences */
+	if (datetime == 0) {
+		print_msg(JERS_LOG_WARNING, "Agent authresp did not contain a Datetime. - Disconnecting them");
+		goto auth_fail;
+	}
+	if (datetime < time_now || datetime > time_now + MAX_AUTH_TIME) {
+		print_msg(JERS_LOG_WARNING, "Agent authresp datetime out of allowed tolerances. datetime:%ld now:%ld tolerance:%ds - Disconnecting them",
+			datetime, time_now, MAX_AUTH_TIME);
+		goto auth_fail;
+	}
+
+	sprintf(datetime_str, "%ld", datetime);
+
+	/* Verify the client knew the shared secret by verifying the HMAC on the response */
+	const char *input[] = {a->nonce, c_nonce, datetime_str, NULL};
+	verify_hmac = generateHMAC(input, server.secret_hash, sizeof(server.secret_hash));
+
+	if (verify_hmac == NULL) {
+		print_msg(JERS_LOG_WARNING, "Agent authresp Failed to generated a HMAC. - Disconnecting agent.");
+		goto auth_fail;
+	}
+
+	if (strcasecmp(verify_hmac, hmac) != 0) {
+		print_msg(JERS_LOG_WARNING, "Agent authresp HMAC incorrect. - Disconnecting them");
+		print_msg(JERS_LOG_DEBUG, "Our HMAC: %s Theirs:%s Datetime:%s c_nonce:%s", verify_hmac, hmac, datetime_str, c_nonce);
+		goto auth_fail;
+	}
+
+	/* Client looks legitimate, send a recon request.
+	 * We include a HMAC of the client nonce and the datetime to
+	 * allow the client to validate we know the secret */
+	resp_t recon;
+	initMessage(&recon, "RECON_REQ", 1);
+	sprintf(datetime_str, "%ld", time_now);
+	const char *reconInput[] = {c_nonce, datetime_str, NULL};
+	char *recon_hmac = generateHMAC(reconInput, server.secret_hash, sizeof(server.secret_hash));
+
+	respAddMap(&recon);
+	addIntField(&recon, DATETIME, time_now);
+	addStringField(&recon, MSG_HMAC, recon_hmac);
+	respCloseMap(&recon);
+
+	sendAgentMessage(a, &recon);
+
+	print_msg(JERS_LOG_INFO, "Requested recon from %s\n", a->host);
+	print_msg(JERS_LOG_DEBUG, "datetime:%s hmac:%s", datetime_str, recon_hmac);
+
+	a->recon = 1;
+	a->logged_in = 1;
+
+	free(verify_hmac);
+	free(c_nonce);
+	free(hmac);
+	free(recon_hmac);
+
+	return 0;
+
+auth_fail:
+	free(verify_hmac);
+	free(c_nonce);
+	free(hmac);
+	return 1;
+}
+
+int command_agent_recon(agent * a, msg_t * msg) {
 	print_msg(JERS_LOG_INFO, "Got recon message from agent on host: %s", a->host);
 
 	for (int i = 0; i < msg->item_count; i++) {
@@ -73,7 +181,7 @@ void command_agent_recon(agent * a, msg_t * msg) {
 		int exitcode = 0;
 		struct rusage usage = {{0}};
 
-		for (int k = 0; k < msg->items[0].field_count; k++) {
+		for (int k = 0; k < msg->items[i].field_count; k++) {
 			switch(msg->items[i].fields[k].number) {
 				case JOBID : jobid = getNumberField(&msg->items[i].fields[k]); break;
 				case STARTTIME: start_time = getNumberField(&msg->items[i].fields[k]); break;
@@ -149,10 +257,10 @@ void command_agent_recon(agent * a, msg_t * msg) {
 
 	a->recon = 0;
 
-	return;
+	return 0;
 }
 
-void command_agent_jobstart(agent * a, msg_t * msg) {
+int command_agent_jobstart(agent * a, msg_t * msg) {
 	int64_t i;
 	jobid_t jobid = 0;
 	pid_t pid = -1;
@@ -175,7 +283,7 @@ void command_agent_jobstart(agent * a, msg_t * msg) {
 
 	if (j == NULL) {
 		print_msg(JERS_LOG_WARNING, "Got job start for non-existent jobid: %d", jobid);
-		return;
+		return 0;
 	}
 
 	changeJobState(j, JERS_JOB_RUNNING, NULL, 0);
@@ -193,10 +301,10 @@ void command_agent_jobstart(agent * a, msg_t * msg) {
 	server.stats.total.started++;
 	print_msg(JERS_LOG_DEBUG, "JobID: %d started PID:%d", jobid, pid);
 
-	return;
+	return 0;
 }
 
-void command_agent_jobcompleted(agent * a, msg_t * msg) {
+int command_agent_jobcompleted(agent * a, msg_t * msg) {
 	jobid_t jobid = 0;
 	int exitcode = 0;
 	time_t finish_time = 0;
@@ -232,7 +340,7 @@ void command_agent_jobcompleted(agent * a, msg_t * msg) {
 
 	if (j == NULL) {
 		print_msg(JERS_LOG_WARNING, "Got job completed for non-existent jobid: %d", jobid);
-		return;
+		return 0;
 	}
 
 	if (j->internal_state & JERS_FLAG_JOB_STARTED) {
@@ -270,5 +378,5 @@ void command_agent_jobcompleted(agent * a, msg_t * msg) {
 
 	print_msg(JERS_LOG_INFO, "JobID: %d %s exitcode:%d finish_time:%ld", jobid, exitcode ? "EXITED" : "COMPLETED", j->exitcode, j->finish_time);
 
-	return;
+	return 1;
 }

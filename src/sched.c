@@ -257,7 +257,7 @@ void checkJobs(void) {
 		}
 
 		/* Agent not connected? */
-		if (j->queue->agent == NULL) {
+		if (j->queue->agent == NULL || j->queue->agent->logged_in == 0) {
 			j->pend_reason = JERS_PEND_AGENTDOWN;
 			continue;
 		}

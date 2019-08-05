@@ -31,6 +31,7 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
 #include <grp.h>
@@ -73,6 +74,28 @@ void getGroups(char * groups, struct gid_array * array) {
 	array->count = count;
 }
 
+void loadAllowedAgents(char * agents_string) {
+	/* The agent string should be a space seperated list of hostnames
+	 * that we expect agents to connect from */
+	char * tok = strtok(agents_string, " ");
+
+	while (tok) {
+		print_msg(JERS_LOG_DEBUG, "Adding agent '%s' to allowed list", tok);
+		agent *a = calloc(1, sizeof(agent));
+
+		if (a == NULL)
+			error_die("Failed to allocate space for agents: %s", strerror(errno));
+
+		a->host = strdup(tok);
+		a->connection.socket = -1;
+		addAgent(a);
+
+		tok = strtok(NULL, " ");
+	}
+
+	return;
+}
+
 void loadConfig(char * config) {
 	FILE * f = NULL;
 	char * line = NULL;
@@ -109,32 +132,16 @@ void loadConfig(char * config) {
 
 	while ((len = getline(&line, &line_size, f)) != -1) {
 		line[strcspn(line, "\n")] = '\0';
+		char *key, *value;
 
-		/* Remove any comments and trailing/leading whitespace */
-		char * comment = strchr(line, '#');
-		if (comment != NULL)
-			*comment = '\0';
-		
-		removeWhitespace(line);
-		/* Blank Line*/
-		if (*line == '\0')
+		if (splitConfigLine(line, &key, &value))
 			continue;
 
-		/* The key and value are seperated by a space */
-		char * key = line;
-		char * value = strchr(line, ' ');
-
-		if (value == NULL) {
+		if (key == NULL || value == NULL) {
 			print_msg(JERS_LOG_WARNING, "Skipping unknown line: %ld %s\n", strlen(line),line);
-			continue;	  
+			continue;
 		}
-
-		*value = '\0';
-		value++;
-
-		removeWhitespace(key);
-		removeWhitespace(value);
-
+	
 		if (strcmp(key, "state_dir") == 0) {
 			free(server.state_dir);
 			server.state_dir = strdup(value);
@@ -143,7 +150,6 @@ void loadConfig(char * config) {
 				server.flush.defer = 1;
 			else
 				server.flush.defer = 0;
-
 		} else if (strcmp(key, "flush_defer_ms") == 0) {
 			server.flush.defer_ms = atoi(value);
 		} else if (strcmp(key, "background_save_ms") == 0) {
@@ -163,6 +169,12 @@ void loadConfig(char * config) {
 		} else if (strcmp(key, "client_listen_socket") == 0) {
 			free(server.socket_path);
 			server.socket_path = strdup(value);
+		} else if (strcmp(key, "agent_listen_port") == 0) {
+			server.agent_port = atoi(value);
+
+			if (server.agent_port == 0)
+				print_msg(JERS_LOG_WARNING, "Invalid agent_listen_port specified in config file %s'. Not listening via TCP port", value);
+
 		} else if (strcmp(key, "agent_listen_socket") == 0) {
 			free(server.agent_socket_path);
 			server.agent_socket_path = strdup(value);
@@ -176,6 +188,8 @@ void loadConfig(char * config) {
 			getGroups(value, &server.permissions.setuid);
 		} else if (strcmp(key, "queue_group") == 0) {
 			getGroups(value, &server.permissions.queue);
+		} else if (strcmp(key, "agents") == 0) {
+			loadAllowedAgents(value);
 		} else if (strcmp(key, "logging_mode") == 0) {
 			if (strcmp(value, "DEBUG") == 0)
 				server.logging_mode = JERS_LOG_DEBUG;
@@ -189,7 +203,11 @@ void loadConfig(char * config) {
 				print_msg(JERS_LOG_WARNING, "Unknown logging mode '%s' specified in config file. Defaulting to 'INFO'", value);
 				server.logging_mode = JERS_LOG_INFO;
 			}
+		} else if(strcmp(key, "secret") == 0) {
+			server.secret = 1;
 			
+			if (loadSecret(value, server.secret_hash) != 0)
+				error_die("Unable to load secret specified in configuration file: %s", value);
 		} else {
 			print_msg(JERS_LOG_WARNING, "Skipping unknown config key: %s\n", key);
 			continue;
@@ -203,6 +221,16 @@ void loadConfig(char * config) {
 	}
 
 	fclose(f);
+
+	if (server.agent_list == NULL) {
+		/* No allowed agents specified in the config file,
+		 * only allow an agent connection from localhost */
+		server.agent_list = calloc(1, sizeof(agent));
+		server.agent_list->host = strdup("localhost");
+		server.agent_list->connection.socket = -1;
+
+		print_msg(JERS_LOG_WARNING, "No agents in config file. Only allowing an agent from localhost");
+	}
 
 	return;
 }

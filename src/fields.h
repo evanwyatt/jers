@@ -153,6 +153,10 @@ enum field_type {
 
 	CLEARRES,
 
+	NONCE,
+	DATETIME,
+	MSG_HMAC,
+
 	ENDOFFIELDS
 };
 void sortfields(void);

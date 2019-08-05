@@ -50,6 +50,8 @@ int buffNew(buff_t * b, size_t initial_size) {
 void buffFree(buff_t * b) {
 	free(b->data);
 	b->data = NULL;
+	b->used = 0;
+	b->size = 0;
 }
 
 /* Resize the buffer to be able to store at least an extra 'length' bytes */

@@ -67,6 +67,7 @@ agent_command_t agent_commands[] = {
 	{AGENT_JOB_COMPLETED, CMDFLG_REPLAY, command_agent_jobcompleted},
 	{AGENT_LOGIN,         0,             command_agent_login},
 	{AGENT_RECON_RESP,    0,             command_agent_recon},
+	{AGENT_AUTH_RESP,     0,             command_agent_authresp},
 };
 
 command_t * sorted_commands = NULL;
@@ -180,6 +181,7 @@ void runComplexCommand(client * c) {
 int runAgentCommand(agent * a) {
 	static int cmd_count = sizeof(agent_commands) / sizeof(agent_command_t);
 	agent_command_t * command_to_run = NULL;
+	int status = 0;
 
 	if (likely(sorted_agentcommands != NULL)) {
 		agent_command_t lookup;
@@ -196,14 +198,14 @@ int runAgentCommand(agent * a) {
 	}
 
 	if (likely(command_to_run != NULL)) {
-		command_to_run->cmd_func(a, &a->msg);
+		status = command_to_run->cmd_func(a, &a->msg);
 	} else {
 		print_msg(JERS_LOG_WARNING, "Invalid agent command %s received", a->msg.command);
 		return 0;
 	}
 
 	/* Write to the journal if the transaction was an update and successful */
-	if (command_to_run->flags &CMDFLG_REPLAY)
+	if (status && command_to_run->flags &CMDFLG_REPLAY)
 		stateSaveCmd(0, a->msg.command, a->msg.reader.msg_cpy, 0, 0);
 
 	free_message(&a->msg);
@@ -213,7 +215,7 @@ int runAgentCommand(agent * a) {
 			respReadUpdate(&a->msg.reader, a->requests.data, a->requests.used);
 	}
 
-	return 0;
+	return status;
 }
 
 static int _sendMessage(struct connectionType * connection, buff_t * b, resp_t * r) {
@@ -402,4 +404,66 @@ int command_stats(client * c, void * args) {
 	respCloseMap(&r);
 
 	return sendClientMessage(c, NULL, &r);
+}
+
+/* Load a users permissions based on groups in the config file */
+static void loadPermissions(struct user * u) {
+	u->permissions = 0;
+
+	for (int i = 0; i < u->group_count; i++) {
+		gid_t g = u->group_list[i];
+
+		for (int j = 0; j < server.permissions.read.count; j++) {
+			if (g == server.permissions.read.groups[j]) {
+				u->permissions |= PERM_READ;
+				break;
+			}
+		}
+
+		for (int j = 0; j < server.permissions.write.count; j++) {
+			if (g == server.permissions.write.groups[j]) {
+				u->permissions |= PERM_WRITE;
+				break;
+			}
+		}
+
+		for (int j = 0; j < server.permissions.setuid.count; j++) {
+			if (g == server.permissions.setuid.groups[j]) {
+				u->permissions |= PERM_SETUID;
+				break;
+			}
+		}
+
+		for (int j = 0; j < server.permissions.queue.count; j++) {
+			if (g == server.permissions.queue.groups[j]) {
+				u->permissions |= PERM_QUEUE;
+				break;
+			}
+		}
+	}
+}
+
+/* Lookup the user, checking if they have the requested permissions.
+ * Returns:
+ * 0 = Authorized
+ * Non-zero = not authorized */
+
+int validateUserAction(client * c, int required_perm) {
+	if (c->uid == 0)
+		return 0;
+
+	c->user = lookup_user(c->uid, 0);
+
+	if (c->user == NULL) {
+		print_msg(JERS_LOG_WARNING, "Failed to find user uid %d for permissions lookup", c->uid);
+		return 1;
+	}
+
+	if (c->user->permissions == -1)
+		loadPermissions(c->user);
+
+	if ((c->user->permissions &required_perm) != required_perm)
+		return 1;
+
+	return 0;
 }

@@ -49,6 +49,7 @@
 #include <comms.h>
 #include <fields.h>
 #include <logging.h>
+#include <auth.h>
 
 #define likely(x)       __builtin_expect((x),1)
 #define unlikely(x)     __builtin_expect((x),0)
@@ -96,7 +97,9 @@ typedef struct _agent {
 	msg_t msg;
 
 	char * host;
+	char * nonce;
 	int recon;
+	int logged_in;
 
 	/* Requests to send to this agent */
 	buff_t requests;
@@ -228,6 +231,9 @@ struct jersServer {
 
 	int daemon;
 
+	int secret;
+	unsigned char secret_hash[SECRET_HASH_SIZE]; // Hash of secret read from config file
+
 	int64_t dirty_jobs;
 	int64_t dirty_queues;
 	int64_t dirty_resources;
@@ -310,7 +316,9 @@ struct jersServer {
 	client * client_list;
 
 	char * agent_socket_path;
+	int agent_port;
 	struct connectionType agent_connection;
+	struct connectionType agent_connection_tcp;
 	agent * agent_list;
 
 	struct flush {

@@ -49,13 +49,14 @@ typedef struct command {
 typedef struct {
 	char * name;
 	int flags;
-	void (*cmd_func)(agent * a, msg_t * msg);
+	int32_t (*cmd_func)(agent * a, msg_t * msg);
 } agent_command_t;
 
-void command_agent_login(agent * a, msg_t * msg);
-void command_agent_jobstart(agent * a, msg_t * msg);
-void command_agent_jobcompleted(agent * a, msg_t * msg);
-void command_agent_recon(agent * a, msg_t * msg);
+int command_agent_login(agent * a, msg_t * msg);
+int command_agent_jobstart(agent * a, msg_t * msg);
+int command_agent_jobcompleted(agent * a, msg_t * msg);
+int command_agent_recon(agent * a, msg_t * msg);
+int command_agent_authresp(agent * a, msg_t * msg);
 
 int command_stats(client *, void *);
 

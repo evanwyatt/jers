@@ -83,23 +83,24 @@ void checkAgentEvent(void) {
 
 	while (a) {
 		int rc = 0;
+		agent * a_next = a->next;
 
 		while (rc == 0) {
 			rc = load_message(&a->msg, &a->requests);
 
 			if (rc < 0) {
-				agent * a_next = a->next;
-				print_msg(JERS_LOG_WARNING, "Failed to load agent message:");
+				print_msg(JERS_LOG_WARNING, "Failed to load agent message - Disconnecting them");
 				handleAgentDisconnect(a);
-				a = a_next;
-				continue;
+				break;
 			}
 
-			if (rc == 0)
-				runAgentCommand(a);
+			if (rc == 0) {
+				if (runAgentCommand(a) != 0)
+					break;
+			}
 		}
 
-		a = a->next;
+		a = a_next;
 	}
 }
 

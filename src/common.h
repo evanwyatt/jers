@@ -110,4 +110,6 @@ const char * getSignalName(int signal);
 int getSignalNumber(const char *name);
 
 void setup_handlers(void(*shutdownHandler)(int));
+char * hexEncode(const unsigned char *input, int input_len, char *output);
+int splitConfigLine(char *line, char **key, char **value);
 #endif

@@ -33,6 +33,8 @@
 #include <sys/socket.h>
 #include <sys/epoll.h>
 #include <sys/un.h>
+#include <netinet/in.h>
+#include <netdb.h>
 
 enum connectionTypes {
 	CLIENT_CONN = 1,

@@ -27,71 +27,142 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <unistd.h>
 #include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <errno.h>
 
-#include "server.h"
-#include "common.h"
-#include "logging.h"
+#include <auth.h>
+#include <common.h>
+#include <logging.h>
 
-/* Load a users permissions based on groups in the config file */
-static void loadPermissions(struct user * u) {
-	u->permissions = 0;
+/* Generate a nonce of size 'size' and return an allocated buffer containing
+ * the hex encoded representation */
 
-	for (int i = 0; i < u->group_count; i++) {
-		gid_t g = u->group_list[i];
+char * generateNonce(int size) {
+	unsigned char nonce[size];
+	int bytes = 0;
 
-		for (int j = 0; j < server.permissions.read.count; j++) {
-			if (g == server.permissions.read.groups[j]) {
-				u->permissions |= PERM_READ;
-				break;
-			}
-		}
+	int fd = open("/dev/urandom", O_RDONLY);
 
-		for (int j = 0; j < server.permissions.write.count; j++) {
-			if (g == server.permissions.write.groups[j]) {
-				u->permissions |= PERM_WRITE;
-				break;
-			}
-		}
-
-		for (int j = 0; j < server.permissions.setuid.count; j++) {
-			if (g == server.permissions.setuid.groups[j]) {
-				u->permissions |= PERM_SETUID;
-				break;
-			}
-		}
-
-		for (int j = 0; j < server.permissions.queue.count; j++) {
-			if (g == server.permissions.queue.groups[j]) {
-				u->permissions |= PERM_QUEUE;
-				break;
-			}
-		}
+	if (fd < 0) {
+		print_msg(JERS_LOG_WARNING, "Failed to open /dev/urandom: %s", strerror(errno));
+		return NULL;
 	}
+
+	while (bytes < size) {
+		int r = read(fd, nonce + bytes, size - bytes);
+
+		if (r == -1) {
+			print_msg(JERS_LOG_WARNING, "Failed to read /dev/urandom: %s\n", strerror(errno));
+			close(fd);
+			return NULL;
+		}
+
+		bytes += r;
+	}
+
+	close(fd);
+
+	return hexEncode(nonce, size, NULL);
 }
 
-/* Lookup the user, checking if they have the requested permissions.
- * Returns:
- * 0 = Authorized
- * Non-zero = not authorized */
+/* Generate a HMAC on the NULL terminated input char * array, using the provided key */
+char * generateHMAC(const char ** input, const unsigned char *key, int key_len) {
+	unsigned char hmac_result[EVP_MAX_MD_SIZE];
+	unsigned int result_size = 0;
+	HMAC_CTX ctx;
 
-int validateUserAction(client * c, int required_perm) {
-	if (c->uid == 0)
-		return 0;
+	HMAC_CTX_init(&ctx);
 
-	c->user = lookup_user(c->uid, 0);
+	if (HMAC_Init_ex(&ctx, key, key_len, EVP_sha256(), NULL) != 1) {
+		print_msg(JERS_LOG_WARNING, "HMAC_Init_ex() failed\n");
+		return NULL;
+	}
 
-	if (c->user == NULL) {
-		print_msg(JERS_LOG_WARNING, "Failed to find user uid %d for permissions lookup", c->uid);
+	for (int i = 0; input[i]; i++) {
+		if (HMAC_Update(&ctx, (const unsigned char *)input[i], strlen(input[i])) != 1) {
+			print_msg(JERS_LOG_WARNING, "HMAC_Update() failed\n");
+			HMAC_CTX_cleanup(&ctx);
+			return NULL;
+		}
+	}
+
+	if (HMAC_Final(&ctx, hmac_result, &result_size) != 1) {
+		print_msg(JERS_LOG_WARNING, "HMAC_Final() failed\n");
+		HMAC_CTX_cleanup(&ctx);
+		return NULL;
+	}
+
+	HMAC_CTX_cleanup(&ctx);
+
+	return hexEncode(hmac_result, result_size, NULL);
+}
+
+/* Load the secret from 'secret_filename' storing the hash of the file in 'hash'.
+ * 'hash' is assummed to be large enough to store a SHA256 hash (SHA256_DIGEST_LENGTH) */
+
+int loadSecret(const char * secret_filename, unsigned char *hash) {
+	unsigned char *secret = NULL;
+	struct stat buff;
+	int bytes = 0;
+
+	int fd = open(secret_filename, O_RDONLY);
+
+	if (fd < 0) {
+		print_msg(JERS_LOG_WARNING, "Failed to open secret %s: %s", secret_filename, strerror(errno));
 		return 1;
 	}
 
-	if (c->user->permissions == -1)
-		loadPermissions(c->user);
-
-	if ((c->user->permissions &required_perm) != required_perm)
+	if (fstat(fd, &buff) != 0) {
+		print_msg(JERS_LOG_WARNING, "Failed to stat() secret file %s: %s", secret_filename, strerror(errno));
 		return 1;
+	}
+
+	/* The secret file should only be readable by the user running the JERS Daemon */
+	if (getuid() != 0 && (getuid() != buff.st_uid || getgid() != buff.st_gid)) {
+		print_msg(JERS_LOG_WARNING, "Ownership of secret file is not uid:%d", getuid());
+		return 1;
+	}
+
+	/* Check the permissions */
+	if (getuid() != 0 && (buff.st_mode &(S_IRWXO|S_IRWXG)) != 0) {
+		print_msg(JERS_LOG_WARNING, "Permissions on the secret file allows group/others access! - Only owner should have access ie. 400");
+		return 1;
+	}
+
+	if (buff.st_size <= 0) {
+		print_msg(JERS_LOG_WARNING, "Secret file %s is empty", secret_filename);
+	}
+
+	secret = malloc(buff.st_size);
+
+	if (secret == NULL) {
+		print_msg(JERS_LOG_WARNING, "Failed to allocate memory for secret: %s", strerror(errno));
+		return 1;
+	}
+
+	while (bytes < buff.st_size) {
+		int l = read(fd, secret + bytes, buff.st_size - bytes);
+
+		if (l <= 0) {
+			print_msg(JERS_LOG_WARNING, "Failed to read secret file %s: %s", secret_filename, strerror(errno));
+			free(secret);
+			return 1;
+		}
+
+		bytes += l;
+	}
+
+	/* Hash the secret */
+	if (SHA256(secret, buff.st_size, hash) == NULL) {
+		print_msg(JERS_LOG_WARNING, "Failed to generate SHA256 hash of secret: %s", strerror(errno));
+		free(secret);
+		return 1;
+	}
+
+	free(secret);
 
 	return 0;
 }

@@ -141,6 +141,33 @@ void setup_listening_sockets(void) {
 
 	setReadable(&server.client_connection);
 
+	/* Agent connections over TCP */
+	if (server.agent_port) {
+		fd = socket(AF_INET, SOCK_STREAM|SOCK_NONBLOCK, 0);
+
+		if (fd == -1)
+			error_die("failed to create listening socket for port %d: %s", server.agent_port, strerror(errno));
+
+		struct sockaddr_in servaddr;
+		memset(&servaddr, 0, sizeof(servaddr));
+		servaddr.sin_family  = AF_INET;
+		servaddr.sin_addr.s_addr = htonl(INADDR_ANY); 
+		servaddr.sin_port = htons(server.agent_port); 
+
+		if ((bind(fd, &servaddr, sizeof(servaddr))) != 0)
+			error_die("Failed to bind socket to TCP port %d: %s", server.agent_port, strerror(errno));
+
+		if (listen(fd, 1024) == -1)
+			error_die("Failed to listen on TCP port %d: %s", server.agent_port, strerror(errno));
+
+		server.agent_connection_tcp.type = AGENT_CONN;
+		server.agent_connection_tcp.socket = fd;
+		server.agent_connection_tcp.ptr = NULL;
+		server.agent_connection_tcp.events = 0;
+
+		setReadable(&server.agent_connection_tcp);
+	}
+
 	/* Agent socket */
 	fd = socket(AF_UNIX, SOCK_STREAM|SOCK_NONBLOCK, 0);
 
@@ -258,14 +285,13 @@ int handleClientConnection(void) {
 	return 0;
 }
 
-int handleAgentConnection(void) {
+int handleAgentConnection(struct connectionType * conn) {
 	int agent_fd;
-	agent * a = NULL;
 
-	print_msg(JERS_LOG_INFO, "Agent has connected");
+	print_msg(JERS_LOG_DEBUG, "Agent has connected");
 
 	while (1) {
-		agent_fd = accept(server.agent_connection.socket, NULL, NULL);
+		agent_fd = accept(conn->socket, NULL, NULL);
 
 		if (agent_fd < 0) {
 			if (errno == EINTR)
@@ -285,23 +311,57 @@ int handleAgentConnection(void) {
 		return 1;
 	}
 
-	a = calloc(sizeof(agent), 1);
+	/* Get the hosts details */
+	struct sockaddr_in peerAddr;
+	socklen_t len = sizeof(peerAddr);
+	if (getpeername(agent_fd, &peerAddr, &len) != 0) {
+		print_msg(JERS_LOG_WARNING, "Failed to getpeername of connecting agent: %s", strerror(errno));
+		close(agent_fd);
+		return 1;
+	}
 
-	a->connection.type = AGENT;
-	a->connection.ptr = a;
-	a->connection.socket = agent_fd;
-	a->connection.events = 0;
+	/* We expect the agent to be resolvable to a single hostname, ie. It has one PTR record. */
+	char host[NI_MAXHOST];
+	if (getnameinfo((struct sockaddr *)&peerAddr, sizeof(peerAddr), host, sizeof(host), NULL, 0, NI_NAMEREQD) != 0) {
+		print_msg(JERS_LOG_WARNING, "Failed to get name of peer getnameinfo(): %s", strerror(errno));
+		close(agent_fd);
+		return 1;
+	}
 
-	setReadable(&a->connection);
+	print_msg(JERS_LOG_INFO, "Got agent connection attempt from host: %s", host);
 
-	buffNew(&a->requests, 0);
-	buffNew(&a->responses, 0);
-	a->sent = 0;
+	/* Check if this agent is allowed to connect to us. */
+	agent *a = NULL;
+	for (a = server.agent_list; a; a = a->next) {
+		if (strcmp(a->host, host) == 0) {
+			/* Found it */
+			if (a->connection.socket >= 0) {
+				print_msg(JERS_LOG_CRITICAL, "An agent connection attempt was made from %s, but they are were already connected.", host);
+				close(agent_fd);
+				return 1;
+			}
 
-	/* Add it to our list of agent */
-	addAgent(a);
+			a->connection.type = AGENT;
+			a->connection.ptr = a;
+			a->connection.socket = agent_fd;
+			a->connection.events = 0;
+			a->logged_in = 0;
 
-	print_msg(JERS_LOG_INFO, "New agent connection initalised");
+			setReadable(&a->connection);
+			buffNew(&a->requests, 0);
+			buffNew(&a->responses, 0);
+			a->sent = 0;
+
+			print_msg(JERS_LOG_INFO, "New agent connection from '%s' initalised", host);
+			break;
+		}
+	}
+
+	if (a == NULL) {
+		print_msg(JERS_LOG_WARNING, "Connecting agent from '%s' not in allowed list. Disconnecting them.", host);
+		close(agent_fd);
+		return 1;
+	}
 
 	return 0;
 }
@@ -310,7 +370,7 @@ int handleAgentConnection(void) {
  * - Mark any jobs that were in running as 'Unknown'. There is a chance the agent will reconnect and update the status. */
 
 void handleAgentDisconnect(agent * a) {
-	print_msg(JERS_LOG_CRITICAL, "JERS AGENT DISCONNECTED.");
+	print_msg(JERS_LOG_CRITICAL, "JERS AGENT DISCONNECTED: %s", a->host);
 
 	/* Stop receiving events for this socket */
 	struct epoll_event ee;
@@ -319,9 +379,7 @@ void handleAgentDisconnect(agent * a) {
 	}
 
 	/* Mark jobs on this agent as unknown */
-	struct job * j;
-
-	for (j = server.jobTable; j != NULL; j = j->hh.next) {
+	for (struct job *j = server.jobTable; j != NULL; j = j->hh.next) {
 		if (j->queue->agent == a && (j->state & JERS_JOB_RUNNING || j->internal_state & JERS_FLAG_JOB_STARTED)) {
 			print_msg(JERS_LOG_WARNING, "Job %d is now unknown", j->jobid);
 			j->internal_state = 0;
@@ -330,24 +388,24 @@ void handleAgentDisconnect(agent * a) {
 	}
 
 	/* Disable queues for this agent */
-	struct queue * q;
-	for (q = server.queueTable; q != NULL; q = q->hh.next) {
+	for (struct queue *q = server.queueTable; q != NULL; q = q->hh.next) {
 		if (q->agent == a) {
-			q->agent = NULL;
 			print_msg(JERS_LOG_DEBUG, "Disabling queue %s", q->name);
-
+			q->agent = NULL;
 			q->state &= ~JERS_QUEUE_FLAG_STARTED;
 		}
 	}
 
 	close(a->connection.socket);
+	a->connection.socket = -1;
+	a->connection.events = 0;
+	a->logged_in = 0;
+	free(a->nonce);
+	a->nonce = NULL;
+
 	buffFree(&a->requests);
 	buffFree(&a->responses);
 	respReadFree(&a->msg.reader);
-	free(a->host);
-
-	removeAgent(a);
-	free(a);
 }
 
 /* Handle read activity on a agent socket */
@@ -454,7 +512,7 @@ void handleReadable(struct epoll_event * e) {
 
 	switch (connection->type) {
 		case CLIENT_CONN: status = handleClientConnection(); break;
-		case AGENT_CONN:  status = handleAgentConnection(); break;
+		case AGENT_CONN:  status = handleAgentConnection(connection); break;
 		case CLIENT:      status = handleClientRead(connection->ptr); break;
 		case AGENT:       status = handleAgentRead(connection->ptr); break;
 		default:          print_msg(JERS_LOG_WARNING, "Unexpected read event - Ignoring"); break;

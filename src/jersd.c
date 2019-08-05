@@ -157,15 +157,15 @@ int main (int argc, char * argv[]) {
 	if (parseOpts(argc, argv))
 		error_die("Argument parsing failed\n");
 
+	if (server.daemon)
+		setupAsDaemon();
+
 	setup_handlers(shutdownHandler);
 	loadConfig(server.config_file);
 
 #ifdef INIT_SETPROCTITLE_REPLACEMENT
     spt_init(argc, argv);
 #endif
-
-	if (server.daemon)
-		setupAsDaemon();
 
 	server_log_mode = server.logging_mode;
 
