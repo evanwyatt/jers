@@ -167,10 +167,10 @@ void freeStringArray(int count, char *** array);
 void freeStringMap(int count, key_val_t ** keys);
 
 void addIntField(resp_t * r, int field_no, int64_t value);
-void addStringField(resp_t * r, int field_no, char * value);
+void addStringField(resp_t * r, int field_no, const char * value);
 void addBoolField(resp_t * r, int field_no, char value);
 void addStringArrayField(resp_t * r, int field_no, int count, char ** strings);
-void addStringMapField(resp_t * r, int field_no, int count, key_val_t * keys);
+void addStringMapField(resp_t * r, int field_no, int count, const key_val_t * keys);
 
 char * getStringField(field * f);
 int64_t getNumberField(field * f);

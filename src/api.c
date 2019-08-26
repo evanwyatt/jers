@@ -85,7 +85,7 @@ static const char * getErrString(int jers_error) {
 	return jers_err_string ? jers_err_string : getErrMsg(jers_error);
 }
 
-static int customInit(char * custom_config) {
+static int customInit(const char * custom_config) {
 	(void) custom_config;
 	return 0;
 }
@@ -95,7 +95,7 @@ static int defaultInit(void) {
 	return 0;
 }
 
-JERS_EXPORT int jersInitAPI(char * custom_config) {
+JERS_EXPORT int jersInitAPI(const char * custom_config) {
 	int rc = 0;
 
 	/* We can be reinitalised by providing a config argument */
@@ -406,7 +406,7 @@ static int deserialize_jersJob(msg_item * item, jersJob *j) {
 	return 0;
 }
 
-JERS_EXPORT int jersGetJob(jobid_t jobid, jersJobFilter * filter, jersJobInfo * job_info) {
+JERS_EXPORT int jersGetJob(jobid_t jobid, const jersJobFilter * filter, jersJobInfo * job_info) {
 	if (jersInitAPI(NULL))
 		return 1;
 
@@ -497,7 +497,7 @@ JERS_EXPORT void jersInitJobAdd(jersJobAdd * j) {
 	j->defer_time = -1;
 }
 
-JERS_EXPORT jobid_t jersAddJob(jersJobAdd * j) {
+JERS_EXPORT jobid_t jersAddJob(const jersJobAdd * j) {
 	jobid_t new_jobid = 0;
 
 	if (jersInitAPI(NULL))
@@ -613,7 +613,7 @@ JERS_EXPORT void jersInitJobMod(jersJobMod *j) {
 	j->defer_time = -1;
 }
 
-JERS_EXPORT int jersModJob(jersJobMod *j) {
+JERS_EXPORT int jersModJob(const jersJobMod *j) {
 	if (jersInitAPI(NULL))
 		return 1;
 
@@ -728,7 +728,7 @@ JERS_EXPORT void jersInitQueueAdd(jersQueueAdd *q) {
 
 /* Note: filter is currently not used for queues */
 
-JERS_EXPORT int jersGetQueue(char * name, jersQueueFilter * filter, jersQueueInfo * info) {
+JERS_EXPORT int jersGetQueue(const char * name, const jersQueueFilter * filter, jersQueueInfo * info) {
 	if (jersInitAPI(NULL)) 
 		return 0;
 
@@ -782,7 +782,7 @@ JERS_EXPORT void jersFreeQueueInfo(jersQueueInfo * info) {
 	return;
 }
 
-JERS_EXPORT int jersAddQueue(jersQueueAdd *q) {
+JERS_EXPORT int jersAddQueue(const jersQueueAdd *q) {
 
 	if (jersInitAPI(NULL))
 		return 1;
@@ -830,7 +830,7 @@ JERS_EXPORT int jersAddQueue(jersQueueAdd *q) {
 	return 0;
 }
 
-JERS_EXPORT int jersModQueue(jersQueueMod *q) {
+JERS_EXPORT int jersModQueue(const jersQueueMod *q) {
 	if (jersInitAPI(NULL))
 		return 1;
 
@@ -879,7 +879,7 @@ JERS_EXPORT int jersModQueue(jersQueueMod *q) {
 	return 0;
 }
 
-JERS_EXPORT int jersDelQueue(char *name) {
+JERS_EXPORT int jersDelQueue(const char *name) {
 	if (jersInitAPI(NULL))
 		return 1;
 
@@ -900,7 +900,7 @@ JERS_EXPORT int jersDelQueue(char *name) {
 	return 0;
 }
 
-JERS_EXPORT int jersAddResource(char *name, int count) {
+JERS_EXPORT int jersAddResource(const char *name, int count) {
 	if (jersInitAPI(NULL))
 		return 1;
 
@@ -928,7 +928,7 @@ JERS_EXPORT int jersAddResource(char *name, int count) {
 
 	return 0;
 }
-JERS_EXPORT int jersGetResource(char * name, jersResourceFilter *filter, jersResourceInfo *info) {
+JERS_EXPORT int jersGetResource(const char * name, const jersResourceFilter *filter, jersResourceInfo *info) {
 	if (jersInitAPI(NULL))
 		return 1;
 
@@ -967,7 +967,7 @@ JERS_EXPORT int jersGetResource(char * name, jersResourceFilter *filter, jersRes
 	return 0;
 }
 
-JERS_EXPORT int jersModResource(char *name, int new_count) {
+JERS_EXPORT int jersModResource(const char *name, int new_count) {
 	if (jersInitAPI(NULL))
 		return 1;
 
@@ -989,7 +989,7 @@ JERS_EXPORT int jersModResource(char *name, int new_count) {
 	return 0;
 }
 
-JERS_EXPORT int jersDelResource(char *name) {
+JERS_EXPORT int jersDelResource(const char *name) {
 	if (jersInitAPI(NULL))
 		return 1;
 
@@ -1068,7 +1068,7 @@ JERS_EXPORT int jersGetStats(jersStats * s) {
 	return 0;
 }
 
-JERS_EXPORT int jersSetTag(jobid_t id, char * key, char * value) {
+JERS_EXPORT int jersSetTag(jobid_t id, const char * key, const char * value) {
 	if (jersInitAPI(NULL))
 		return 1;
 
@@ -1093,7 +1093,7 @@ JERS_EXPORT int jersSetTag(jobid_t id, char * key, char * value) {
 	return 0;
 }
 
-JERS_EXPORT int jersDelTag(jobid_t id, char * key) {
+JERS_EXPORT int jersDelTag(jobid_t id, const char * key) {
 	if (jersInitAPI(NULL))
 		return 1;
 

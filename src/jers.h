@@ -26,6 +26,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
 #ifndef __JERS_H
 #define __JERS_H
 
@@ -413,27 +414,26 @@ void jersInitQueueMod(jersQueueMod *q);
 void jersInitResourceAdd(jersResourceAdd *r);
 void jersInitResourceMod(jersResourceMod *r);
 
-jobid_t jersAddJob(jersJobAdd *s);
-int jersModJob(jersJobMod *j);
-int jersGetJob(jobid_t id, jersJobFilter *filter, jersJobInfo *info);
+jobid_t jersAddJob(const jersJobAdd *s);
+int jersModJob(const jersJobMod *j);
+int jersGetJob(jobid_t id, const jersJobFilter *filter, jersJobInfo *info);
 int jersDelJob(jobid_t id);
-int jersRestartJob(jobid_t id);
 int jersSignalJob(jobid_t id, int signo);
 void jersFreeJobInfo (jersJobInfo *info);
 
-int jersSetTag(jobid_t id, char * key, char * value);
-int jersDelTag(jobid_t id, char * key);
+int jersSetTag(jobid_t id, const char * key, const char * value);
+int jersDelTag(jobid_t id, const char * key);
 
-int jersAddQueue(jersQueueAdd *q);
-int jersModQueue(jersQueueMod *q);
-int jersGetQueue(char *name, jersQueueFilter *filter, jersQueueInfo *info);
-int jersDelQueue(char *name);
+int jersAddQueue(const jersQueueAdd *q);
+int jersModQueue(const jersQueueMod *q);
+int jersGetQueue(const char *name, const jersQueueFilter *filter, jersQueueInfo *info);
+int jersDelQueue(const char *name);
 void jersFreeQueueInfo(jersQueueInfo *info);
 
-int jersAddResource(char *name, int count);
-int jersModResource(char *name, int new_count);
-int jersGetResource(char *name, jersResourceFilter *filter, jersResourceInfo *info);
-int jersDelResource(char *name);
+int jersAddResource(const char *name, int count);
+int jersModResource(const char *name, int new_count);
+int jersGetResource(const char *name, const jersResourceFilter *filter, jersResourceInfo *info);
+int jersDelResource(const char *name);
 void jersFreeResourceInfo(jersResourceInfo *info);
 
 int jersGetStats(jersStats * s);
