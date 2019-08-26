@@ -493,12 +493,12 @@ void addIntField(resp_t * r, int field_no, int64_t value) {
 	respAddInt(r, value);
 }
 
-void addStringField(resp_t * r, int field_no, char * value) {
+void addStringField(resp_t * r, int field_no, const char * value) {
 	respAddSimpleString(r, fields[field_no].name);
 	respAddBlobString(r, value, value ? strlen(value) : 0);
 }
 
-void addStringMapField(resp_t * r, int field_no, int count, key_val_t * keys) {
+void addStringMapField(resp_t * r, int field_no, int count, const key_val_t * keys) {
 	respAddSimpleString(r, fields[field_no].name);
 	respAddMap(r);
 
