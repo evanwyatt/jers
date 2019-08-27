@@ -322,8 +322,9 @@ int handleAgentConnection(struct connectionType * conn) {
 
 	/* We expect the agent to be resolvable to a single hostname, ie. It has one PTR record. */
 	char host[NI_MAXHOST];
-	if (getnameinfo((struct sockaddr *)&peerAddr, sizeof(peerAddr), host, sizeof(host), NULL, 0, NI_NAMEREQD) != 0) {
-		print_msg(JERS_LOG_WARNING, "Failed to get name of peer getnameinfo(): %s", strerror(errno));
+	int status;
+	if ((status = getnameinfo((struct sockaddr *)&peerAddr, sizeof(peerAddr), host, sizeof(host), NULL, 0, NI_NAMEREQD)) != 0) {
+		print_msg(JERS_LOG_WARNING, "Failed to get name of peer getnameinfo(): %s", gai_strerror(status));
 		close(agent_fd);
 		return 1;
 	}
