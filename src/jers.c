@@ -311,12 +311,12 @@ static void print_queue(jersQueue *q, int all) {
 
 	} else {
 		if (first) {
-			printf("Queue        Desc             State          JobLimit\n");
-			printf("=====================================================\n");
+			printf("Queue        Desc             Node             State          JobLimit\n");
+			printf("======================================================================\n");
 			first = 0;
 		}
 
-		printf("%-12s %-16.16s %-14.14s %-4d\n", q->name, q->desc, getQueueState(q->state), q->job_limit);
+		printf("%-12s %-16.16s %-16.16s %-14.14s %-4d\n", q->name, q->desc, q->node, getQueueState(q->state), q->job_limit);
 	}
 
 	return;
