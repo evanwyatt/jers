@@ -4,6 +4,8 @@
 
 #include <jers.h>
 
+#include <assert.h>
+
 struct command {
 	char *command_name;
 	int (*func)(int argc, char *argv[]);
@@ -84,7 +86,7 @@ struct show_resource_args {
     char **resources;
 };
 
-struct del_resource_args {
+struct delete_resource_args {
     int verbose;
 
     char **resources;
@@ -103,52 +105,30 @@ struct show_agent_args {
 	char *hostname;
 };
 
-
 int add_func(int argc, char *argv[]);
-
-int add_job(int argc, char *argv[]);
-int add_queue(int argc, char *argv[]);
-int add_resource(int argc, char *argv[]);
-
 int mod_func(int argc, char *argv[]);
-
-int mod_job(int argc, char *argv[]);
-int mod_queue(int argc, char *argv[]);
-int mod_resource(int argc, char *argv[]);
-
 int delete_func(int argc, char *argv[]);
-
-int delete_job(int argc, char *argv[]);
-int delete_queue(int argc, char *argv[]);
-int delete_resource(int argc, char *argv[]);
-
 int show_func(int argc, char *argv[]);
-
-int show_job(int argc, char *argv[]);
-int show_queue(int argc, char *argv[]);
-int show_resource(int argc, char *argv[]);
-
-int show_agent(int argc, char *argv[]);
-
 int signal_func(int argc, char *argv[]);
-int signal_job(int argc, char *argv[]);
 
-int parse_add_job(int argc, char *argv[], struct add_job_args *args);
-int parse_add_queue(int argc, char * argv[], struct add_queue_args * args);
-int parse_mod_job(int argc, char *argv[], struct mod_job_args *args);
+#define CMD(cmd) \
+	int cmd(int argc, char *argv[]); \
+	int parse_##cmd(int argc, char *argv[], struct cmd##_args *args);
 
-int parse_show_job(int argc, char *argv[], struct show_job_args *args);
-int parse_show_queue(int argc, char * argv[], struct show_queue_args * args);
-int parse_mod_queue(int argc, char *argv[], struct mod_queue_args *args);
+CMD(add_job)
+CMD(show_job)
+CMD(delete_job)
+CMD(mod_job)
+CMD(signal_job)
 
-int parse_delete_queue(int argc, char * argv[], struct delete_queue_args * args);
-int parse_delete_job(int argc, char * argv[], struct delete_job_args * args);
+CMD(add_queue)
+CMD(show_queue)
+CMD(delete_queue)
+CMD(mod_queue)
 
-int parse_signal_job(int argc, char * argv[], struct signal_job_args * args);
+CMD(add_resource)
+CMD(show_resource)
+CMD(delete_resource)
+CMD(mod_resource)
 
-int parse_add_resource(int argc, char * argv[], struct add_resource_args * args);
-int parse_mod_resource(int argc, char * argv[], struct mod_resource_args * args);
-int parse_del_resource(int argc, char * argv[], struct del_resource_args * args);
-int parse_show_resource(int argc, char * argv[], struct show_resource_args * args);
-
-int parse_show_agent(int argc, char * argv[], struct show_agent_args * args);
+CMD(show_agent)

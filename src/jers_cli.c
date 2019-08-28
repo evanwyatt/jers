@@ -201,8 +201,6 @@ static error_t add_job_parse(int key, char *arg, struct argp_state *state)
 	return 0;
 }
 
-static struct argp add_job_argp = {add_job_options, add_job_parse, add_job_arg_doc, add_job_doc};
-
 /* Mod Job */
 static char mod_job_doc[] = "mod job - Modify existing job/s";
 static char mod_job_arg_doc[] = "jobid [...]";
@@ -301,10 +299,6 @@ static error_t mod_job_parse(int key, char *arg, struct argp_state *state)
 	}
 	return 0;
 }
-
-static struct argp mod_job_argp = {mod_job_options, mod_job_parse, mod_job_arg_doc, mod_job_doc};
-
-
 
 /* Mod Queue */
 static char mod_queue_doc[] = "mod queue - Modify existing queue/s";
@@ -412,10 +406,6 @@ static error_t mod_queue_parse(int key, char *arg, struct argp_state *state)
 	return 0;
 }
 
-static struct argp mod_queue_argp = {mod_queue_options, mod_queue_parse, mod_queue_arg_doc, mod_queue_doc};
-
-
-
 /* Add Queue */
 static char add_queue_doc[] = "add queue - Create a new queue";
 static char add_queue_arg_doc[] = "QUEUENAME";
@@ -471,8 +461,6 @@ static error_t add_queue_parse(int key, char *arg, struct argp_state *state)
 	return 0;
 }
 
-static struct argp add_queue_argp = {add_queue_options, add_queue_parse, add_queue_arg_doc, add_queue_doc};
-
 /* Add Job */
 static char show_job_doc[] = "show job -- Show jobs";
 static char show_job_arg_doc[] = "JOBID";
@@ -520,8 +508,6 @@ static error_t show_job_parse(int key, char *arg, struct argp_state *state)
 	return 0;
 }
 
-static struct argp show_job_argp = {show_job_options, show_job_parse, show_job_arg_doc, show_job_doc};
-
 static char show_queue_doc[] = "show queue -- Show queues";
 static char show_queue_arg_doc[] = "QUEUE";
 static struct argp_option show_queue_options[] = {
@@ -567,9 +553,6 @@ static error_t show_queue_parse(int key, char *arg, struct argp_state *state)
 	return 0;
 }
 
-static struct argp show_queue_argp = {show_queue_options, show_queue_parse, show_queue_arg_doc, show_queue_doc};
-
-
 static char delete_queue_doc[] = "delete queue -- Delete queue/s";
 static char delete_queue_arg_doc[] = "QUEUE";
 static struct argp_option delete_queue_options[] = {
@@ -609,8 +592,6 @@ static error_t delete_queue_parse(int key, char *arg, struct argp_state *state)
 	}
 	return 0;
 }
-
-static struct argp delete_queue_argp = {delete_queue_options, delete_queue_parse, delete_queue_arg_doc, delete_queue_doc};
 
 static char delete_job_doc[] = "delete job -- Delete job/s";
 static char delete_job_arg_doc[] = "JOBID";
@@ -653,8 +634,6 @@ static error_t delete_job_parse(int key, char *arg, struct argp_state *state)
 	}
 	return 0;
 }
-
-static struct argp delete_job_argp = {delete_job_options, delete_job_parse, delete_job_arg_doc, delete_job_doc};
 
 static char signal_job_doc[] = "signal job -- Signal job/s";
 static char signal_job_arg_doc[] = "JOBID";
@@ -708,9 +687,6 @@ static error_t signal_job_parse(int key, char *arg, struct argp_state *state)
 	return 0;
 }
 
-static struct argp signal_job_argp = {signal_job_options, signal_job_parse, signal_job_arg_doc, signal_job_doc};
-
-
 static char add_resource_doc[] = "add resource -- Add a new resource";
 static char add_resource_arg_doc[] = "resource_name[:count] [...]";
 static struct argp_option add_resource_options[] = {
@@ -753,9 +729,6 @@ static error_t add_resource_parse(int key, char *arg, struct argp_state *state)
 	}
 	return 0;
 }
-
-static struct argp add_resource_argp = {add_resource_options, add_resource_parse, add_resource_arg_doc, add_resource_doc};
-
 
 static char mod_resource_doc[] = "mod resource -- Mod a existing resource/s";
 static char mod_resource_arg_doc[] = "resource_name:new_count [...]";
@@ -800,21 +773,18 @@ static error_t mod_resource_parse(int key, char *arg, struct argp_state *state)
 	return 0;
 }
 
-static struct argp mod_resource_argp = {mod_resource_options, mod_resource_parse, mod_resource_arg_doc, mod_resource_doc};
-
-
-static char del_resource_doc[] = "del resource -- Delete existing resource/s";
-static char del_resource_arg_doc[] = "resource_name [...]";
-static struct argp_option del_resource_options[] = {
+static char delete_resource_doc[] = "del resource -- Delete existing resource/s";
+static char delete_resource_arg_doc[] = "resource_name [...]";
+static struct argp_option delete_resource_options[] = {
 	{"verbose", 'v', 0, 0, "Produce verbose output"},
 	{0}
 };
 
-static error_t del_resource_parse(int key, char *arg, struct argp_state *state)
+static error_t delete_resource_parse(int key, char *arg, struct argp_state *state)
 {
 	UNUSED(arg);
 	int count = 0;
-	struct del_resource_args *arguments = state->input;
+	struct delete_resource_args *arguments = state->input;
 
 	switch (key)
 	{
@@ -845,8 +815,6 @@ static error_t del_resource_parse(int key, char *arg, struct argp_state *state)
 	}
 	return 0;
 }
-
-static struct argp del_resource_argp = {del_resource_options, del_resource_parse, del_resource_arg_doc, del_resource_doc};
 
 static char show_resource_doc[] = "show resource -- Show resource/s";
 static char show_resource_arg_doc[] = "resource_name [...]";
@@ -890,8 +858,6 @@ static error_t show_resource_parse(int key, char *arg, struct argp_state *state)
 	return 0;
 }
 
-static struct argp show_resource_argp = {show_resource_options, show_resource_parse, show_resource_arg_doc, show_resource_doc};
-
 static char show_agent_doc[] = "show agent -- Show agents/s";
 static char show_agent_arg_doc[] = "[hostname (Can be wildcarded)]";
 static struct argp_option show_agent_options[] = {
@@ -930,9 +896,6 @@ static error_t show_agent_parse(int key, char *arg, struct argp_state *state)
 	return 0;
 }
 
-static struct argp show_agent_argp = {show_agent_options, show_agent_parse, show_agent_arg_doc, show_agent_doc};
-
-
 int parse_args(int argc, char *argv[], struct argp *argp, void *args) {
 	/* Call the argp parser, skipping the first two arguments of command/object */
 	if (argp_parse (argp, argc - 2, &argv[2], 0, 0, args) != 0) {
@@ -943,72 +906,27 @@ int parse_args(int argc, char *argv[], struct argp *argp, void *args) {
 	return 0;
 }
 
-int parse_add_job(int argc, char * argv[], struct add_job_args * args) {
-	memset(args, 0, sizeof(struct add_job_args));
-	return parse_args(argc, argv, &add_job_argp, args);
+#define CMD_PARSE(cmd) \
+static struct argp cmd##_argp = {cmd##_options, cmd##_parse, cmd##_arg_doc, cmd##_doc}; \
+int parse_##cmd(int argc, char *argv[], struct cmd##_args *args) { \
+	memset(args, 0, sizeof(struct cmd##_args)); \
+	return parse_args(argc, argv, &cmd##_argp, args); \
 }
 
-int parse_add_queue(int argc, char * argv[], struct add_queue_args * args) {
-	memset(args, 0, sizeof(struct add_queue_args));
-	return parse_args(argc, argv, &add_queue_argp, args);
-}
+CMD_PARSE(add_job)
+CMD_PARSE(show_job)
+CMD_PARSE(delete_job)
+CMD_PARSE(mod_job)
+CMD_PARSE(signal_job)
 
-int parse_show_job(int argc, char * argv[], struct show_job_args * args) {
-	memset(args, 0, sizeof(struct show_job_args));
-	return parse_args(argc, argv, &show_job_argp, args);
-}
+CMD_PARSE(add_queue)
+CMD_PARSE(show_queue)
+CMD_PARSE(delete_queue)
+CMD_PARSE(mod_queue)
 
-int parse_show_queue(int argc, char * argv[], struct show_queue_args * args) {
-	memset(args, 0, sizeof(struct show_queue_args));
-	return parse_args(argc, argv, &show_queue_argp, args);
-}
+CMD_PARSE(add_resource)
+CMD_PARSE(show_resource)
+CMD_PARSE(delete_resource)
+CMD_PARSE(mod_resource)
 
-int parse_delete_queue(int argc, char * argv[], struct delete_queue_args * args) {
-	memset(args, 0, sizeof(struct delete_queue_args));
-	return parse_args(argc, argv, &delete_queue_argp, args);
-}
-
-int parse_delete_job(int argc, char * argv[], struct delete_job_args * args) {
-	memset(args, 0, sizeof(struct delete_job_args));
-	return parse_args(argc, argv, &delete_job_argp, args);
-}
-
-int parse_signal_job(int argc, char * argv[], struct signal_job_args * args) {
-	memset(args, 0, sizeof(struct signal_job_args));
-	return parse_args(argc, argv, &signal_job_argp, args);
-}
-
-int parse_add_resource(int argc, char *argv[], struct add_resource_args *args) {
-	memset(args, 0, sizeof(struct add_resource_args));
-	return parse_args(argc, argv, &add_resource_argp, args);
-}
-
-int parse_mod_resource(int argc, char *argv[], struct mod_resource_args *args) {
-	memset(args, 0, sizeof(struct mod_resource_args));
-	return parse_args(argc, argv, &mod_resource_argp, args);
-}
-
-int parse_del_resource(int argc, char *argv[], struct del_resource_args *args) {
-	memset(args, 0, sizeof(struct del_resource_args));
-	return parse_args(argc, argv, &del_resource_argp, args);
-}
-
-int parse_show_resource(int argc, char *argv[], struct show_resource_args *args) {
-	memset(args, 0, sizeof(struct show_resource_args));
-	return parse_args(argc, argv, &show_resource_argp, args);
-}
-
-int parse_mod_queue(int argc, char *argv[], struct mod_queue_args *args) {
-	memset(args, 0, sizeof(struct mod_queue_args));
-	return parse_args(argc, argv, &mod_queue_argp, args);
-}
-
-int parse_mod_job(int argc, char *argv[], struct mod_job_args *args) {
-	memset(args, 0, sizeof(struct mod_job_args));
-	return parse_args(argc, argv, &mod_job_argp, args);
-}
-
-int parse_show_agent(int argc, char *argv[], struct show_agent_args *args) {
-	memset(args, 0, sizeof(struct show_agent_args));
-	return parse_args(argc, argv, &show_agent_argp, args);
-}
+CMD_PARSE(show_agent)

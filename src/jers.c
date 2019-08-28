@@ -232,10 +232,10 @@ int delete_queue(int argc, char *argv[]) {
 }
 
 int delete_resource(int argc, char *argv[]) {
-	struct del_resource_args args;
+	struct delete_resource_args args;
 	int rc = 0;
 
-	if (parse_del_resource(argc, argv, &args))
+	if (parse_delete_resource(argc, argv, &args))
 		return 1;
 
 	for (int i = 0; args.resources[i]; i++) {
