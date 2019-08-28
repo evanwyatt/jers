@@ -1025,8 +1025,8 @@ int loadKeyValue (char * line, char **key, char ** value, int * index) {
 	/* Remove a trailing newline if present */
 	line[strcspn(line, "\n")] = '\0';
 
-	if (!*line) {
-		/* Empty line*/
+	if (!*line || *line == '#') {
+		/* Empty line/ commented out*/
 		*key = NULL;
 		*value = NULL;
 		return 0;
@@ -1219,9 +1219,11 @@ int stateLoadJob(char * fileName) {
 		char *key, *value;
 		int index = 0;
 
-		if (loadKeyValue(line, &key, &value, &index)) {
+		if (loadKeyValue(line, &key, &value, &index))
 			error_die("Failed to parse job file: %s", fileName);
-		}
+
+		if (!key || !value)
+			continue;
 
 		if (strcmp(key, "JOBNAME") == 0) {
 			j->jobname = strdup(value);
@@ -1543,13 +1545,11 @@ int stateLoadRes(char * file_name) {
 		char * key = NULL, *value = NULL;
 		int index;
 
-		if (loadKeyValue(line, &key, &value, &index)) {
+		if (loadKeyValue(line, &key, &value, &index))
 			error_die("stateLoadRes: Error parsing resource file: %s\n", file_name);
-		}
 
-		if (!key || !value) {
+		if (!key || !value)
 			continue;
-		}
 
 		if (strcasecmp(key, "COUNT") == 0) {
 			r->count = atoi(value);
