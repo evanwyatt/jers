@@ -524,11 +524,6 @@ JERS_EXPORT jobid_t jersAddJob(const jersJobAdd * j) {
 		return 0;
 	}
 
-	if (!j->name) {
-		setJersErrno(JERS_ERR_INVARG, "Job name must be provided");
-		return 0;
-	}
-
 	if (j->argc <=0 || j->argv == NULL) {
 		setJersErrno(JERS_ERR_INVARG, "argc/argv must be populated");
 		return 0;
@@ -542,8 +537,10 @@ JERS_EXPORT jobid_t jersAddJob(const jersJobAdd * j) {
 	resp_t r;
 	initRequest(&r, CMD_ADD_JOB, 1);
 
-	addStringField(&r, JOBNAME, j->name);
 	addStringArrayField(&r, ARGS, j->argc, j->argv);
+
+	if (j->name)
+		addStringField(&r, JOBNAME, j->name);
 
 	if (j->queue)
 		addStringField(&r, QUEUENAME, j->queue);
@@ -733,6 +730,7 @@ JERS_EXPORT void jersInitQueueMod(jersQueueMod *q) {
 	q->state = -1;
 	q->job_limit = -1;
 	q->priority = -1;
+	q->default_queue = -1;
 }
 
 JERS_EXPORT void jersInitQueueAdd(jersQueueAdd *q) {
@@ -742,6 +740,7 @@ JERS_EXPORT void jersInitQueueAdd(jersQueueAdd *q) {
 	q->state = -1;
 	q->job_limit = -1;
 	q->priority = -1;
+	q->default_queue = -1;
 }
 
 /* Note: filter is currently not used for queues */
@@ -834,7 +833,7 @@ JERS_EXPORT int jersAddQueue(const jersQueueAdd *q) {
 	if (q->state != -1)
 		addIntField(&r, STATE, q->state);
 
-	if (q->default_queue)
+	if (q->default_queue != -1)
 		addBoolField(&r, DEFAULT, q->default_queue);
 
 	if (sendRequest(&r))
@@ -857,7 +856,7 @@ JERS_EXPORT int jersModQueue(const jersQueueMod *q) {
 		return 1;
 	}
 
-	if (q->desc == NULL && q->node == NULL && q->job_limit == -1 && q->priority == -1 && q->state == -1) {
+	if (q->desc == NULL && q->node == NULL && q->job_limit == -1 && q->priority == -1 && q->state == -1 && q->default_queue == -1) {
 		setJersErrno(JERS_ERR_NOCHANGE, NULL);
 		return 1;
 	}
@@ -883,7 +882,7 @@ JERS_EXPORT int jersModQueue(const jersQueueMod *q) {
 	if (q->state != -1)
 		addIntField(&r, STATE, q->state);
 
-	if (q->default_queue)
+	if (q->default_queue != -1)
 		addBoolField(&r, DEFAULT, q->default_queue);
 
 	if (sendRequest(&r))

@@ -672,7 +672,9 @@ int stateSaveQueue(struct queue * q) {
 
 	fprintf(f, "# SAVETIME %ld\n", time(NULL));
 
-	fprintf(f, "DESC %s\n", q->desc);
+	if (q->desc)
+		fprintf(f, "DESC %s\n", q->desc);
+
 	fprintf(f, "JOBLIMIT %d\n", q->job_limit);
 	fprintf(f, "PRIORITY %d\n", q->priority);
 	fprintf(f, "HOST %s\n", q->host);

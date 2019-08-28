@@ -456,6 +456,16 @@ int command_add_job(client * c, void * args) {
 		return -1;
 	}
 
+	/* Default the job name if one was not provided */
+	if (s->name == NULL) {
+		if (asprintf(&s->name, "job_%u", j->jobid) < 0) {
+			free(j);
+			free(resources);
+			sendError(c, JERS_ERR_MEM, "Failed to allocated jobname");
+			return -1;
+		}
+	}
+
 	/* Fill out the job structure */
 	j->jobname = s->name;
 	j->queue = q;

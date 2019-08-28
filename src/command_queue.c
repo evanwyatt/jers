@@ -41,6 +41,7 @@ void * deserialize_add_queue(msg_t * msg) {
 	q->priority = JERS_QUEUE_DEFAULT_PRIORITY;
 	q->state = 0;
 	q->job_limit = 1;
+	q->default_queue = -1;
 
 	for (i = 0; i < item->field_count; i++) {
 		switch(item->fields[i].number) {
@@ -83,6 +84,7 @@ void * deserialize_mod_queue(msg_t * msg) {
 	q->priority = -1;
 	q->state = -1;
 	q->job_limit = -1;
+	q->default_queue = -1;
 
 	for (i = 0; i < item->field_count; i++) {
 		switch(item->fields[i].number) {
@@ -120,6 +122,8 @@ void * deserialize_del_queue(msg_t * msg) {
 int command_add_queue(client * c, void * args) {
 	jersQueueAdd * qa = args;
 	struct queue * q = NULL;
+	int default_queue = 0;
+	int localhost = 0;
 
 	lowercasestring(qa->name);
 
@@ -151,32 +155,42 @@ int command_add_queue(client * c, void * args) {
 		q = calloc(sizeof(struct queue), 1);
 	}
 
+	if (qa->node == NULL) {
+		qa->node = strdup("localhost");
+		localhost = 1;
+	} else if (strcasecmp(qa->node, "localhost") == 0) {
+		localhost = 1;
+	}
+
+	/* Check the node provided is known to us */
+	agent * a = server.agent_list;
+
+	while (a) {
+		if (localhost) {
+			if (strcasecmp(a->host, gethost()) == 0)
+				break;
+		} else if (strcasecmp(a->host, qa->node) == 0) {
+			break;
+		}
+		a = a->next;
+	}
+
+	if (a == NULL) {
+		free(q);
+		sendError(c, JERS_ERR_INVARG, "Invalid hostname provided");
+		return 1;
+	}
+
 	q->name = qa->name;
 	q->host = qa->node;
 	q->desc = qa->desc;
 	q->job_limit = qa->job_limit != -1 ? qa->job_limit : JERS_QUEUE_DEFAULT_LIMIT;
 	q->priority = qa->priority != -1 ? qa->priority : JERS_QUEUE_DEFAULT_PRIORITY;
 	q->state = qa->state != -1 ? qa->state : JERS_QUEUE_DEFAULT_STATE;
-	q->agent = NULL;
+	q->agent = a;
+	default_queue = qa->default_queue != -1 ? qa->default_queue : 0;
 
-	addQueue(q, qa->default_queue, 1);
-
-	/* Check if we need to link this queue to an agent that
-	 * is already connected . */
-
-	agent * a = server.agent_list;
-
-	while (a) {
-		if (strcmp(a->host, q->host) == 0) {
-			q->agent = a;
-			break;
-		} else if (strcmp(q->host, "localhost") == 0) {
-			if (strcmp(a->host, gethost()) == 0) {
-				q->agent = a;
-				break;
-			}
-		}
-	}
+	addQueue(q, default_queue, 1);
 
 	return sendClientReturnCode(c, &q->obj, "0");
 }
@@ -185,7 +199,10 @@ void serialize_jersQueue(resp_t * r, struct queue * q) {
 	respAddMap(r);
 
 	addStringField(r, QUEUENAME, q->name);
-	addStringField(r, DESC, q->desc);
+
+	if (q->desc)
+		addStringField(r, DESC, q->desc);
+
 	addStringField(r, NODE, q->host);
 	addIntField(r, JOBLIMIT, q->job_limit);
 	addIntField(r, STATE, q->state);
@@ -250,6 +267,7 @@ int command_mod_queue(client *c, void * args) {
 	jersQueueMod * qm = args;
 	struct queue * q = NULL;
 	int dirty = 0;
+	agent *a = NULL;
 
 	if (qm->name == NULL) {
 		sendError(c, JERS_ERR_INVARG, "No queue provided");
@@ -270,6 +288,27 @@ int command_mod_queue(client *c, void * args) {
 		}
 	}
 
+	if (qm->node) {
+		/* Check the node provided is known to us */
+		a = server.agent_list;
+		int localhost = strcasecmp(qm->node, "localhost") == 0;
+
+		while (a) {
+			if (localhost) {
+				if (strcasecmp(a->host, gethost()) == 0)
+					break;
+			} else if (strcasecmp(a->host, qm->node) == 0) {
+				break;
+			}
+			a = a->next;
+		}
+
+		if (a == NULL) {
+			sendError(c, JERS_ERR_INVARG, "Invalid hostname provided");
+			return 1;
+		}
+	}
+
 	if (qm->desc) {
 		free(q->desc);
 		q->desc = qm->desc;
@@ -279,6 +318,7 @@ int command_mod_queue(client *c, void * args) {
 	if (qm->node) {
 		free(q->host);
 		q->host = qm->node;
+		q->agent = a;
 		dirty = 1;
 	}
 
@@ -294,6 +334,12 @@ int command_mod_queue(client *c, void * args) {
 
 	if (qm->priority != -1 && q->priority != qm->priority) {
 		q->priority = qm->priority;
+		dirty = 1;
+	}
+
+	if (qm->default_queue != -1) {
+		/* Clear the existing default queue and set this one */
+		setDefaultQueue(q);
 		dirty = 1;
 	}
 
@@ -315,12 +361,12 @@ int command_del_queue(client *c, void *args) {
 	q = findQueue(qd->name);
 
 	if (q == NULL || q->internal_state &JERS_FLAG_DELETED) {
-		sendError(c, JERS_ERR_NOQUEUE, NULL);
-		return 1;
-	}
+		if (unlikely(server.recovery.in_progress)) {
+			print_msg(JERS_LOG_DEBUG, "Skipping deletion of non-existent queue %s", qd->name);
+			return 0;
+		}
 
-	if (q == server.defaultQueue) {
-		sendError(c, JERS_ERR_INVARG, "Can't delete the default queue");
+		sendError(c, JERS_ERR_NOQUEUE, NULL);
 		return 1;
 	}
 

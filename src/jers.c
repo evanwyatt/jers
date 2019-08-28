@@ -112,25 +112,24 @@ int add_job(int argc, char *argv[]) {
 
 int add_queue(int argc, char *argv[]) {
 	struct add_queue_args args;
-	jersQueueAdd q;
 
 	if (parse_add_queue(argc, argv, &args))
 		return 1;
 
 	if (args.add.name == NULL) {
-		fprintf(stderr, "add queue: No queue name provided\n");
+		fprintf(stderr, "No queue name provided\n");
 		return 1;
 	}
 
 	if (args.add.node == NULL)
 		args.add.node = "localhost";
 
-	if (jersAddQueue(&q)) {
-		fprintf(stderr, "add queue: Failed to queue: %s\n", jersGetErrStr(jers_errno));
+	if (jersAddQueue(&args.add)) {
+		fprintf(stderr, "Failed to add queue: %s\n", jersGetErrStr(jers_errno));
 		return 1;
 	}
 
-	printf("Queue %s added.\n", q.name);
+	printf("Queue %s added.\n", args.add.name);
 
 	return 0;
 }
@@ -312,12 +311,12 @@ static void print_queue(jersQueue *q, int all) {
 
 	} else {
 		if (first) {
-			printf("Queue        Desc             Node             State          JobLimit\n");
-			printf("======================================================================\n");
+			printf("Queue         Desc             Node             State          JobLimit\n");
+			printf("=======================================================================\n");
 			first = 0;
 		}
 
-		printf("%-12s %-16.16s %-16.16s %-14.14s %-4d\n", q->name, q->desc, q->node, getQueueState(q->state), q->job_limit);
+		printf("%c%-12s %-16.16s %-16.16s %-14.14s %-4d\n", q->default_queue? '*':' ', q->name, q->desc ? q->desc:"", q->node, getQueueState(q->state), q->job_limit);
 	}
 
 	return;

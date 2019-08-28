@@ -368,6 +368,7 @@ struct resource * findResource(char * name);
 int addQueue(struct queue * q, int def, int dirty);
 void freeQueue(struct queue * q);
 struct queue * findQueue(char * name);
+void setDefaultQueue(struct queue *q);
 
 void addClient(client * c);
 void removeClient(client * c);

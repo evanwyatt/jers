@@ -310,6 +310,7 @@ static struct argp_option mod_queue_options[] = {
 	{"limit", 'l', "job_limit", 0, "Queue job limit"},
 	{"priority", 'p', "priority", 0, "Queue priority"},
 	{"state", 's', "state", 0, "Queue state. <open/closed>:<started/stopped>"},
+	{"default", 'D', 0, 0, "Set this queue to be the default queue"},
 	{0}
 };
 
@@ -359,6 +360,10 @@ static error_t mod_queue_parse(int key, char *arg, struct argp_state *state)
 
 		case 'd':
 			arguments->mod.desc = arg;
+			break;
+
+		case 'D':
+			arguments->mod.default_queue = 1;
 			break;
 
 		case 'h':
@@ -432,6 +437,10 @@ static error_t add_queue_parse(int key, char *arg, struct argp_state *state)
 			arguments->add.desc = arg;
 			break;
 
+		case 'D':
+			arguments->add.default_queue = 1;
+			break;
+
 		case 'h':
 			arguments->add.node = arg;
 			break;
@@ -449,6 +458,11 @@ static error_t add_queue_parse(int key, char *arg, struct argp_state *state)
 			break;
 
 		case ARGP_KEY_ARG:
+			if (arguments->add.name) {
+				fprintf(stderr, "Only one queue name allowed\n");
+				return EINVAL;
+			}
+
 			arguments->add.name = arg;
 			break;
 

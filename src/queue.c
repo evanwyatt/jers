@@ -44,11 +44,15 @@ int addQueue(struct queue * q, int def, int dirty) {
 	HASH_ADD_STR(server.queueTable, name, q);
 
 	if (def)
-		server.defaultQueue = q;
+		setDefaultQueue(q);
 
 	q->obj.type = JERS_OBJECT_QUEUE;
 	updateObject(&q->obj, dirty);
 	return 0;
+}
+
+void setDefaultQueue(struct queue *q) {
+	server.defaultQueue = q;
 }
 
 void freeQueue(struct queue * q) {
