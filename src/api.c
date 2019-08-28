@@ -367,6 +367,21 @@ static int deserialize_jersResource(msg_item * item, jersResource *r) {
 	return 0;
 }
 
+static int deserialize_jersAgent(msg_item * item, jersAgent *a) {
+	int i;
+
+	for (i = 0; i < item->field_count; i++) {
+		switch(item->fields[i].number) {
+			case NODE       : a->host = getStringField(&item->fields[i]); break;
+			case CONNECTED  : a->connected = getBoolField(&item->fields[i]); break;
+
+			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",item->fields[i].name); break;
+		}
+	}
+
+	return 0;
+}
+
 static int deserialize_jersJob(msg_item * item, jersJob *j) {
 	int i;
 
@@ -1022,6 +1037,41 @@ JERS_EXPORT void jersFreeResourceInfo(jersResourceInfo *info) {
 
 	free(info->resources);
 	return;
+}
+
+JERS_EXPORT int jersGetAgents(const char * name, jersAgentInfo *info) {
+	if (jersInitAPI(NULL))
+		return 1;
+
+	info->count = 0;
+	info->agents = NULL;
+
+	resp_t r;
+
+	initRequest(&r, CMD_GET_AGENT, 1);
+
+	if (name)
+		addStringField(&r, NODE, name);
+
+	if (sendRequest(&r))
+		return 1;
+
+	if(readResponse())
+		return 1;
+
+	int64_t i;
+
+	info->agents = calloc(sizeof(jersAgent) *  msg.item_count, 1);
+
+	for (i = 0; i < msg.item_count; i++) {
+		deserialize_jersAgent(&msg.items[i], &info->agents[i]);
+	}
+
+	info->count = msg.item_count;
+
+	free_message(&msg);
+
+	return 0;
 }
 
 JERS_EXPORT int jersGetStats(jersStats * s) {

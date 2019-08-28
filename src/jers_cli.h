@@ -97,6 +97,13 @@ struct mod_queue_args {
     char **queues;
 };
 
+struct show_agent_args {
+	int verbose;
+
+	char *hostname;
+};
+
+
 int add_func(int argc, char *argv[]);
 
 int add_job(int argc, char *argv[]);
@@ -121,6 +128,8 @@ int show_job(int argc, char *argv[]);
 int show_queue(int argc, char *argv[]);
 int show_resource(int argc, char *argv[]);
 
+int show_agent(int argc, char *argv[]);
+
 int signal_func(int argc, char *argv[]);
 int signal_job(int argc, char *argv[]);
 
@@ -141,3 +150,5 @@ int parse_add_resource(int argc, char * argv[], struct add_resource_args * args)
 int parse_mod_resource(int argc, char * argv[], struct mod_resource_args * args);
 int parse_del_resource(int argc, char * argv[], struct del_resource_args * args);
 int parse_show_resource(int argc, char * argv[], struct show_resource_args * args);
+
+int parse_show_agent(int argc, char * argv[], struct show_agent_args * args);

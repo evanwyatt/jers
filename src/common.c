@@ -287,9 +287,9 @@ int matches(const char * pattern, const char * string) {
 			return 0;
 		else
 			return 1;
-	} else {
-		return strcmp(string, pattern);
 	}
+
+	return strcmp(string, pattern);
 }
 
 /* Check whether a name (resource, queue) is valid

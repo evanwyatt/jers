@@ -303,6 +303,10 @@ typedef struct {
 } jersJobFilter;
 
 typedef struct {
+	char *host;
+} jersAgentFilter;
+
+typedef struct {
 	char * name;
 	int count;
 	int inuse;
@@ -335,6 +339,16 @@ typedef struct {
 		int count;
 	} filters;
 } jersResourceFilter;
+
+typedef struct {
+	char *host;
+	int connected;
+} jersAgent;
+
+typedef struct {
+	int64_t count;
+	jersAgent *agents;
+} jersAgentInfo;
 
 struct jobStats {
 	int64_t running;
@@ -439,6 +453,7 @@ int jersGetResource(const char *name, const jersResourceFilter *filter, jersReso
 int jersDelResource(const char *name);
 void jersFreeResourceInfo(jersResourceInfo *info);
 
+int jersGetAgents(const char *name, jersAgentInfo *info);
 int jersGetStats(jersStats * s);
 
 void jersFinish(void);

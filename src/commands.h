@@ -80,6 +80,8 @@ int command_del_resource(client *, void *);
 int command_set_tag(client *, void *);
 int command_del_tag(client *, void *);
 
+int command_get_agent(client *, void *);
+
 void* deserialize_add_job(msg_t *);
 void* deserialize_get_job(msg_t *);
 void* deserialize_mod_job(msg_t *);
@@ -95,6 +97,7 @@ void* deserialize_mod_resource(msg_t *);
 void* deserialize_del_resource(msg_t *);
 void* deserialize_set_tag(msg_t *);
 void* deserialize_del_tag(msg_t *);
+void* deserialize_get_agent(msg_t *);
 
 void free_add_job(void *, int);
 void free_get_job(void *, int);
@@ -114,6 +117,8 @@ void free_del_resource(void *, int);
 
 void free_set_tag(void *, int);
 void free_del_tag(void *, int);
+
+void free_get_agent(void *, int);
 
 /* Magic values */
 

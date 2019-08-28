@@ -59,6 +59,7 @@ command_t commands[] = {
 	{CMD_DEL_RESOURCE, PERM_WRITE,            CMDFLG_REPLAY, command_del_resource, deserialize_del_resource, free_del_resource},
 	{CMD_SET_TAG,      PERM_WRITE,            CMDFLG_REPLAY, command_set_tag,      deserialize_set_tag, free_set_tag},
 	{CMD_DEL_TAG,      PERM_WRITE,            CMDFLG_REPLAY, command_del_tag,      deserialize_del_tag, free_del_tag},
+	{CMD_GET_AGENT,    PERM_READ,             0,             command_get_agent,    deserialize_get_agent, free_get_agent},
 	{CMD_STATS,        PERM_READ,             0,             command_stats,        NULL, NULL},
 };
 
@@ -375,6 +376,51 @@ void replayCommand(msg_t * msg) {
 	free_message(msg);
 	
 	return;
+}
+
+int command_get_agent(client * c, void * args) {
+	jersAgentFilter * f = args;
+	resp_t r;
+
+	initMessage(&r, "RESP", 1);
+
+	respAddArray(&r);
+
+	for (agent *a = server.agent_list; a; a = a->next) {
+		if (f->host == NULL || matches(f->host, a->host) == 0) {
+			respAddMap(&r);
+			addStringField(&r, NODE, a->host);
+			addBoolField(&r, CONNECTED, a->logged_in);
+			respCloseMap(&r);
+		}
+	}
+
+	respCloseArray(&r);
+
+	return sendClientMessage(c, NULL, &r);
+}
+
+void * deserialize_get_agent(msg_t * t) {
+	jersAgentFilter * f = calloc(sizeof(jersAgentFilter), 1);
+	msg_item * item = &t->items[0];
+	int i;
+
+	for (i = 0; i < item->field_count; i++) {
+		switch(item->fields[i].number) {
+			case NODE  : f->host = getStringField(&item->fields[i]); break;
+
+			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",t->items[0].fields[i].name); break;
+		}
+	}
+
+	return f;
+}
+
+void free_get_agent(void *args, int status) {
+	UNUSED(status);
+	jersAgentFilter * f = args;
+
+	free(f->host);
 }
 
 int command_stats(client * c, void * args) {

@@ -892,6 +892,46 @@ static error_t show_resource_parse(int key, char *arg, struct argp_state *state)
 
 static struct argp show_resource_argp = {show_resource_options, show_resource_parse, show_resource_arg_doc, show_resource_doc};
 
+static char show_agent_doc[] = "show agent -- Show agents/s";
+static char show_agent_arg_doc[] = "[hostname (Can be wildcarded)]";
+static struct argp_option show_agent_options[] = {
+	{"verbose", 'v', 0, 0, "Produce verbose output"},
+	{0}
+};
+
+static error_t show_agent_parse(int key, char *arg, struct argp_state *state)
+{
+	struct show_agent_args *arguments = state->input;
+
+	switch (key)
+	{
+		case 'v':
+			arguments->verbose = 1;
+			break;
+
+		case ARGP_KEY_INIT:
+			break;
+
+		case ARGP_KEY_ARG:
+			if (arguments->hostname) {
+				fprintf(stderr, "Only one hostname can be provided.\n");
+				return EINVAL;
+			}
+
+			arguments->hostname = arg;
+			break;
+
+		case ARGP_KEY_END:
+			break;
+
+		default:
+			return ARGP_ERR_UNKNOWN;
+	}
+	return 0;
+}
+
+static struct argp show_agent_argp = {show_agent_options, show_agent_parse, show_agent_arg_doc, show_agent_doc};
+
 
 int parse_args(int argc, char *argv[], struct argp *argp, void *args) {
 	/* Call the argp parser, skipping the first two arguments of command/object */
@@ -966,4 +1006,9 @@ int parse_mod_queue(int argc, char *argv[], struct mod_queue_args *args) {
 int parse_mod_job(int argc, char *argv[], struct mod_job_args *args) {
 	memset(args, 0, sizeof(struct mod_job_args));
 	return parse_args(argc, argv, &mod_job_argp, args);
+}
+
+int parse_show_agent(int argc, char *argv[], struct show_agent_args *args) {
+	memset(args, 0, sizeof(struct show_agent_args));
+	return parse_args(argc, argv, &show_agent_argp, args);
 }

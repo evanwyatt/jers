@@ -105,6 +105,7 @@ int setReadable(struct connectionType * connection) {
 void setup_listening_sockets(void) {
 	struct sockaddr_un addr;
 	int fd = -1;
+	int enable = 1;
 
 	fd = socket(AF_UNIX, SOCK_STREAM|SOCK_NONBLOCK, 0);
 
@@ -147,6 +148,9 @@ void setup_listening_sockets(void) {
 
 		if (fd == -1)
 			error_die("failed to create listening socket for port %d: %s", server.agent_port, strerror(errno));
+
+		if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0)
+			error_die("Failed to set socket options for socket for port %d: %s", server.agent_port, strerror(errno));
 
 		struct sockaddr_in servaddr;
 		memset(&servaddr, 0, sizeof(servaddr));

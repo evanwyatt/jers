@@ -156,6 +156,7 @@ enum field_type {
 	NONCE,
 	DATETIME,
 	MSG_HMAC,
+	CONNECTED,
 
 	ENDOFFIELDS
 };

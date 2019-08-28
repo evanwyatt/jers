@@ -77,6 +77,7 @@ struct object show_objects[] = {
 	{"job",      show_job},
 	{"queue",    show_queue},
 	{"resource", show_resource},
+	{"agent",    show_agent},
 	{NULL, NULL}
 };
 
@@ -322,6 +323,26 @@ static void print_queue(jersQueue *q, int all) {
 	return;
 }
 
+static void print_agent(jersAgent *a, int all) {
+	static int first = 1;
+
+	if (all) {
+		printf("%s\n", a->host);
+		printf("------------------------\n");
+
+	} else {
+		if (first) {
+			printf("Agent Host                       Connected\n");
+			printf("==========================================\n");
+			first = 0;
+		}
+
+		printf("%-32.32s %s\n", a->host, a->connected ? "True" : "False");
+	}
+
+	return;
+}
+
 static void print_job(jersJob *j, int all) {
 	static int first = 1;
 
@@ -513,6 +534,24 @@ int show_queue(int argc, char *argv[]) {
 		for (int i = 0; i < qInfo.count; i++)
 			print_queue(&qInfo.queues[i], args.all);
 	}
+
+	return 0;
+}
+
+int show_agent(int argc, char *argv[]) {
+	jersAgentInfo aInfo;
+	struct show_agent_args args;
+
+	if (parse_show_agent(argc, argv, &args))
+		return 1;
+
+	if (jersGetAgents(args.hostname, &aInfo) != 0) {
+		fprintf(stderr, "Failed to get information on agents: %s\n", jersGetErrStr(jers_errno));
+		return 1;
+	}
+
+	for (int i = 0; i < aInfo.count; i++)
+		print_agent(&aInfo.agents[i], 0);
 
 	return 0;
 }
