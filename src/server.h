@@ -53,8 +53,6 @@
 #include <agent.h>
 #include <client.h>
 
-#define likely(x)       __builtin_expect((x),1)
-#define unlikely(x)     __builtin_expect((x),0)
 #define UNUSED(x) (void)(x)
 
 #define UNLIMITED_JOBS -1
@@ -76,6 +74,7 @@
 #define DEFAULT_CONFIG_AGENTSOCKETPATH "/var/run/jers/agent.socket"
 #define DEFAULT_CONFIG_FLUSHDEFER 1
 #define DEFAULT_CONFIG_FLUSHDEFERMS 5000
+#define DEFAULT_CONFIG_EMAIL_FREQ 5000
 
 enum jers_object_type {
 	JERS_OBJECT_JOB = 1,
@@ -159,6 +158,10 @@ struct job {
 	pid_t pid;
 	int exitcode;
 	int signal;
+	
+	/* Email instructions */
+	int email_states;
+	char *email_addresses;
 
 	struct rusage usage;
 
@@ -208,6 +211,8 @@ struct jersServer {
 	int64_t flush_resources;
 
 	int background_save_ms;
+
+	int email_freq_ms;
 
 	char * logfile;
 	int logging_mode;
@@ -261,6 +266,7 @@ struct jersServer {
 		jobid_t jobid;
 		int64_t revision;
 	} recovery;
+	int initalising;
 
 	int candidate_recalc;
 

@@ -31,6 +31,7 @@
 #include "jers.h"
 #include "common.h"
 #include "commands.h"
+#include "email.h"
 
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -1704,6 +1705,10 @@ void changeJobState(struct job *j, int new_state, struct queue *new_queue, int d
 	}
 
 	updateObject(&j->obj, dirty);
+
+	/* Add the email to the pending email list if required */
+	if (j->email_states &new_state)
+		generateEmail(j, new_state);
 }
 
 void updateObject(jers_object * obj, int dirty) {

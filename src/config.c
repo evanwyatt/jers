@@ -145,6 +145,8 @@ void loadConfig(char * config) {
 	server.flush.defer = DEFAULT_CONFIG_FLUSHDEFER;
 	server.flush.defer_ms = DEFAULT_CONFIG_FLUSHDEFERMS;
 
+	server.email_freq_ms = DEFAULT_CONFIG_EMAIL_FREQ;
+
 	while ((len = getline(&line, &line_size, f)) != -1) {
 		line[strcspn(line, "\n")] = '\0';
 		char *key, *value;

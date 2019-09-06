@@ -32,6 +32,7 @@
 
 #include "client.h"
 #include "agent.h"
+#include "email.h"
 
 struct event {
 	void (*func)(void);
@@ -154,6 +155,11 @@ void backgroundSaveEvent(void) {
 	stateSaveToDisk(0);
 }
 
+/* Send any pending emails */
+void checkEmails(void) {
+	checkEmailProcesses();
+}
+
 void initEvents(void) {
 	registerEvent(checkJobsEvent, server.sched_freq);
 	registerEvent(cleanupEvent, 1000);
@@ -163,6 +169,8 @@ void initEvents(void) {
 		registerEvent(flushEvent, server.flush.defer_ms);
 
 	registerEvent(checkDeferEvent, 750);
+
+	registerEvent(checkEmails, server.email_freq_ms);
 
 	registerEvent(checkAgentEvent, 0);
 	registerEvent(checkClientEvent, 0);

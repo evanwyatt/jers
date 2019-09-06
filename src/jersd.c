@@ -258,6 +258,7 @@ int main (int argc, char * argv[]) {
 	server.journal.fd = -1;
 	server.agent_connection.socket = -1;
 	server.client_connection.socket = -1;
+	server.initalising = 1;
 
 	/* Perform some sorts for improved lookup performance */
 	sortfields();
@@ -299,6 +300,7 @@ int main (int argc, char * argv[]) {
 	initEvents();
 
 	server.candidate_recalc = 1;
+	server.initalising = 0;
 
 	print_msg(JERS_LOG_INFO, "* JERSD entering main loop...\n");
 
