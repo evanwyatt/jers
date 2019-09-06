@@ -187,7 +187,8 @@ int openStateFile(time_t now) {
 		if (server.journal.limit <= 0)
 			server.journal.limit = server.journal.len; // Ensure the next allocation will increase the size
 
-		flushDir(server.state_dir);
+		if (flushDir(server.state_dir) != 0)
+			error_die("Failed to flush state directory %s: %s", server.state_dir, strerror(errno));
 	} else {
 		/* Created a new journal file */
 		server.journal.len = 0;
@@ -347,7 +348,7 @@ void convertJournalEntry(msg_t *msg, buff_t *message_buffer, char *entry) {
 	field_count = sscanf(entry, " %ld.%d\t%d\t%64s\t%u\t%ld\t%n", &timestamp_s, &timestamp_ms, (int *)&uid, command, &jobid, &revision, &msg_offset);
 
 	if (field_count != 6) {
-		print_msg(JERS_LOG_CRITICAL, "Failed entry (len:%d): %s", strlen(entry), entry);
+		print_msg(JERS_LOG_CRITICAL, "Failed entry (len:%ld): %s", strlen(entry), entry);
 		error_die("Failed to load journal entry. Got %d fields, wanted 6\n", field_count);
 	}
 
@@ -1109,8 +1110,11 @@ int flushDir(char *path) {
 		}
 	}
 
-	if (fdatasync(fd))
+	if (fdatasync(fd)) {
+		close(fd);
+		free(temp);
 		return 1;
+	}
 
 	close(fd);
 
