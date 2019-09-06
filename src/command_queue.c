@@ -32,6 +32,7 @@
 #include <commands.h>
 #include <fields.h>
 #include <error.h>
+#include <agent.h>
 
 void * deserialize_add_queue(msg_t * msg) {
 	jersQueueAdd *q = calloc(sizeof(jersQueueAdd), 1);
@@ -163,7 +164,7 @@ int command_add_queue(client * c, void * args) {
 	}
 
 	/* Check the node provided is known to us */
-	agent * a = server.agent_list;
+	agent * a = agentList;
 
 	while (a) {
 		if (localhost) {
@@ -290,7 +291,7 @@ int command_mod_queue(client *c, void * args) {
 
 	if (qm->node) {
 		/* Check the node provided is known to us */
-		a = server.agent_list;
+		a = agentList;
 		int localhost = strcasecmp(qm->node, "localhost") == 0;
 
 		while (a) {

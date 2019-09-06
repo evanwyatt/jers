@@ -3,9 +3,10 @@
 #include <pwd.h>
 #include <signal.h>
 
-#include <argp.h>
 #include <jers_cli.h>
 #include <common.h>
+
+#include <argp.h>
 
 /* Options structures for each command */
 

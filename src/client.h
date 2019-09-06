@@ -8,13 +8,13 @@
  *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation 
+ *    this list of conditions and the following disclaimer in the documentation
  *    and/or other materials provided with the distribution.
  *
  * 3. Neither the name of the copyright holder nor the names of its contributors may
  *    be used to endorse or promote products derived from this software without
  *    specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -22,54 +22,54 @@
  * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
  * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _comms_h
-#define _comms_h
+#ifndef _client_h
+#define _client_h
 
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/epoll.h>
-#include <sys/un.h>
-#include <netinet/in.h>
-#include <netdb.h>
+#include <stdio.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
-enum connectionTypes {
-	CLIENT_CONN = 1,
-	AGENT_CONN,
-	CLIENT,
-	AGENT,
-	CLIENT_PROXY_CONN,
-	CLIENT_PROXY
-};
+#include "comms.h"
+#include "buffer.h"
+#include "resp.h"
+#include "fields.h"
 
-struct connectionType {
-	int type;
-	int events;
-	int socket;
-	int event_fd;
-	void *ptr; // Pointer to either a client, agent structure
+typedef struct _client {
+	struct connectionType connection;
 
-	struct {
-		void *agent;
-		pid_t pid;
-	} proxy;
-};
+	msg_t msg;
 
-int createSocket(const char * path, int port, int perm);
+	buff_t request;
+	buff_t response;
+	size_t response_sent;
 
-int pollSetReadable(struct connectionType * connection);
-int pollSetWritable(struct connectionType * connection);
-int pollRemoveSocket(struct connectionType * connection);
+	uid_t uid;
+	struct user * user;
 
-//void handleReadable(struct epoll_event * e);
-//void handleWriteable(struct epoll_event * e);
+//	struct {
+//		int pid;
+//		void *agent;
+//	} proxy;
 
-int _accept(int sockfd);
-ssize_t _recv(int fd, void * buf, size_t count);
-ssize_t _send(int fd, const void * buf, size_t count);
+	struct _client * next;
+	struct _client * prev;
+} client;
+
+extern client *clientList;
+
+int handleClientConnection(struct connectionType * connection);
+int handleClientDisconnect(client *c);
+int handleClientRead(client *c);
+int handleClientWrite(client *c);
+
+void addClient(client *c);
+void removeClient(client *c);
 
 #endif

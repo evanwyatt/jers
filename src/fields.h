@@ -44,7 +44,10 @@ typedef struct {
 	const char * name;
 
 	union {
-		char * string;
+		struct {
+			char * value;
+			int64_t length;
+		} string;
 		int64_t number;
 		char boolean;
 
@@ -158,9 +161,14 @@ enum field_type {
 	MSG_HMAC,
 	CONNECTED,
 
+	PID,
+	PROXYDATA,
+
 	ENDOFFIELDS
 };
 void sortfields(void);
+void freeSortedFields(void);
+
 int load_message(msg_t * msg, buff_t * buff);
 void free_message(msg_t * msg);
 int initMessage(resp_t * r, const char * resp_name, int version);
@@ -178,8 +186,11 @@ void addStringField(resp_t * r, int field_no, const char * value);
 void addBoolField(resp_t * r, int field_no, char value);
 void addStringArrayField(resp_t * r, int field_no, int count, char ** strings);
 void addStringMapField(resp_t * r, int field_no, int count, const key_val_t * keys);
+void addBlobStringField(resp_t * r, int field_no, const char * value, size_t length);
+
 
 char * getStringField(field * f);
+char * getBlobStringField(field *f, size_t *length);
 int64_t getNumberField(field * f);
 char getBoolField(field *f);
 int64_t getStringArrayField(field *f, char *** array);

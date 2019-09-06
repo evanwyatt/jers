@@ -37,6 +37,7 @@
 #include <commands.h>
 #include <fields.h>
 #include <error.h>
+#include <agent.h>
 
 const char * getErrType(int jers_error);
 
@@ -69,6 +70,9 @@ agent_command_t agent_commands[] = {
 	{AGENT_LOGIN,         0,             command_agent_login},
 	{AGENT_RECON_RESP,    0,             command_agent_recon},
 	{AGENT_AUTH_RESP,     0,             command_agent_authresp},
+	{AGENT_PROXY_CONN,    0,             command_agent_proxyconn},
+	{AGENT_PROXY_DATA,    0,             command_agent_proxydata},
+	{AGENT_PROXY_CLOSE,   0,             command_agent_proxyclose},
 };
 
 command_t * sorted_commands = NULL;
@@ -106,6 +110,13 @@ void sortCommands(void) {
 	qsort(sorted_commands, cmd_count, sizeof(command_t), cmpCommand);
 }
 
+void freeSortedCommands(void) {
+	free(sorted_commands);
+	free(sorted_agentcommands);
+
+	sorted_commands = NULL;
+	sorted_agentcommands = NULL;
+}
 void runComplexCommand(client * c) {
 	static int cmd_count = sizeof(commands) / sizeof(command_t);
 	uint64_t start, end;
@@ -202,21 +213,22 @@ int runAgentCommand(agent * a) {
 		status = command_to_run->cmd_func(a, &a->msg);
 	} else {
 		print_msg(JERS_LOG_WARNING, "Invalid agent command %s received", a->msg.command);
-		return 0;
+		status = 1;
 	}
 
 	/* Write to the journal if the transaction was an update and successful */
-	if (status && command_to_run->flags &CMDFLG_REPLAY)
+	if (status == 0 && command_to_run->flags &CMDFLG_REPLAY)
 		stateSaveCmd(0, a->msg.command, a->msg.reader.msg_cpy, 0, 0);
 
 	free_message(&a->msg);
-	
+
 	if (buffRemove(&a->requests, a->msg.reader.pos, 0)) {
-			a->msg.reader.pos = 0;
-			respReadUpdate(&a->msg.reader, a->requests.data, a->requests.used);
+		a->msg.reader.pos = 0;
+		respReadUpdate(&a->msg.reader, a->requests.data, a->requests.used);
 	}
 
-	return status;
+	/* Always a good return for agent commands */
+	return 0;
 }
 
 static int _sendMessage(struct connectionType * connection, buff_t * b, resp_t * r) {
@@ -226,8 +238,27 @@ static int _sendMessage(struct connectionType * connection, buff_t * b, resp_t *
 	if (buff == NULL)
 		return 1;
 
-	buffAdd(b, buff, buff_length);
-	setWritable(connection);
+	if (connection->proxy.agent) {
+		/* Send the response to the agent the client is connected to */
+		agent *a = connection->proxy.agent;
+		resp_t forward;
+
+
+		if (initMessage(&forward, AGENT_PROXY_DATA, 1) != 0)
+			return 0;
+
+		respAddMap(&forward);
+		addIntField(&forward, PID, connection->proxy.pid);
+		addBlobStringField(&forward, PROXYDATA, buff, buff_length);
+		respCloseMap(&forward);
+
+		sendAgentMessage(a, &forward);
+
+	} else {
+		buffAdd(b, buff, buff_length);
+		pollSetWritable(connection);
+	}
+
 	free(buff);
 
 	return 0;
@@ -386,7 +417,7 @@ int command_get_agent(client * c, void * args) {
 
 	respAddArray(&r);
 
-	for (agent *a = server.agent_list; a; a = a->next) {
+	for (agent *a = agentList; a; a = a->next) {
 		if (f->host == NULL || matches(f->host, a->host) == 0) {
 			respAddMap(&r);
 			addStringField(&r, NODE, a->host);

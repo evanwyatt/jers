@@ -62,6 +62,7 @@
 #include "fields.h"
 #include "cmd_defs.h"
 #include "auth.h"
+#include "proxy.h"
 
 #define MAX_EVENTS 1024
 #define INITIAL_SIZE 0x1000
@@ -69,6 +70,7 @@
 #define DEFAULT_DIR "/tmp"
 #define DEFAULT_CONFIG_FILE "/etc/jers/jers_agentd.conf"
 #define DEFAULT_AGENT_SOCKET "/run/jers/agent.sock"
+#define DEFAULT_PROXY_SOCKET "/run/jers/proxy.sock"
 #define DEFAULT_DAEMON_PORT 7000
 #define RECONNECT_WAIT 20 // Seconds
 
@@ -126,6 +128,8 @@ struct agent {
 
 	int daemon_fd;
 	int event_fd;
+
+	struct connectionType client_proxy;
 
 	time_t next_connect;
 
@@ -532,7 +536,7 @@ spawn_exit:
 
 	/* Send the PID of the job */
 	do {
-		status = write(socket, &jobPid, sizeof(jobPid));
+		status = _send(socket, &jobPid, sizeof(jobPid));
 
 		if (status != sizeof(jobPid))
 			fprintf(stderr, "Failed to send PID of job %d to agent: (status=%d) %s\n", j->jobid, status, strerror(errno));
@@ -591,8 +595,8 @@ spawn_exit:
 		close(stderr_fd);
 
 	do {
-		status = write(socket, &job_completion, sizeof(struct jobCompletion));
-		
+		status = _send(socket, &job_completion, sizeof(struct jobCompletion));
+
 		if (status != sizeof(struct jobCompletion))
 			fprintf(stderr, "Failed to send completion to agent: (status=%d) %s\n", status, strerror(errno));
 	} while (status == -1 && errno == EINTR);
@@ -655,7 +659,7 @@ void send_msg(resp_t * r) {
 		return;
 
 	ee.events = EPOLLIN|EPOLLOUT;
-	ee.data.ptr = NULL;
+	ee.data.ptr = &agent;
 
 	if (epoll_ctl(agent.event_fd, EPOLL_CTL_MOD, agent.daemon_fd, &ee)) {
 		print_msg(JERS_LOG_WARNING, "Failed to set epoll EPOLLOUT on daemon_fd");
@@ -763,18 +767,14 @@ int get_job_completion(struct runningJob * j) {
 
 	/* Get the PID if we haven't already. */
 	if (j->job_pid == 0) {
-		do {
-			status = read(j->socket, &j->job_pid, sizeof(pid_t));
-		} while (status == -1 && errno == EINTR);
+		status = _recv(j->socket, &j->job_pid, sizeof(pid_t));
 
 		if (status == -1 && (errno != EAGAIN && errno != EWOULDBLOCK))
 			fprintf(stderr, "Failed to read pid from job %d\n", j->jobID);
 	}
 
 	/* Read in the completion details */
-	do {
-		status = read(j->socket, &j->job_completion, sizeof(struct jobCompletion));
-	} while (status == -1 && errno == EINTR);
+	status = _recv(j->socket, &j->job_completion, sizeof(struct jobCompletion));
 
 	if (status == -1) {
 		if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -783,7 +783,7 @@ int get_job_completion(struct runningJob * j) {
 			return 1;
 		} else {
 			print_msg(JERS_LOG_WARNING, "Failed to read in job completion information for jobid:%d :%s", j->jobID, strerror(errno));
-			j->job_completion.exitcode = 255; //TODO: Use a different exitcode for this?
+			j->job_completion.exitcode = JERS_FAIL_UNKNOWN | JERS_EXIT_FAIL;
 		}
 	}
 
@@ -1195,6 +1195,45 @@ int recon_complete(msg_t * m) {
 	return 0;
 }
 
+/* Handle a response to a proxied client command */
+int proxy_response(msg_t *m) {
+	pid_t pid = 0;
+	char *data = NULL;
+	size_t data_length = 0;
+	msg_item * item = &m->items[0];
+
+	for (int i = 0; i < item->field_count; i++) {
+		switch(item->fields[i].number) {
+			case PID: pid = getNumberField(&item->fields[i]); break;
+			case PROXYDATA: data = getBlobStringField(&item->fields[i], &data_length); break;
+
+			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", item->fields[i].name); break;
+		}
+	}
+
+	if (pid)
+		return 0;
+
+	/* Locate the client structure */
+	proxyClient * c;
+	for (c = proxyClientList; c; c = c->next) {
+		if (c->pid == pid)
+			break;
+	}
+
+	if (c == NULL) {
+		print_msg(JERS_LOG_WARNING, "Failed to locate proxy client for response pid: %d", pid);
+		return 0;
+	}
+
+	buffAdd(&c->response, data, data_length);
+	pollSetWritable(&c->connection);
+
+	free(data);
+
+	return 0;
+}
+
 /* We have been requested to authenticate.
  * Use the shared secret we loaded earlier to generate a hmac of
  * a client nonce we generate, and the current datetime */
@@ -1269,6 +1308,8 @@ int process_message(msg_t * m) {
 		status = recon_complete(m);
 	} else if (strcmp(m->command, AGENT_AUTH_CHALLENGE) == 0) {
 		status = auth_challenge(m);
+	} else if (strcmp(m->command, AGENT_PROXY_DATA) == 0) {
+		status = proxy_response(m);
 	} else {
 		print_msg(JERS_LOG_WARNING, "Got an unexpected command message '%s'", m->command);
 		status = 1;
@@ -1306,7 +1347,7 @@ int connectjers(void) {
 		sleep(5);
 		return 1;
 	}
-	
+
 	fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
 
 	if (fd < 0) {
@@ -1367,9 +1408,9 @@ int connectjers(void) {
 		}
 	}
 
-	struct epoll_event ee;
+	struct epoll_event ee = {0};
 	ee.events = EPOLLIN;
-	ee.data.ptr = NULL;
+	ee.data.ptr = &agent;
 
 	if (epoll_ctl(agent.event_fd, EPOLL_CTL_ADD, fd, &ee)) {
 		print_msg(JERS_LOG_WARNING, "Failed to set epoll event on daemon socket: %s", strerror(errno));
@@ -1412,6 +1453,166 @@ void disconnectFromDaemon(void) {
 void shutdownHandler(int signum) {
 	(void) signum;
 	shutdown_requested = 1;
+}
+
+void setupProxySocket(const char *path) {
+	int fd = -1;
+	struct sockaddr_un addr;
+
+	if (path == NULL)
+		path = DEFAULT_PROXY_SOCKET;
+
+	print_msg(JERS_LOG_DEBUG, "Setting up cmd proxy listening socket: %s", path);
+
+	fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+
+	if (fd < 0)
+		error_die("Failed to create socket for proxy socket: %s\n", strerror(errno));
+
+	memset(&addr, 0, sizeof(addr));
+	addr.sun_family = AF_UNIX;
+	strncpy(addr.sun_path, path, sizeof(addr.sun_path)-1);
+	
+	unlink(path);
+
+	if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1)
+		error_die("Failed to bind socket for proxy socket: %s\n", strerror(errno));
+
+	if (listen(fd, 1024) == -1) 
+		error_die("Failed to listen on socket for proxy socket: %s\n", strerror(errno));
+
+	if (chmod(path, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH) != 0)
+		error_die("chmod failed on proxy socket %s", strerror(errno));
+
+	/* Add it to our event fd and set it to readable */
+	struct epoll_event ee;
+	ee.events = EPOLLIN;
+	ee.data.ptr = &agent.client_proxy;
+
+	agent.client_proxy.socket = fd;
+	agent.client_proxy.ptr = NULL;
+	agent.client_proxy.events = 0;
+	agent.client_proxy.type = CLIENT_PROXY_CONN;
+	agent.client_proxy.event_fd = agent.event_fd;
+
+	if (epoll_ctl(agent.event_fd, EPOLL_CTL_ADD, fd, &ee))
+		error_die("Failed to set epoll event on proxy socket: %s", strerror(errno));
+
+	return;
+}
+
+int send_proxy_connect(proxyClient *c) {
+	resp_t connRequest;
+	initMessage(&connRequest, AGENT_PROXY_CONN, 1);
+	respAddMap(&connRequest);
+
+	addIntField(&connRequest, PID, c->pid);
+	addIntField(&connRequest, UID, c->uid);
+
+	respCloseMap(&connRequest);
+	send_msg(&connRequest);
+
+	return 0;
+}
+
+int send_proxy_data(proxyClient *c, char *data, size_t size) {
+	resp_t dataRequest;
+	initMessage(&dataRequest, AGENT_PROXY_DATA, 1);
+	respAddMap(&dataRequest);
+
+	addIntField(&dataRequest, PID, c->pid);
+	addBlobStringField(&dataRequest, PROXYDATA, data, size);
+
+	respCloseMap(&dataRequest);
+	send_msg(&dataRequest);
+	return 0;
+}
+
+int send_proxy_close(proxyClient *c) {
+	resp_t closeRequest;
+	initMessage(&closeRequest, AGENT_PROXY_CLOSE, 1);
+	respAddMap(&closeRequest);
+
+	addIntField(&closeRequest, PID, c->pid);
+
+	respCloseMap(&closeRequest);
+	send_msg(&closeRequest);
+	return 0;
+}
+
+void proxy_cleanup(proxyClient *c) {
+	send_proxy_close(c);
+	removeProxyClient(c);
+	free(c);
+	return;
+}
+
+void check_proxy_clients(void) {
+	/* Check our proxy clients for any messages to forward */
+	proxyClient *c = proxyClientList;
+
+	while (c) {
+		proxyClient *next = c->next;
+
+		if (c->clean_up) {
+			proxy_cleanup(c);
+			c = next;
+			continue;
+		}
+
+		if (c->connect_sent == 0) {
+			/* Send the connect message if we haven't already */
+			if (send_proxy_connect(c) != 0) {
+				handleClientProxyDisconnect(c);
+				proxy_cleanup(c);
+				c = next;
+				continue;
+			}
+
+			c->connect_sent = 1;
+		}
+
+		if (c->request_forwarded < c->request.used) {
+			/* Forward more data to the main daemon */
+			send_proxy_data(c, c->request.data + c->request_forwarded, c->request.used - c->request_forwarded);
+			c->request_forwarded += c->request.used - c->request_forwarded;
+		}
+
+		c = next;
+	}
+}
+
+void handleReadable(struct epoll_event *e) {
+	struct connectionType * connection = e->data.ptr;
+	int status = 0;
+
+	switch (connection->type) {
+		case CLIENT_PROXY_CONN: status = handleClientProxyConnection(connection); break;
+		case CLIENT_PROXY:      status = handleClientProxyRead(connection->ptr); break;
+		default:                print_msg(JERS_LOG_WARNING, "Unexpected read event - Ignoring"); break;
+	}
+
+	if (status) {
+		/* Disconnected */
+		e->data.ptr = NULL;
+	}
+
+	return;
+}
+
+void handleWritable(struct epoll_event *e) {
+	struct connectionType * connection = e->data.ptr;
+
+	/* Disconnected before handling the write event */
+	if (connection == NULL)
+		return;
+
+	switch (connection->type) {
+		case CLIENT_PROXY: handleClientProxyWrite(connection->ptr); break;
+		default:           print_msg(JERS_LOG_WARNING, "Unexpected write event - Ignoring"); break;
+	}
+
+	return;
 }
 
 int main (int argc, char * argv[]) {
@@ -1459,6 +1660,9 @@ int main (int argc, char * argv[]) {
 	/* Sort the fields */
 	sortfields();
 
+	/* Create a proxy listening unix socket */
+	setupProxySocket(NULL);
+
 	while(1) {
 		if (shutdown_requested) {
 			print_msg(JERS_LOG_INFO, "Shutdown has been requested");
@@ -1474,61 +1678,72 @@ int main (int argc, char * argv[]) {
 
 		for (i = 0; i < status; i++) {
 			struct epoll_event * e = &events[i];
-			if (e->events & EPOLLIN) {
-				/* Message/s from the main daemon.
-				 * We simply keep appending to our request buffer here */
+			if (e->data.ptr == &agent) {
+				/* Event for the agent socket */
+				if (e->events & EPOLLIN) {
+					/* Message/s from the main daemon.
+					* We simply keep appending to our request buffer here */
 
-				buffResize(&agent.requests, 0x10000);
+					buffResize(&agent.requests, 0x10000);
 
-				int len = recv(agent.daemon_fd, agent.requests.data + agent.requests.used, agent.requests.size - agent.requests.used, 0);
+					int len = _recv(agent.daemon_fd, agent.requests.data + agent.requests.used, agent.requests.size - agent.requests.used);
 
-				if (len <= 0) {
-					/* lost connection to the main daemon. */
-					// Keep going, but try and reconnect every 10 seconds.
-					// If we reconnect, the daemon should send a reconciliation message to us
-					// and we will send back the details of every job we have in memory.
-					print_msg(JERS_LOG_WARNING, "Got disconnected from JERS daemon. Will try to reconnect");
-					disconnectFromDaemon();
-					break;
-				} else {
-					agent.requests.used += len;
-				}
-			}
-
-			if (e->events & EPOLLOUT) {
-				/* We can write to the main daemon */
-				if (agent.responses.used - agent.responses_sent <= 0)
-					continue;
-
-				int len = send(agent.daemon_fd, agent.responses.data + agent.responses_sent, agent.responses.used - agent.responses_sent, 0);
-
-				if (len <= 0) {
-					/* lost connection to the main daemon. */
-					// Keep going, but try and reconnect every 10 seconds.
-					// If we reconnect, the daemon should send a reconciliation message to us
-					// and we will send back the details of every job we have in memory.
-					print_msg(JERS_LOG_WARNING, "Got disconnected from JERS daemon (during send). Will try to reconnect");
-					disconnectFromDaemon();
-					break;
+					if (len <= 0) {
+						/* lost connection to the main daemon. */
+						// Keep going, but try and reconnect every 10 seconds.
+						// If we reconnect, the daemon should send a reconciliation message to us
+						// and we will send back the details of every job we have in memory.
+						print_msg(JERS_LOG_WARNING, "Got disconnected from JERS daemon. Will try to reconnect");
+						disconnectFromDaemon();
+						break;
+					} else {
+						agent.requests.used += len;
+					}
 				}
 
-				agent.responses_sent += len;
+				if (e->events & EPOLLOUT) {
+					/* We can write to the main daemon */
+					if (agent.responses.used - agent.responses_sent <= 0)
+						continue;
 
-				if (agent.responses_sent == agent.responses.used) {
-					struct epoll_event ee;
-					ee.events = EPOLLIN;
-					ee.data.ptr = NULL;
-					if (epoll_ctl(agent.event_fd, EPOLL_CTL_MOD, agent.daemon_fd, &ee)) {
-						print_msg(JERS_LOG_WARNING, "Failed to clear EPOLLOUT from daemon socket");
+					int len = _send(agent.daemon_fd, agent.responses.data + agent.responses_sent, agent.responses.used - agent.responses_sent);
+
+					if (len <= 0) {
+						/* lost connection to the main daemon. */
+						// Keep going, but try and reconnect every 10 seconds.
+						// If we reconnect, the daemon should send a reconciliation message to us
+						// and we will send back the details of every job we have in memory.
+						print_msg(JERS_LOG_WARNING, "Got disconnected from JERS daemon (during send). Will try to reconnect");
+						disconnectFromDaemon();
+						break;
 					}
 
-					agent.responses_sent = agent.responses.used = 0;
+					agent.responses_sent += len;
+
+					if (agent.responses_sent == agent.responses.used) {
+						struct epoll_event ee;
+						ee.events = EPOLLIN;
+						ee.data.ptr = &agent;
+						if (epoll_ctl(agent.event_fd, EPOLL_CTL_MOD, agent.daemon_fd, &ee)) {
+							print_msg(JERS_LOG_WARNING, "Failed to clear EPOLLOUT from daemon socket");
+						}
+
+						agent.responses_sent = agent.responses.used = 0;
+					}
 				}
+			} else {
+				/* If not on the daemon proxy, the ptr should be to a connectionType structure */
+				if (e->events & EPOLLIN)
+					handleReadable(e);
+
+				if (e->events & EPOLLOUT)
+					handleWritable(e);
 			}
 		}
-			
+
 		process_messages();
 		check_children();
+		check_proxy_clients();
 	}
 
 	print_msg(JERS_LOG_INFO, "Finished.");

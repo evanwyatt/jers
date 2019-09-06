@@ -1,6 +1,8 @@
+#ifndef __JERS_CLI_H
+#define __JERS_CLI_H
+
 #include <time.h>
 #include <string.h>
-#include <argp.h>
 
 #include <jers.h>
 
@@ -132,3 +134,5 @@ CMD(delete_resource)
 CMD(mod_resource)
 
 CMD(show_agent)
+
+#endif

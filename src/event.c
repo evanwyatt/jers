@@ -30,6 +30,9 @@
 #include <server.h>
 #include <unistd.h>
 
+#include "client.h"
+#include "agent.h"
+
 struct event {
 	void (*func)(void);
 	int interval;    // Milliseconds between event triggering
@@ -51,8 +54,18 @@ void registerEvent(void(*func)(void), int interval) {
 	return;
 }
 
+void freeEvents(void) {
+	struct event *e = eventList;
+
+	while (e) {
+		struct event *next = e->next;
+		free(e);
+		e = next;
+	}
+}
+
 void checkClientEvent(void) {
-	client * c = server.client_list;
+	client * c = clientList;
 	int rc;
 
 	/* Check the connected clients for commands to action,
@@ -79,7 +92,7 @@ void checkClientEvent(void) {
 }
 
 void checkAgentEvent(void) {
-	agent * a = server.agent_list;
+	agent * a = agentList;
 
 	while (a) {
 		int rc = 0;

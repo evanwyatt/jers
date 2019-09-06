@@ -259,27 +259,42 @@ void * dup_mem(void * src, size_t len, size_t size) {
  * Returns the len added to the buffer, excluding the null terminator.
  * Caution - No overflow checking is performed */
 
-static inline char * _int64tostr(char * dest, int64_t num) {
-	if (num <= -10)
-			dest = _int64tostr(dest, num / 10);
+int int64tostr(char *dest, int64_t value) {
+    int64_t v;
+    int len;
 
-	*dest++ = '0' - (num % 10);
-	return dest;
+    if (value < 0)
+        v = -value;
+    else
+        v = value;
+    
+    char *p = dest;
+    do {
+        *p++ = '0' + (v%10);
+        v /= 10;
+    } while(v);
+
+    if (value < 0)
+        *p++ = '-';
+
+    *p = '\0';
+    len = p - dest;
+
+    p--;
+
+    /* Reverse the string to the correct order */
+    char tmp;
+    while(dest < p) {
+        tmp = *dest;
+        *dest = *p;
+        *p = tmp;
+        dest++;
+        p--;
+    }
+
+    return len;
 }
 
-int int64tostr(char * dest, int64_t num) {
-	char *p = dest;
-
-	if (num < 0)
-		*p++ = '-';
-	else
-		num = -num;
-
-	p = _int64tostr(p, num);
-	*p = '\0';
-
-	return p - dest;
-}
 
 int matches(const char * pattern, const char * string) {
 	if (strchr(pattern, '*') || strchr(pattern, '?')) {

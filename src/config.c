@@ -36,7 +36,11 @@
 #include <errno.h>
 #include <grp.h>
 
+#include "agent.h"
+
 #define GROUP_LIMIT 32
+
+extern agent *agentList;
 
 static gid_t getGroup(char * name) {
 	struct group * g = getgrnam(name);
@@ -94,6 +98,17 @@ void loadAllowedAgents(char * agents_string) {
 	}
 
 	return;
+}
+
+void freeConfig(void) {
+	free(server.state_dir);
+	free(server.socket_path);
+	free(server.agent_socket_path);
+
+	free(server.permissions.read.groups);
+	free(server.permissions.write.groups);
+	free(server.permissions.setuid.groups);
+	free(server.permissions.queue.groups);
 }
 
 void loadConfig(char * config) {
@@ -222,12 +237,12 @@ void loadConfig(char * config) {
 
 	fclose(f);
 
-	if (server.agent_list == NULL) {
+	if (agentList == NULL) {
 		/* No allowed agents specified in the config file,
 		 * only allow an agent connection from localhost */
-		server.agent_list = calloc(1, sizeof(agent));
-		server.agent_list->host = strdup("localhost");
-		server.agent_list->connection.socket = -1;
+		agentList = calloc(1, sizeof(agent));
+		agentList->host = strdup("localhost");
+		agentList->connection.socket = -1;
 
 		print_msg(JERS_LOG_WARNING, "No agents in config file. Only allowing an agent from localhost");
 	}

@@ -41,24 +41,23 @@
 /* A simple implementation of the RESP3 protocol for serialization and deserialization
  * - Not all data type are implemented */
 
-static int _resize(struct buffer * b, int needed) {
-	if (b->size <= b->len + needed) {
+static inline int _resize(struct buffer * b, int needed) {
+	if (b->size > b->len + needed)
+		return 0;
 
-		if (b->size == 0)
-			b->size = INIT_SIZE;
+	if (b->size == 0)
+		b->size = INIT_SIZE;
 
-		while(b->size <= b->len + needed) {
-			b->size *= 2;
-		}
+	while(b->size <= b->len + needed)
+		b->size *= 2;
 
-		char * new = realloc(b->string, b->size);
-		b->string = new;
-	}
+	char * new = realloc(b->string, b->size);
+	b->string = new;
 
 	return 0;
 }
 
-static char * _respGetBytes(resp_read_t * r, int wanted) {
+static inline char * _respGetBytes(resp_read_t * r, int wanted) {
 	char * ret = NULL;
 
 	/* Return a valid pointer if we have enough bytes,
@@ -75,7 +74,7 @@ static char * _respGetBytes(resp_read_t * r, int wanted) {
  * - If we don't hit a delimiter before we run out of bytes,
  *   return NULL to signify we need more data */
 
-static char * _respGetLine(resp_read_t * r) {
+static inline char * _respGetLine(resp_read_t * r) {
 	char * pos = r->string + r->pos;
 
 	if (r->length <= r->pos)
@@ -97,7 +96,7 @@ static char * _respGetLine(resp_read_t * r) {
 	return NULL;
 }
 
-static int _respConvertNum(char * str, int64_t * result) {
+static inline int _respConvertNum(char * str, int64_t * result) {
 	/* Given str, read until the delimter is hit, converting the
  	 * the number to an int64_t */
 	*result = 0;
@@ -119,7 +118,7 @@ static int _respConvertNum(char * str, int64_t * result) {
 	return RESP_OK;
 }
 
-static void _respFreeItem(struct argItem * item) {
+static inline void _respFreeItem(struct argItem * item) {
 	if (item->type == RESP_TYPE_ARRAY || item->type == RESP_TYPE_MAP) {
 		while (item->data.array.loaded) {
 			_respFreeItem(&item->data.array.items[--item->data.array.loaded]);
@@ -392,13 +391,11 @@ int respAddStringArray(resp_t * r, int count, char ** strings) {
 
 int respAddSimpleString(resp_t * r, const char * string) {
 	struct buffer * b = &r->items[r->depth];
-	int len;
-	_resize(b, strlen(string) + 8);
-
-	len = strlen(string);
+	int len = strlen(string);
+	_resize(b, len + 8);
 
 	b->string[b->len++] = '+';
-	strcpy(b->string + b->len, string);
+	memcpy(b->string + b->len, string, len + 1);
 	b->len += len;
 	b->string[b->len++] = DELIM_CHAR;
 	b->count++;

@@ -114,6 +114,9 @@ field fields[] = {
 
 	{CONNECTED, RESP_TYPE_BOOL, "CONNECTED"},
 
+	{PID, RESP_TYPE_INT, "PID"},
+	{PROXYDATA, RESP_TYPE_BLOBSTRING, "PROXYDATA"},
+
 	{ENDOFFIELDS, RESP_TYPE_INT, "ENDOFFIELDS"}
 };
 
@@ -154,7 +157,24 @@ void freeStringMap(int count, key_val_t ** keys) {
 }
 
 char * getStringField(field *f) {
-	char * ret = strdup(f->value.string ? f->value.string : "");
+	char * ret = strdup(f->value.string.value ? f->value.string.value : "");
+	return ret;
+}
+
+char * getBlobStringField(field *f, size_t *length) {
+	char * ret;
+
+	if (length)
+		*length = 0;
+
+	ret = malloc(f->value.string.length);
+
+	if (ret == NULL)
+		return NULL;
+
+	memcpy(ret, f->value.string.value, f->value.string.length);
+	*length = f->value.string.length;
+
 	return ret;
 }
 
@@ -216,6 +236,11 @@ void sortfields(void) {
 	memcpy(sortedFields, fields, sizeof(field) * num_fields);
 
 	qsort(sortedFields, num_fields, sizeof(field), compfield);
+}
+
+void freeSortedFields(void) {
+	free(sortedFields);
+	sortedFields = NULL;
 }
 
 int fieldtonum(const char * in) {
@@ -326,7 +351,7 @@ static int load_fields(msg_t * msg) {
 			/* Load the value */
 			switch (fields[msg->items[item].fields[i].number].type) {
 				case RESP_TYPE_BLOBSTRING:
-					rc = respGetBlobString(&msg->reader, &msg->items[item].fields[i].value.string, NULL);
+					rc = respGetBlobString(&msg->reader, &msg->items[item].fields[i].value.string.value, &msg->items[item].fields[i].value.string.length);
 					break;
 				case RESP_TYPE_INT:
 					rc = respGetNum(&msg->reader, &msg->items[item].fields[i].value.number);
@@ -504,6 +529,11 @@ void addIntField(resp_t * r, int field_no, int64_t value) {
 void addStringField(resp_t * r, int field_no, const char * value) {
 	respAddSimpleString(r, fields[field_no].name);
 	respAddBlobString(r, value, value ? strlen(value) : 0);
+}
+
+void addBlobStringField(resp_t * r, int field_no, const char * value, size_t length) {
+	respAddSimpleString(r, fields[field_no].name);
+	respAddBlobString(r, value, value ? length : 0);
 }
 
 void addStringMapField(resp_t * r, int field_no, int count, const key_val_t * keys) {

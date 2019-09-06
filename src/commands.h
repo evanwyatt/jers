@@ -57,6 +57,9 @@ int command_agent_jobstart(agent * a, msg_t * msg);
 int command_agent_jobcompleted(agent * a, msg_t * msg);
 int command_agent_recon(agent * a, msg_t * msg);
 int command_agent_authresp(agent * a, msg_t * msg);
+int command_agent_proxyconn(agent * a, msg_t * msg);
+int command_agent_proxydata(agent * a, msg_t * msg);
+int command_agent_proxyclose(agent * a, msg_t * msg);
 
 int command_stats(client *, void *);
 

@@ -105,3 +105,13 @@ int cleanupQueues(uint32_t max_clean) {
 
 	return cleaned_up;
 }
+
+void markQueueStopped(agent *a) {
+	for (struct queue *q = server.queueTable; q != NULL; q = q->hh.next) {
+		if (q->agent == a) {
+			print_msg(JERS_LOG_DEBUG, "Disabling queue %s", q->name);
+			q->agent = NULL;
+			q->state &= ~JERS_QUEUE_FLAG_STARTED;
+		}
+	}
+}

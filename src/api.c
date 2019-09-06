@@ -51,7 +51,7 @@
 JERS_EXPORT int jers_errno = JERS_ERR_OK;
 char * jers_err_string = NULL;
 
-char * socket_path = NULL;
+char * socket_path[3] = {NULL, NULL, NULL};
 int fd = -1;
 msg_t msg;
 buff_t response = {0};
@@ -91,7 +91,9 @@ static int customInit(const char * custom_config) {
 }
 
 static int defaultInit(void) {
-	socket_path = "/run/jers/jers.sock";
+	socket_path[0] = "/run/jers/jers.sock";
+	socket_path[1] = "/run/jers/proxy.sock";
+
 	return 0;
 }
 
@@ -144,6 +146,7 @@ JERS_EXPORT void jersFinish(void) {
 /* Establish a connection to the main daemon */
 static int jersConnect(void) {
 	struct sockaddr_un addr;
+	int status = -1;
 
 	fd = socket(AF_UNIX, SOCK_STREAM, 0);
 
@@ -152,13 +155,21 @@ static int jersConnect(void) {
 		return 1;
 	}
 
-	memset(&addr, 0, sizeof(addr));
-	addr.sun_family = AF_UNIX;
+	for (int i = 0; socket_path[i]; i++) {
+		memset(&addr, 0, sizeof(addr));
+		addr.sun_family = AF_UNIX;
 
-	strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path));
-	addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
+		strncpy(addr.sun_path, socket_path[i], sizeof(addr.sun_path));
+		addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
 
-	if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+		if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1)
+			continue;
+
+		status = 0;
+		break;
+	}
+
+	if (status != 0) {
 		fprintf(stderr, "Failed to connect to jers daemon: %s\n", strerror(errno));
 		return 1;
 	}

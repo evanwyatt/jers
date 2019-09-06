@@ -50,6 +50,8 @@
 #include <fields.h>
 #include <logging.h>
 #include <auth.h>
+#include <agent.h>
+#include <client.h>
 
 #define likely(x)       __builtin_expect((x),1)
 #define unlikely(x)     __builtin_expect((x),0)
@@ -74,43 +76,6 @@
 #define DEFAULT_CONFIG_AGENTSOCKETPATH "/var/run/jers/agent.socket"
 #define DEFAULT_CONFIG_FLUSHDEFER 1
 #define DEFAULT_CONFIG_FLUSHDEFERMS 5000
-
-typedef struct _client {
-	struct connectionType connection;
-
-	msg_t msg;
-
-	buff_t request;
-	buff_t response;
-	size_t response_sent;
-
-	uid_t uid;
-	struct user * user;
-
-	struct _client * next;
-	struct _client * prev;
-} client;
-
-typedef struct _agent {
-	struct connectionType connection;
-
-	msg_t msg;
-
-	char * host;
-	char * nonce;
-	int recon;
-	int logged_in;
-
-	/* Requests to send to this agent */
-	buff_t requests;
-	size_t sent;
-
-	/* Data we've read from this agent */
-	buff_t responses;
-
-	struct _agent * next;
-	struct _agent * prev;
-} agent;
 
 enum jers_object_type {
 	JERS_OBJECT_JOB = 1,
@@ -313,13 +278,11 @@ struct jersServer {
 
 	char * socket_path;
 	struct connectionType client_connection;
-	client * client_list;
 
 	char * agent_socket_path;
 	int agent_port;
 	struct connectionType agent_connection;
 	struct connectionType agent_connection_tcp;
-	agent * agent_list;
 
 	struct flush {
 		pid_t pid;
@@ -370,12 +333,8 @@ void freeQueue(struct queue * q);
 struct queue * findQueue(char * name);
 void setDefaultQueue(struct queue *q);
 
-void addClient(client * c);
-void removeClient(client * c);
-void addAgent(agent * a);
-void removeAgent(agent * a);
-
 void loadConfig(char * config);
+void freeConfig(void);
 
 int stateSaveCmd(uid_t uid, char * cmd, char * msg, jobid_t jobid, int64_t revision);
 void stateInit(void);
@@ -402,6 +361,7 @@ int runCommand(client * c);
 int runAgentCommand(agent * a);
 
 void checkEvents(void);
+void freeEvents(void);
 
 void initEvents(void);
 
@@ -409,16 +369,9 @@ int cleanupJobs(uint32_t max_clean);
 int cleanupQueues(uint32_t max_clean);
 int cleanupResources(uint32_t max_clean);
 
-void setup_listening_sockets(void);
-int setReadable(struct connectionType * connection);
-int setWritable(struct connectionType * connection);
-void handleReadable(struct epoll_event * e);
-void handleWriteable(struct epoll_event * e);
-
-void handleClientDisconnect(client * c);
-void handleAgentDisconnect(agent * a);
-
 void sortAgentCommands(void);
 void sortCommands(void);
+
+void freeSortedCommands(void);
 
 #endif

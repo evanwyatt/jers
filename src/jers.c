@@ -35,8 +35,6 @@
 #include <pwd.h>
 #include <errno.h>
 
-#include <argp.h>
-
 #include <jers_cli.h>
 #include <jers.h>
 #include <common.h>
@@ -286,12 +284,12 @@ static void _print_time(const char * str, time_t t) {
 
 static char * getUser(uid_t uid) {
 	static char username[256];
-	struct passwd *pw = getpwuid(uid);
+	struct user *u = lookup_user( uid, 0);
 
-	if (pw == NULL)
+	if (u == NULL)
 		sprintf(username, "%d", uid);
 	else
-		strcpy(username, pw->pw_name);
+		strcpy(username, u->username);
 
 	return username;
 }

@@ -34,6 +34,7 @@
 #include <time.h>
 #include <fcntl.h>
 #include <stdarg.h>
+#include <sys/stat.h>
 
 #include "server.h"
 #include "jers.h"
@@ -51,50 +52,6 @@ int parseOpts(int argc, char * argv[]) {
 	}
 
 	return 0;
-}
-
-void addClient(client * c) {
-	if (server.client_list) {
-		c->next = server.client_list;
-		c->next->prev = c;
-	}
-
-	server.client_list = c;
-}
-
-void removeClient(client * c) {
-	if (c->next) {
-		c->next->prev = c->prev;
-	}
-
-	if (c->prev) {
-		c->prev->next = c->next;
-	}
-	if (c == server.client_list) {
-		server.client_list = c->next;
-	}
-}
-
-void addAgent(agent * a) {
-	if (server.agent_list) {
-		a->next = server.agent_list;
-		a->next->prev = a;
-	}
-
-	server.agent_list = a;
-}
-
-void removeAgent(agent * a) {
-	if (a->next) {
-		a->next->prev = a->prev;
-	}
-
-	if (a->prev) {
-		a->prev->next = a->next;
-	}
-	if (a == server.agent_list) {
-		server.agent_list = a->next;
-	}
 }
 
 void serverShutdown(void) {
@@ -137,6 +94,44 @@ void serverShutdown(void) {
 
 	/* Scheduling candidate pool */
 	free(server.candidate_pool);
+
+	/* Clients and agents */
+	client *c = clientList;
+	while (c) {
+		client *next = c->next;
+
+		close(c->connection.socket);
+		buffFree(&c->response);
+		buffFree(&c->request);
+		respReadFree(&c->msg.reader);
+		removeClient(c);
+		free(c);
+
+		c = next;
+	}
+
+	agent *a = agentList;
+	while (a) {
+		agent *next = a->next;
+
+		close(a->connection.socket);
+		buffFree(&a->requests);
+		buffFree(&a->responses);
+		respReadFree(&a->msg.reader);
+		free(a->host);
+		free(a->nonce);
+		removeAgent(a);
+		free(a);
+
+		a = next;
+	}
+
+	/* Commands and fields */
+	freeSortedCommands();
+	freeSortedFields();
+
+	freeEvents();
+	freeConfig();
 }
 
 void shutdownHandler(int signum) {
@@ -148,6 +143,89 @@ void setupAsDaemon(void) {
 	/* If we are running as a daemon, we want to redirect
 	 * our output to logfile specified in the config file */
 	setLogfileName(server_log);
+}
+
+void setup_listening_sockets(void) {
+
+	int fd = createSocket(server.socket_path, 0, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
+
+	if (fd < 0)
+		error_die("Failed to create listening socket for client connections: %s", strerror(errno));
+
+	server.client_connection.type = CLIENT_CONN;
+	server.client_connection.socket = fd;
+	server.client_connection.event_fd = server.event_fd;
+	server.client_connection.ptr = NULL;
+	server.client_connection.events = 0;
+
+	pollSetReadable(&server.client_connection);
+
+	/* Agent connections over TCP */
+	if (server.agent_port) {
+		fd = createSocket(NULL, server.agent_port, 0);
+
+		if (fd == -1)
+			error_die("failed to create listening socket for port %d: %s", server.agent_port, strerror(errno));
+
+		server.agent_connection_tcp.type = AGENT_CONN;
+		server.agent_connection_tcp.socket = fd;
+		server.agent_connection_tcp.event_fd = server.event_fd;
+		server.agent_connection_tcp.ptr = NULL;
+		server.agent_connection_tcp.events = 0;
+
+		pollSetReadable(&server.agent_connection_tcp);
+	}
+
+	/* Agent socket */
+	fd = createSocket(server.agent_socket_path, 0, 0);
+
+	if (fd == -1) {
+		error_die("failed to create listening socket %s", strerror(errno));
+	}
+
+	server.agent_connection.type = AGENT_CONN;
+	server.agent_connection.socket = fd;
+	server.agent_connection.event_fd = server.event_fd;
+	server.agent_connection.ptr = NULL;
+	server.agent_connection.events = 0;
+
+	pollSetReadable(&server.agent_connection);
+}
+
+void handleReadable(struct epoll_event *e) {
+	struct connectionType * connection = e->data.ptr;
+	int status = 0;
+
+	switch (connection->type) {
+		case CLIENT_CONN:       status = handleClientConnection(connection); break;
+		case AGENT_CONN:        status = handleAgentConnection(connection); break;
+		case CLIENT:            status = handleClientRead(connection->ptr); break;
+		case AGENT:             status = handleAgentRead(connection->ptr); break;
+		default:                print_msg(JERS_LOG_WARNING, "Unexpected read event - Ignoring"); break;
+	}
+
+	if (status) {
+		/* Disconnected */
+		e->data.ptr = NULL;
+	}
+
+	return;
+}
+
+void handleWriteable(struct epoll_event *e) {
+	struct connectionType * connection = e->data.ptr;
+
+	/* Disconnected before handling the write event */
+	if (connection == NULL)
+		return;
+
+	switch (connection->type) {
+		case CLIENT:       handleClientWrite(connection->ptr); break;
+		case AGENT:        handleAgentWrite(connection->ptr); break;
+		default:           print_msg(JERS_LOG_WARNING, "Unexpected write event - Ignoring"); break;
+	}
+
+	return;
 }
 
 int main (int argc, char * argv[]) {
@@ -242,6 +320,7 @@ int main (int argc, char * argv[]) {
 			if (e->events &EPOLLIN)
 				handleReadable(e);
 
+			/* Socket is writeable */
 			if (e->events &EPOLLOUT)
 				handleWriteable(e);
 		}

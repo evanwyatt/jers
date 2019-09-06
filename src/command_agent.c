@@ -86,15 +86,15 @@ int command_agent_authresp(agent * a, msg_t * msg) {
 	print_msg(JERS_LOG_INFO, "Got authresp message from agent on host: %s", a->host);
 
 	//Expecting a nonce and a hmac
-		for (int i = 0; i < msg->items[0].field_count; i++) {
-			switch(msg->items[0].fields[i].number) {
-				case NONCE : c_nonce = getStringField(&msg->items[0].fields[i]); break;
-				case DATETIME: datetime = getNumberField(&msg->items[0].fields[i]); break;
-				case MSG_HMAC  : hmac = getStringField(&msg->items[0].fields[i]); break;
+	for (int i = 0; i < msg->items[0].field_count; i++) {
+		switch(msg->items[0].fields[i].number) {
+			case NONCE : c_nonce = getStringField(&msg->items[0].fields[i]); break;
+			case DATETIME: datetime = getNumberField(&msg->items[0].fields[i]); break;
+			case MSG_HMAC  : hmac = getStringField(&msg->items[0].fields[i]); break;
 
-				default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", msg->items[0].fields[i].name); break;
-			}
+			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", msg->items[0].fields[i].name); break;
 		}
+	}
 
 	if (c_nonce == NULL) {
 		print_msg(JERS_LOG_WARNING, "Agent authresp did not contain a client_nonce. - Disconnecting them");
@@ -283,17 +283,17 @@ int command_agent_jobstart(agent * a, msg_t * msg) {
 
 	if (j == NULL) {
 		print_msg(JERS_LOG_WARNING, "Got job start for non-existent jobid: %d", jobid);
-		return 0;
+		return 1;
 	}
 
-	changeJobState(j, JERS_JOB_RUNNING, NULL, 0);
+	changeJobState(j, JERS_JOB_RUNNING, NULL, 1);
 
 	j->internal_state &= ~JERS_FLAG_JOB_STARTED;
 	j->pend_reason = 0;
 	j->pid = pid;
 	j->start_time = start_time;
 
-    if (server.recovery.in_progress && j->res_count) {
+	if (server.recovery.in_progress && j->res_count) {
 		for (i = 0; i < j->res_count; i++)
 			j->req_resources[i].res->in_use += j->req_resources[i].needed;
 	}
@@ -340,7 +340,7 @@ int command_agent_jobcompleted(agent * a, msg_t * msg) {
 
 	if (j == NULL) {
 		print_msg(JERS_LOG_WARNING, "Got job completed for non-existent jobid: %d", jobid);
-		return 0;
+		return 1;
 	}
 
 	if (j->internal_state & JERS_FLAG_JOB_STARTED) {
@@ -378,5 +378,129 @@ int command_agent_jobcompleted(agent * a, msg_t * msg) {
 
 	print_msg(JERS_LOG_INFO, "JobID: %d %s exitcode:%d finish_time:%ld", jobid, exitcode ? "EXITED" : "COMPLETED", j->exitcode, j->finish_time);
 
-	return 1;
+	return 0;
+}
+
+int command_agent_proxyconn(agent *a, msg_t *msg) {
+	pid_t pid = -1;
+	uid_t uid = -1;
+
+	for (int i = 0; i < msg->items[0].field_count; i++) {
+		switch(msg->items[0].fields[i].number) {
+			case PID : pid = getNumberField(&msg->items[0].fields[i]); break;
+			case UID: uid = getNumberField(&msg->items[0].fields[i]); break;
+
+			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", msg->items[0].fields[i].name); break;
+		}
+	}
+
+	client *c = NULL;
+	
+	/* Check if we already had this client connected, if so remove the old client */
+	for (c = clientList; c; c = c->next) {
+		if (c->connection.proxy.pid == 0)
+			continue;
+
+		if (c->connection.proxy.agent == a && c->connection.proxy.pid == pid)
+			break;
+	}
+	
+	if (c != NULL) {
+		print_msg(JERS_LOG_WARNING, "Had previous proxy client connected on agent %d pid:%d", ((agent *)c->connection.proxy.agent)->host, c->connection.proxy.pid);
+		buffFree(&c->response);
+		buffFree(&c->request);
+		respReadFree(&c->msg.reader);
+		removeClient(c);
+		free(c);
+	}
+	
+	c = calloc(sizeof(client), 1);
+
+	if (c == NULL)
+		error_die("Failed to allocate memory for proxy client request");
+
+	c->uid = uid;
+	c->connection.proxy.pid = pid;
+	c->connection.proxy.agent =  a;
+
+	buffNew(&c->request, 0);
+
+	addClient(c);
+
+	return 0;
+}
+
+int command_agent_proxydata(agent *a, msg_t *msg) {
+	pid_t pid = -1;
+	char *data = NULL;
+	size_t data_length;
+
+	for (int i = 0; i < msg->items[0].field_count; i++) {
+		switch(msg->items[0].fields[i].number) {
+			case PID : pid = getNumberField(&msg->items[0].fields[i]); break;
+			case PROXYDATA: data = getBlobStringField(&msg->items[0].fields[i], &data_length); break;
+
+			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", msg->items[0].fields[i].name); break;
+		}
+	}
+
+	if (data == NULL) {
+		return 1;
+	}
+
+	/* Locate the client structure */
+	client *c = NULL;
+	for (c = clientList; c; c = c->next) {
+		if (c->connection.proxy.pid == 0)
+			continue;
+
+		if (c->connection.proxy.agent == a && c->connection.proxy.pid == pid)
+			break;
+	}
+
+	if (c == NULL) {
+		print_msg(JERS_LOG_WARNING, "Failed to locate proxy client from agent %s pid:%d", a, pid);
+		return 1;
+	}
+
+	/* Add the new data to the clients stream */
+	buffAdd(&c->request, data, data_length);
+	free(data);
+
+	return 0;
+}
+
+int command_agent_proxyclose(agent *a, msg_t *msg) {
+	pid_t pid = -1;
+
+	for (int i = 0; i < msg->items[0].field_count; i++) {
+		switch(msg->items[0].fields[i].number) {
+			case PID : pid = getNumberField(&msg->items[0].fields[i]); break;
+
+			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", msg->items[0].fields[i].name); break;
+		}
+	}
+
+	/* Locate the client structure */
+	client *c = NULL;
+	for (c = clientList; c; c = c->next) {
+		if (c->connection.proxy.pid == 0)
+			continue;
+
+		if (c->connection.proxy.agent == a && c->connection.proxy.pid == pid)
+			break;
+	}
+
+	if (c == NULL) {
+		print_msg(JERS_LOG_WARNING, "Failed to locate proxy client (close) from agent %s pid:%d", a, pid);
+		return 1;
+	}
+
+	buffFree(&c->response);
+	buffFree(&c->request);
+	respReadFree(&c->msg.reader);
+	removeClient(c);
+	free(c);
+
+	return 0;
 }
