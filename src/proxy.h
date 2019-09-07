@@ -56,6 +56,7 @@ typedef struct _proxyClient {
 	pid_t pid;
 	int connect_sent;
 	int clean_up;
+	int error;
 
 	struct _proxyClient * next;
 	struct _proxyClient * prev;

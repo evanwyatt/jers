@@ -272,7 +272,7 @@ void sendError(client * c, int error, const char * err_msg) {
 	if (c == NULL) {
 		if (server.recovery.in_progress)
 			return;
-		
+
 		print_msg(JERS_LOG_WARNING, "Trying to send a error code, but no client provided");
 		return;
 	}

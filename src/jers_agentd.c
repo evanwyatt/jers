@@ -77,6 +77,7 @@
 int initMessage(resp_t * r, const char * resp_name, int version);
 void error_die(char *, ...);
 const char * getFailString(int);
+const char * getErrType(int jers_error);
 void disconnectFromDaemon(void);
 
 char * server_log = "jers_agentd";
@@ -1211,7 +1212,7 @@ int proxy_response(msg_t *m) {
 		}
 	}
 
-	if (pid)
+	if (pid == 0)
 		return 0;
 
 	/* Locate the client structure */
@@ -1342,7 +1343,7 @@ void process_messages(void) {
 
 int connectjers(void) {
 	int fd;
-	
+
 	if (time(NULL) < agent.next_connect) {
 		sleep(5);
 		return 1;
@@ -1541,10 +1542,30 @@ int send_proxy_close(proxyClient *c) {
 }
 
 void proxy_cleanup(proxyClient *c) {
-	send_proxy_close(c);
+	if (agent.daemon_fd != -1)
+		send_proxy_close(c);
+
 	removeProxyClient(c);
 	free(c);
 	return;
+}
+
+void sendProxyError(proxyClient *c, int error, const char *msg) {
+	resp_t error_resp;
+	char *buff;
+	size_t buff_length = 0;
+	char error_message[128];
+	const char * error_type = getErrType(error);
+
+	sprintf(error_message, "%s %s", error_type, msg ? msg : "");
+
+	respNew(&error_resp);
+	respAddSimpleError(&error_resp, error_message);
+	buff = respFinish(&error_resp, &buff_length);
+	buffAdd(&c->response, buff, buff_length);
+	pollSetWritable(&c->connection);
+
+	free(buff);
 }
 
 void check_proxy_clients(void) {
@@ -1560,8 +1581,23 @@ void check_proxy_clients(void) {
 			continue;
 		}
 
+		if (c->error) {
+			c = next;
+			continue;
+		}
+
 		if (c->connect_sent == 0) {
-			/* Send the connect message if we haven't already */
+			/* Send the connect message if we haven't already
+			 * If we aren't connected to the daemon, send the client an error now */
+
+			if (agent.daemon_fd == -1 || agent.in_recon) {
+				print_msg(JERS_LOG_WARNING, "Not connected to main daemon, return error to proxy request");
+				sendProxyError(c, JERS_ERR_NOTCONN, "Agent not connected");
+				c->error = 1;
+				c = next;
+				continue;
+			}
+
 			if (send_proxy_connect(c) != 0) {
 				handleClientProxyDisconnect(c);
 				proxy_cleanup(c);
