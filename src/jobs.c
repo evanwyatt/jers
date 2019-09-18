@@ -127,6 +127,15 @@ int cleanupJobs(uint32_t max_clean) {
 		/* Got a job to remove */
 		stateDelJob(j);
 		HASH_DEL(server.jobTable, j);
+
+		/* If the job was a candidate for execution, clear it out of the pool */
+		for (int i = 0; i < server.candidate_pool_jobs; i++) {
+			if (server.candidate_pool[i] == j) {
+				server.candidate_pool[i] = NULL;
+				break;
+			}
+		}
+
 		freeJob(j);
 		server.deleted--;
 
