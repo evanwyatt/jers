@@ -61,6 +61,19 @@ void serverShutdown(void) {
 		fdatasync(server.journal.fd);
 	}
 
+	/* Kill off any accounting stream clients */
+	acctClient *ac = acctClientList;
+	while (ac) {
+		acctClient *next = ac->next;
+
+		kill(ac->pid, SIGTERM);
+		close(ac->connection.socket);
+		removeAcctClient(ac);
+		free(ac);
+
+		ac = next;
+	}
+
 	/* Close our sockets */
 	close(server.client_connection.socket);
 	close(server.agent_connection.socket);
@@ -190,6 +203,17 @@ void setup_listening_sockets(void) {
 	server.agent_connection.events = 0;
 
 	pollSetReadable(&server.agent_connection);
+
+	/* Accounting stream socket */
+	fd = createSocket(server.acct_socket_path, 0, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
+
+	server.acct_connection.type = ACCT_CONN;
+	server.acct_connection.socket = fd;
+	server.acct_connection.event_fd = server.event_fd;
+	server.acct_connection.ptr = NULL;
+	server.acct_connection.events = 0;
+
+	pollSetReadable(&server.acct_connection);
 }
 
 void handleReadable(struct epoll_event *e) {
@@ -199,6 +223,7 @@ void handleReadable(struct epoll_event *e) {
 	switch (connection->type) {
 		case CLIENT_CONN:       status = handleClientConnection(connection); break;
 		case AGENT_CONN:        status = handleAgentConnection(connection); break;
+		case ACCT_CONN:         status = handleAcctClientConnection(connection); break;
 		case CLIENT:            status = handleClientRead(connection->ptr); break;
 		case AGENT:             status = handleAgentRead(connection->ptr); break;
 		default:                print_msg(JERS_LOG_WARNING, "Unexpected read event - Ignoring"); break;

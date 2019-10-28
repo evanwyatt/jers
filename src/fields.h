@@ -169,6 +169,8 @@ enum field_type {
 void sortfields(void);
 void freeSortedFields(void);
 
+const char *getFieldName(int field_no);
+
 int load_message(msg_t * msg, buff_t * buff);
 void free_message(msg_t * msg);
 int initMessage(resp_t * r, const char * resp_name, int version);

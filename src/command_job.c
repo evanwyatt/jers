@@ -75,21 +75,6 @@ struct jobResource * convertResourceStrings(int res_count, char ** res_strings) 
 	return resources;
 }
 
-char ** convertResourceToStrings(int res_count, struct jobResource * res) {
-	char ** res_strings = NULL;
-	int i;
-
-	res_strings = malloc(sizeof(char *) * res_count);
-
-
-	for (i = 0; i < res_count; i++) {
-		res_strings[i] = malloc(strlen(res[i].res->name) + 16);
-		sprintf(res_strings[i], "%s:%d", res[i].res->name, res[i].needed);
-	}
-
-	return res_strings; 
-}
-
 void * deserialize_add_job(msg_t * t) {
 	jersJobAdd * s = calloc(sizeof(jersJobAdd), 1);
 	int i;

@@ -52,6 +52,7 @@
 #include <auth.h>
 #include <agent.h>
 #include <client.h>
+#include <acct.h>
 
 #define UNUSED(x) (void)(x)
 
@@ -72,6 +73,7 @@
 #define DEFAULT_CONFIG_MAXJOBID 9999999
 #define DEFAULT_CONFIG_SOCKETPATH "/var/run/jers/jers.socket"
 #define DEFAULT_CONFIG_AGENTSOCKETPATH "/var/run/jers/agent.socket"
+#define DEFAULT_CONFIG_ACCTSOCKETPATH "/var/run/jers/accounting.socket"
 #define DEFAULT_CONFIG_FLUSHDEFER 1
 #define DEFAULT_CONFIG_FLUSHDEFERMS 5000
 #define DEFAULT_CONFIG_EMAIL_FREQ 5000
@@ -290,6 +292,9 @@ struct jersServer {
 	struct connectionType agent_connection;
 	struct connectionType agent_connection_tcp;
 
+	char *acct_socket_path;
+	struct connectionType acct_connection;
+
 	struct flush {
 		pid_t pid;
 		char defer;		// 0 == flush after every write. 1 == flush every defer_ms milliseconds
@@ -374,6 +379,8 @@ void initEvents(void);
 int cleanupJobs(uint32_t max_clean);
 int cleanupQueues(uint32_t max_clean);
 int cleanupResources(uint32_t max_clean);
+
+char ** convertResourceToStrings(int res_count, struct jobResource * res);
 
 void sortAgentCommands(void);
 void sortCommands(void);

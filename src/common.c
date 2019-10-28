@@ -5,7 +5,7 @@
  * are permitted provided that the following conditions are met:
  *
  * 1. Redistributions of source code must retain the above copyright notice,
- *    this list of conditions and the following disclaimer.
+ *	this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
@@ -43,6 +43,7 @@
 #include <fnmatch.h>
 #include <stdarg.h>
 #include <execinfo.h>
+#include <signal.h>
 
 #include <uthash.h>
 
@@ -56,7 +57,7 @@ volatile sig_atomic_t reopen_logfile = 1;
 
 /* Escape / unescape newlines, tabs and backslash characters
  *  - A static buffer is used to hold the escaped string,
- *    so it needs to be copied if required */
+ *	so it needs to be copied if required */
 
 char * escapeString(const char * string, size_t * length) {
 	static char * escaped = NULL;
@@ -132,7 +133,7 @@ void unescapeString(char * string) {
 
 /* Return the time, in milliseconds
  * Note: This is NOT the real time! It's mainly used for timed events,
- *       where only the duration between calls is important. */
+ *	   where only the duration between calls is important. */
 
 int64_t getTimeMS(void) {
 	struct timespec tp;
@@ -142,9 +143,9 @@ int64_t getTimeMS(void) {
 
 /* Return a formated timespec as a static string
  *  - If elapsed is zero, print as year-month-day hour:minute:second.milliseconds
- *    Otherwise print an elapsed time as minutes seconds milliseconds
- *    ie 1969-07-21 02:56:15.000
- *    or 151m 40.000s */
+ *	Otherwise print an elapsed time as minutes seconds milliseconds
+ *	ie 1969-07-21 02:56:15.000
+ *	or 151m 40.000s */
 
 char * print_time(const struct timespec * time, int elapsed) {
 	static char formatted[64];
@@ -260,39 +261,39 @@ void * dup_mem(void * src, size_t len, size_t size) {
  * Caution - No overflow checking is performed */
 
 int int64tostr(char *dest, int64_t value) {
-    int64_t v;
-    int len;
+	int64_t v;
+	int len;
 
-    if (value < 0)
-        v = -value;
-    else
-        v = value;
-    
-    char *p = dest;
-    do {
-        *p++ = '0' + (v%10);
-        v /= 10;
-    } while(v);
+	if (value < 0)
+		v = -value;
+	else
+		v = value;
+	
+	char *p = dest;
+	do {
+		*p++ = '0' + (v%10);
+		v /= 10;
+	} while(v);
 
-    if (value < 0)
-        *p++ = '-';
+	if (value < 0)
+		*p++ = '-';
 
-    *p = '\0';
-    len = p - dest;
+	*p = '\0';
+	len = p - dest;
 
-    p--;
+	p--;
 
-    /* Reverse the string to the correct order */
-    char tmp;
-    while(dest < p) {
-        tmp = *dest;
-        *dest = *p;
-        *p = tmp;
-        dest++;
-        p--;
-    }
+	/* Reverse the string to the correct order */
+	char tmp;
+	while(dest < p) {
+		tmp = *dest;
+		*dest = *p;
+		*p = tmp;
+		dest++;
+		p--;
+	}
 
-    return len;
+	return len;
 }
 
 
@@ -555,7 +556,7 @@ void handlerSigsegv(int signum, siginfo_t *info, void *context) {
 
 	/* Reinstate the default handler and send ourselves the same signal so we can produce a core dump */
 	struct sigaction sigact;
-    sigemptyset(&sigact.sa_mask);
+	sigemptyset(&sigact.sa_mask);
 	sigact.sa_flags = SA_NODEFER|SA_RESETHAND;
 	sigact.sa_handler = SIG_DFL;
 	sigaction(signum, &sigact, NULL);
@@ -577,34 +578,34 @@ void setup_handlers(void(*shutdownHandler)(int)) {
 	struct sigaction sigact;
 
 	/* Wrapup & shutdown signals */
-    sigemptyset(&sigact.sa_mask);
-    sigact.sa_flags = 0;
-    sigact.sa_handler = shutdownHandler;
+	sigemptyset(&sigact.sa_mask);
+	sigact.sa_flags = 0;
+	sigact.sa_handler = shutdownHandler;
 
-    sigaction(SIGTERM, &sigact, NULL);
+	sigaction(SIGTERM, &sigact, NULL);
 	sigaction(SIGINT, &sigact, NULL);
 
 	/* SIGUSR1 - Drop any cached data */
-    sigemptyset(&sigact.sa_mask);
-    sigact.sa_flags = 0;
-    sigact.sa_handler = clearCacheHandler;
+	sigemptyset(&sigact.sa_mask);
+	sigact.sa_flags = 0;
+	sigact.sa_handler = clearCacheHandler;
 
-    sigaction(SIGUSR1, &sigact, NULL);
+	sigaction(SIGUSR1, &sigact, NULL);
 
 	/* SIGHUP - Close and reopen the current logfile */
 	sigemptyset(&sigact.sa_mask);
-    sigact.sa_flags = 0;
-    sigact.sa_handler = hupHandler;
+	sigact.sa_flags = 0;
+	sigact.sa_handler = hupHandler;
 
 	sigaction(SIGHUP, &sigact, NULL);
 
 	/* Fatal signals - Display a backtrace if we get these */
 	sigemptyset(&sigact.sa_mask);
-    sigact.sa_flags = SA_NODEFER | SA_RESETHAND | SA_SIGINFO;
-    sigact.sa_sigaction = handlerSigsegv;
-    sigaction(SIGSEGV, &sigact, NULL);
-    sigaction(SIGBUS, &sigact, NULL);
-    sigaction(SIGFPE, &sigact, NULL);
+	sigact.sa_flags = SA_NODEFER | SA_RESETHAND | SA_SIGINFO;
+	sigact.sa_sigaction = handlerSigsegv;
+	sigaction(SIGSEGV, &sigact, NULL);
+	sigaction(SIGBUS, &sigact, NULL);
+	sigaction(SIGFPE, &sigact, NULL);
 	sigaction(SIGILL, &sigact, NULL);
 
 	return;

@@ -29,6 +29,8 @@
 
 #include <string.h>
 #include <errno.h>
+#include <stdarg.h>
+
 #include <buffer.h>
 
 /* Routines to manage generic dynamic buffers */
@@ -105,7 +107,7 @@ void buffShrink(buff_t * b, size_t min_size) {
 }
 
 /* Add 'new_data' to the buffer */
-int buffAdd(buff_t * b, char * new_data, size_t data_size) {
+int buffAdd(buff_t * b, const char * new_data, size_t data_size) {
 	buffResize(b, data_size);
 
 	memcpy(b->data + b->used, new_data, data_size);

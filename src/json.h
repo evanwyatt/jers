@@ -26,29 +26,16 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef _BUFFER_H_
-#define _BUFFER_H_
 
-#include <stdio.h>
-#include <stdlib.h>
+#ifndef _JSON_H
+#define _JSON_H
 
-#define BUFF_DEFAULT_SIZE 0x1000
-#define BUFF_USED_THRESHOLD 0x1000
+#include <server.h>
+#include <buffer.h>
 
-typedef struct buff_t {
-	char * data;
-	size_t size;
-	size_t used;
-} buff_t;
+int jobToJSON(struct job *j, buff_t *buf);
+int queueToJSON(struct queue *q, buff_t *buf);
+int resourceToJSON(struct resource *r, buff_t *buf);
 
-int  buffNew(buff_t * b, size_t initial_size);
-void buffFree(buff_t * b);
-void buffClear(buff_t * b, size_t size);
-
-int buffResize(buff_t * b, size_t length);
-void buffShrink(buff_t * b, size_t min_size);
-
-int buffAdd(buff_t * b, const char * new_data, size_t data_size);
-int buffRemove(buff_t * b, size_t data_size, int shrink);
-
+int msgToJSON(msg_t *msg, buff_t *buf);
 #endif

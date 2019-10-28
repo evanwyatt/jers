@@ -43,7 +43,9 @@ enum connectionTypes {
 	CLIENT,
 	AGENT,
 	CLIENT_PROXY_CONN,
-	CLIENT_PROXY
+	CLIENT_PROXY,
+	ACCT_CONN,
+	ACCT_CLIENT
 };
 
 struct connectionType {

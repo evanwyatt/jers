@@ -1662,7 +1662,7 @@ int main (int argc, char * argv[]) {
 	setup_handlers(shutdownHandler);
 
 #ifdef INIT_SETPROCTITLE_REPLACEMENT
-    spt_init(argc, argv);
+	spt_init(argc, argv);
 #endif
 
 	if (agent.daemon)

@@ -5,15 +5,15 @@
  * are permitted provided that the following conditions are met:
  *
  * 1. Redistributions of source code must retain the above copyright notice,
- *    this list of conditions and the following disclaimer.
+ *	this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation 
- *    and/or other materials provided with the distribution.
+ *	this list of conditions and the following disclaimer in the documentation 
+ *	and/or other materials provided with the distribution.
  *
  * 3. Neither the name of the copyright holder nor the names of its contributors may
- *    be used to endorse or promote products derived from this software without
- *    specific prior written permission.
+ *	be used to endorse or promote products derived from this software without
+ *	specific prior written permission.
  * 
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -26,29 +26,49 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef _BUFFER_H_
-#define _BUFFER_H_
+#ifndef _ACCT_H
+#define _ACCT_H
 
-#include <stdio.h>
-#include <stdlib.h>
+#include "comms.h"
+#include "buffer.h"
+#include "resp.h"
+#include "fields.h"
 
-#define BUFF_DEFAULT_SIZE 0x1000
-#define BUFF_USED_THRESHOLD 0x1000
+enum acctStates {
+	ACCT_STOPPED = 0,
+	ACCT_STARTED
+};
 
-typedef struct buff_t {
-	char * data;
-	size_t size;
-	size_t used;
-} buff_t;
+typedef struct _acctClient {
+	struct connectionType connection;
 
-int  buffNew(buff_t * b, size_t initial_size);
-void buffFree(buff_t * b);
-void buffClear(buff_t * b, size_t size);
+	buff_t request;
+	size_t pos;
 
-int buffResize(buff_t * b, size_t length);
-void buffShrink(buff_t * b, size_t min_size);
+	buff_t response;
+	size_t response_sent;
 
-int buffAdd(buff_t * b, const char * new_data, size_t data_size);
-int buffRemove(buff_t * b, size_t data_size, int shrink);
+	uid_t uid;
+	pid_t pid;
+
+	int state;
+	char *id;
+
+	int initalised;
+
+	struct _acctClient * next;
+	struct _acctClient * prev;
+} acctClient;
+
+extern acctClient *acctClientList;
+
+int handleAcctClientConnection(struct connectionType * connection);
+
+//int handleAcctDisconnect(client *c);
+//int handleAcctRead(client *c);
+//int handleAcctWrite(client *c);
+
+void addAcctClient(acctClient *a);
+void removeAcctClient(acctClient *a);
 
 #endif

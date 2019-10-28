@@ -29,9 +29,12 @@
 
 #include <server.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 #include "client.h"
 #include "agent.h"
+#include "acct.h"
 #include "email.h"
 
 struct event {
@@ -118,6 +121,34 @@ void checkAgentEvent(void) {
 	}
 }
 
+void checkAcctEvent(void) {
+	acctClient *a = acctClientList;
+
+	while (a) {
+		acctClient *a_next = a->next;
+		int status;
+
+		/* Check if the child has exited, and clean up the resources, etc. */
+		if (waitpid(a->pid, &status, WNOHANG) == a->pid) {
+			if (WIFEXITED(status)) {
+
+			} else if (WIFSIGNALED(status)) {
+
+			} else {
+
+			}
+
+			/* Close the connection and remove the client */
+			print_msg(JERS_LOG_INFO, "Closing connection to accounting client pid:%d fd:%d uid:%d", a->pid, a->connection.socket, a->uid);
+			close(a->connection.socket);
+			removeAcctClient(a);
+		}
+
+		a = a_next;
+	}
+
+}
+
 void checkDeferEvent(void) {
 	releaseDeferred();
 }
@@ -174,6 +205,7 @@ void initEvents(void) {
 
 	registerEvent(checkAgentEvent, 0);
 	registerEvent(checkClientEvent, 0);
+	registerEvent(checkAcctEvent, 1000);
 }
 
 /* Check for any timed events to expire */

@@ -17,7 +17,7 @@ JERS_PATCH=$(shell grep JERS_PATCH jers.h | awk '{print $$3}')
 JERSD_OBJS=jersd.o error.o config.o event.o resp.o commands.o state.o jobs.o auth.o \
 	comms.o sched.o common.o queue.o buffer.o queue.o fields.o resource.o command_job.o \
 	command_agent.o command_queue.o command_resource.o logging.o setproctitle.o \
-	client.o agent.o email.o
+	client.o agent.o email.o acct.o json.o
 
 JERSAGENTD_OBJS=jers_agentd.o common.o error.o resp.o buffer.o fields.o logging.o error.o setproctitle.o auth.o proxy.o comms.o
 JERS_OBJS=jers.o jers_cli.o common.o

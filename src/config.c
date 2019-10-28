@@ -139,6 +139,7 @@ void loadConfig(char * config) {
 	server.max_jobid = DEFAULT_CONFIG_MAXJOBID;
 	server.socket_path = strdup(DEFAULT_CONFIG_SOCKETPATH);
 	server.agent_socket_path = strdup(DEFAULT_CONFIG_AGENTSOCKETPATH);
+	server.acct_socket_path = strdup(DEFAULT_CONFIG_ACCTSOCKETPATH);
 
 	server.journal.extend_block_size = JOURNAL_EXTEND_DEFAULT;
 
