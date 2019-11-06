@@ -70,6 +70,7 @@ int command_agent_login(agent * a, msg_t * msg) {
 		print_msg(JERS_LOG_INFO, "Requested recon from %s\n", a->host);
 
 		a->recon = 1;
+		a->logged_in = 1;
 	}
 
 	return 0;
