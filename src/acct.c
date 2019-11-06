@@ -379,10 +379,8 @@ static void acctMain(acctClient *a, int journal_fd, off_t stream_start) {
 			if (nl == NULL)
 			{
 				/* Consumed all the read data */
-				if (len - used != 0) {
-					memcpy(temp.data + temp.used, read_buffer + used, len - used);
-					temp.used += (len - used);
-				}
+				if (len - used != 0)
+					buffAdd(&temp, read_buffer + used, len - used);
 
 				break;
 			}
@@ -392,13 +390,9 @@ static void acctMain(acctClient *a, int journal_fd, off_t stream_start) {
 
 			/* Append this to the used buffer */
 			size_t line_len = strlen(read_buffer + used);
-			buffResize(&temp, line_len);
 
-			memcpy(temp.data + temp.used, read_buffer + used, line_len);
-			temp.used += line_len;
+			buffAdd(&temp, read_buffer + used, line_len);
 			used += line_len + 1;
-
-			buffResize(&line, line_len);
 
 			int field_count = 0;
 			int msg_offset = 0;
