@@ -60,6 +60,16 @@ typedef struct _acctClient {
 	struct _acctClient * prev;
 } acctClient;
 
+struct journal_hdr {
+	char saved;
+	time_t timestamp_s;
+	int timestamp_ms;
+	uid_t uid;
+	char command[65];
+	jobid_t jobid;
+	int64_t revision;
+};
+
 extern acctClient *acctClientList;
 
 int handleAcctClientConnection(struct connectionType * connection);

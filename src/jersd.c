@@ -66,6 +66,7 @@ void serverShutdown(void) {
 	while (ac) {
 		acctClient *next = ac->next;
 
+		print_msg(JERS_LOG_INFO, "Sending SIGTERM in acct stream pid:%d", ac->pid);
 		kill(ac->pid, SIGTERM);
 		close(ac->connection.socket);
 		removeAcctClient(ac);

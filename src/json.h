@@ -37,5 +37,5 @@ int jobToJSON(struct job *j, buff_t *buf);
 int queueToJSON(struct queue *q, buff_t *buf);
 int resourceToJSON(struct resource *r, buff_t *buf);
 
-int msgToJSON(msg_t *msg, buff_t *buf);
+int msgToJSON(struct journal_hdr *hdr, msg_t *msg, int64_t id, buff_t *buf);
 #endif

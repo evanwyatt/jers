@@ -266,7 +266,10 @@ static void acctShutdownHandler(int signo) {
 /* Does not return */
 static void acctMain(acctClient *a, int journal_fd, off_t stream_start) {
 	setproctitle("jersd_acct[%d]", a->connection.socket);
-	buff_t j, line;
+	buff_t j, line, temp;
+	off_t journal_offset = stream_start;
+	char read_buffer[4096];
+
 	/* Termination handler */
 	struct sigaction sigact;
 
@@ -299,7 +302,8 @@ static void acctMain(acctClient *a, int journal_fd, off_t stream_start) {
 
 	buffNew(&a->request, 0);
 	buffNew(&j, 0);
-	buffNew(&line, 0);
+	buffNew(&temp, 0);
+	buffNew(&line, 256);
 
 	/* Main processing loop */
 	while (1) {
@@ -310,7 +314,7 @@ static void acctMain(acctClient *a, int journal_fd, off_t stream_start) {
 		}
 
 		/* Poll for any events on our sockets */
-		int status = epoll_wait(a->connection.event_fd, events, MAX_EVENTS, 100);
+		int status = epoll_wait(a->connection.event_fd, events, MAX_EVENTS, 500);
 
 		for (int i = 0; i < status; i++) {
 			struct epoll_event * e = &events[i];
@@ -342,37 +346,91 @@ static void acctMain(acctClient *a, int journal_fd, off_t stream_start) {
 		 *   end of journal marker. (This might not have been written
 		 *   so we also need to check if a new journal was created) */
 
-		size_t len = read(journal_fd, j.data + j.used, j.size - j.used);
+		/* Read a chunk of the file in,
+		 * We might get a lot of nulls, so just consume everything until we hit a null */
+		ssize_t len = pread(journal_fd, read_buffer, sizeof(read_buffer) - 1, journal_offset);
 
-		if (len > 0) {
-			/* Break the buffer up into lines to process */
-			while (1) {
-				char *nl = strchr(j.data, '\n');
-				size_t used = 0;
+		if (len < 0) {
+			print_msg(JERS_LOG_WARNING, "Accounting stream Failed to read journal file: %s\n", strerror(errno));
+			exit(1);
+		}
 
-				if (nl == NULL)
-					break;
+		read_buffer[len] = 0;
 
-				*nl = '\0';
-				used = nl - j.data;
+		if (len <= 0)
+			continue;
 
-				line.used = 0;
-				buffAdd(&line, j.data, used);
-				unescapeString(line.data);
+		/* Get the real length */
+		len = strlen(read_buffer);
 
-				msg_t msg;
-				if (load_message(&msg, &line) != 0) {
-					print_msg(JERS_LOG_CRITICAL, "Failed to load message from line: %s", line.data);
-					exit(1);
+		if (len <= 0)
+			continue;
+
+		/* Advance our read position */
+		journal_offset += len;
+
+		ssize_t used = 0;
+
+		/* Copy this new data into our line buffer */
+		while (used < len)
+		{
+			char *nl = strchr(read_buffer + used, '\n');
+
+			if (nl == NULL)
+			{
+				/* Consumed all the read data */
+				if (len - used != 0) {
+					memcpy(temp.data + temp.used, read_buffer + used, len - used);
+					temp.used += (len - used);
 				}
 
-				msgToJSON(&msg, &a->response);
-				pollSetWritable(&a->connection);
-
-				/* Remove the used data from the buffer */
-				memmove(j.data, j.data + used, j.used - used);
-				j.used -= used;
+				break;
 			}
+
+			/* Null terminate this line */
+			*nl = '\0';
+
+			/* Append this to the used buffer */
+			size_t line_len = strlen(read_buffer + used);
+			buffResize(&temp, line_len);
+
+			memcpy(temp.data + temp.used, read_buffer + used, line_len);
+			temp.used += line_len;
+			used += line_len + 1;
+
+			buffResize(&line, line_len);
+
+			int field_count = 0;
+			int msg_offset = 0;
+			struct journal_hdr hdr;
+
+			field_count = sscanf(temp.data, "%c%ld.%d\t%d\t%64s\t%u\t%ld\t%n", &hdr.saved, &hdr.timestamp_s, &hdr.timestamp_ms, (int *)&hdr.uid, hdr.command, &hdr.jobid, &hdr.revision, &msg_offset);
+
+			if (field_count != 7) {
+				print_msg(JERS_LOG_CRITICAL, "Failed entry (len:%ld): %s", strlen(temp.data), temp.data);
+				error_die("Accounting Stream: Failed to load journal entry. Got %d fields, wanted 6\n", field_count);
+			}
+
+			strcpy(line.data, temp.data + msg_offset);
+
+			if (*line.data) {
+				unescapeString(line.data);
+				line.used = strlen(line.data);
+
+				msg_t msg = {{0}};
+
+				if (load_message(&msg, &line) != 0)
+					error_die("Accounting Stream: Failed to load message from journal entry");
+
+				msgToJSON(&hdr, &msg, 0, &a->response);
+				pollSetWritable(&a->connection);
+			}
+
+			/* Processed a line, clear our the buffer for the next line */
+			temp.used = 0;
+
+			if (shutdown_flag)
+				break;
 		}
 	}
 

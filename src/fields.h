@@ -164,6 +164,8 @@ enum field_type {
 	PID,
 	PROXYDATA,
 
+	ACCT_ID,
+
 	ENDOFFIELDS
 };
 void sortfields(void);

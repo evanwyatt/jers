@@ -33,6 +33,7 @@
 
 static int JSONStartObject(buff_t *buff, const char *name);
 static int JSONEndObject(buff_t *buff);
+static const char *JSONescapeString(const char *string);
 
 static int JSONAddInt(buff_t *buff, int field_no, int64_t value) {
 	const char *field_name = getFieldName(field_no);
@@ -58,9 +59,10 @@ static int JSONAddInt(buff_t *buff, int field_no, int64_t value) {
 	return 0;
 }
 
-static int JSONAddString(buff_t *buff, int field_no, char *value) {
+static int JSONAddString(buff_t *buff, int field_no, const char *value) {
 	const char *field_name = getFieldName(field_no);
 	size_t name_len = strlen(field_name);
+	value = value ? JSONescapeString(value) : value;
 	size_t value_len = value ? strlen(value) : 4; // 4 = null
 
 	/* Ensure we have room for '"field_name":"value",' */
@@ -102,7 +104,7 @@ static int JSONAddStringArray(buff_t *buff, int field_no, int64_t count, char **
 		return 0;
 
 	for (int64_t i = 0; i < count; i++)
-		required += strlen(values[i]) + 3;
+		required += (strlen(values[i]) * 2) + 3;
 
 	buffResize(buff, required);
 
@@ -123,7 +125,9 @@ static int JSONAddStringArray(buff_t *buff, int field_no, int64_t count, char **
 			p[len++] = ',';
 
 		p[len++] = '"';
-		memcpy(p + len, values[i], value_len);
+		const char *escaped = JSONescapeString(values[i]);
+		value_len = strlen(escaped);
+		memcpy(p + len, escaped, value_len);
 		len += value_len;
 		p[len++] = '"';
 	}
@@ -235,7 +239,7 @@ static int JSONStart(buff_t *buf) {
 static int JSONEnd(buff_t *buf) {
 	/* Slight hack. We always append a ',' to the end of a field.
 	 * We can just replace this with the '}', then add the newline */
-printf("len: %ld\n", buf->used);
+
 	if (*(buf->data + buf->used - 1) == ',') {
 		*(buf->data + buf->used -1 ) = '}';
 		buffAdd(buf, "\n", 1);
@@ -260,6 +264,55 @@ static char ** _convertResourceToStrings(int res_count, struct jobResource * res
 	}
 
 	return res_strings; 
+}
+
+static const char * JSONescapeString(const char *string) {
+	static char * escaped = NULL;
+	static size_t escaped_size = 0;
+	size_t string_length = strlen(string);
+	const char * temp = string;
+	char * dest;
+
+	/* Assume we have to escape everything */
+	if (escaped_size <= string_length * 2 ) {
+		escaped_size = string_length *2;
+		escaped = realloc(escaped, escaped_size);
+	}
+
+	dest = escaped;
+
+	while (*temp != '\0') {
+		switch (*temp) {
+			case '\\':
+				*dest++ = '\\';
+				*dest++ = '\\';
+				break;
+
+			case '\t':
+				*dest++ = '\\';
+				*dest++ = 't';
+				break;
+
+			case '\n':
+				*dest++ = '\\';
+				*dest++ = 'n';
+				break;
+
+			case '"':
+				*dest++ = '\\';
+				*dest++ = '"';
+				break;
+
+			default:
+				*dest++ = *temp;
+				break;
+		}
+
+		temp++;
+	}
+
+	*dest = '\0';
+	return escaped;
 }
 
 /* Convert a JERS object to json */
@@ -375,9 +428,20 @@ int resourceToJSON(struct resource *r, buff_t *buff) {
 
 /* Convert a Msg to JSON */
 
-int msgToJSON(msg_t *msg, buff_t *buff) {
+int msgToJSON(struct journal_hdr *hdr, msg_t *msg, int64_t id, buff_t *buff) {
 	JSONStart(buff);
 	JSONStartObject(buff, msg->command);
+
+	/* Add in the header */
+	if (id)
+		JSONAddInt(buff, ACCT_ID, id);
+
+	if (hdr->jobid)
+		JSONAddInt(buff, JOBID, hdr->jobid);
+
+	JSONAddInt(buff, UID, hdr->uid);
+
+	JSONStartObject(buff, "FIELDS");
 
 	for (int64_t i = 0; i < msg->items[0].field_count; i++) {
 		switch(msg->items[0].fields[i].type) {
@@ -401,6 +465,7 @@ int msgToJSON(msg_t *msg, buff_t *buff) {
 		}
 	}
 
+	JSONEndObject(buff);
 	JSONEndObject(buff);
 	JSONEnd(buff);
 	return 0;
