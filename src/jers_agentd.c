@@ -1076,12 +1076,14 @@ int recon_command(msg_t * m) {
 
 	msg_item * item = &m->items[0];
 
-	for (int i = 0; i < item->field_count; i++) {
-		switch(item->fields[i].number) {
-			case MSG_HMAC: hmac = getStringField(&item->fields[i]); break;
-			case DATETIME: datetime = getNumberField(&item->fields[i]); break;
+	if (item != NULL) {
+		for (int i = 0; i < item->field_count; i++) { 
+			switch(item->fields[i].number) {
+				case MSG_HMAC: hmac = getStringField(&item->fields[i]); break;
+				case DATETIME: datetime = getNumberField(&item->fields[i]); break;
 
-			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", item->fields[i].name); break;
+				default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", item->fields[i].name); break;
+			}
 		}
 	}
 
