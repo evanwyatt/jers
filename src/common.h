@@ -90,6 +90,9 @@ int64_t getTimeMS(void);
 char * escapeString(const char * string, size_t * length);
 void unescapeString(char * string);
 char * removeWhitespace(char * str);
+char *skipChars(char *str, const char *skip);
+char *skipWhitespace(char *str);
+
 void uppercasestring(char * str);
 void lowercasestring(char * str);
 int isprintable(const char * str);

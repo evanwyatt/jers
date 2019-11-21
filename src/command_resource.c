@@ -31,6 +31,7 @@
 #include <jers.h>
 #include <commands.h>
 #include <fields.h>
+#include <json.h>
 
 #include <fnmatch.h>
 
@@ -150,40 +151,36 @@ int command_get_resource(client *c, void *args) {
 	jersResourceFilter * rf = args;
 	struct resource * r = NULL;
 	int wildcard = 0;
-	resp_t response;
+	buff_t response;
 
 	if (rf->filters.name == NULL) {
 		sendError(c, JERS_ERR_INVARG, "No name filter provided");
 		return 1;
 	}
 
-	initMessage(&response, "RESP", 1);
+	initResponse(&response, 1);
 
 	wildcard = ((strchr(rf->filters.name, '*')) || (strchr(rf->filters.name, '?')));
 
 	if (wildcard) {
-		respAddArray(&response);
-
 		for (r = server.resTable; r != NULL; r = r->hh.next) {
 			if ((r->internal_state &JERS_FLAG_DELETED) == 0 && matches(rf->filters.name, r->name) == 0) {
-				respAddMap(&response);
-				addStringField(&response, RESNAME, r->name);
-				addIntField(&response, RESCOUNT, r->count);
-				addIntField(&response, RESINUSE, r->in_use);
-				respCloseMap(&response);	
+				JSONStartObject(&response, NULL);
+				JSONAddString(&response, RESNAME, r->name);
+				JSONAddInt(&response, RESCOUNT, r->count);
+				JSONAddInt(&response, RESINUSE, r->in_use);
+				JSONEndObject(&response);	
 			} 
 		}
-
-		respCloseArray(&response);
 	} else {
 		r = findResource(rf->filters.name);
 
 		if (r && (r->internal_state &JERS_FLAG_DELETED) == 0) {
-			respAddMap(&response);
-			addStringField(&response, RESNAME, r->name);
-			addIntField(&response, RESCOUNT, r->count);
-			addIntField(&response, RESINUSE, r->in_use);
-			respCloseMap(&response);
+			JSONStartObject(&response, NULL);
+			JSONAddString(&response, RESNAME, r->name);
+			JSONAddInt(&response, RESCOUNT, r->count);
+			JSONAddInt(&response, RESINUSE, r->in_use);
+			JSONEndObject(&response);	
 		}
 	}
 

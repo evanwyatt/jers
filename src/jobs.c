@@ -30,6 +30,8 @@
 #include <server.h>
 #include <limits.h>
 
+#include <json.h>
+
 /* Return the next free jobid.
  * 0 is returned if no ids are available */
 
@@ -173,4 +175,76 @@ void markJobsUnknown(agent *a) {
 			changeJobState(j, JERS_JOB_UNKNOWN, NULL, 1);
 		}
 	}
+}
+
+/* Convert a JERS object to json */
+int jobToJSON(struct job *j, buff_t *buff)
+{
+	JSONStart(buff);
+	JSONStartObject(buff, "JOB");
+
+	JSONAddInt(buff, JOBID, j->jobid);
+	JSONAddString(buff, JOBNAME, j->jobname);
+	JSONAddString(buff, QUEUENAME, j->queue->name);
+	JSONAddInt(buff, STATE, j->state);
+	JSONAddInt(buff, UID, j->uid);
+	JSONAddInt(buff, SUBMITTER, j->submitter);
+	JSONAddInt(buff, PRIORITY, j->priority);
+	JSONAddInt(buff, SUBMITTIME, j->submit_time);
+	JSONAddInt(buff, NICE, j->nice);
+	JSONAddStringArray(buff, ARGS, j->argc, j->argv);
+	JSONAddString(buff, NODE, j->queue->host);
+	JSONAddString(buff, STDOUT, j->stdout);
+	JSONAddString(buff, STDERR, j->stderr);
+
+	if (j->defer_time)
+		JSONAddInt(buff, DEFERTIME, j->defer_time);
+
+	if (j->start_time)
+		JSONAddInt(buff, STARTTIME, j->start_time);
+
+	if (j->finish_time)
+		JSONAddInt(buff, FINISHTIME, j->finish_time);
+
+	if (j->tag_count)
+		JSONAddMap(buff, TAGS, j->tag_count, j->tags);
+
+	if (j->shell)
+		JSONAddString(buff, SHELL, j->shell);
+
+	if (j->pre_cmd)
+		JSONAddString(buff, POSTCMD, j->pre_cmd);
+
+	if (j->post_cmd)
+		JSONAddString(buff, PRECMD, j->post_cmd);
+
+	if (j->res_count)
+	{
+		char **res_strings = convertResourceToStrings(j->res_count, j->req_resources);
+		JSONAddStringArray(buff, RESOURCES, j->res_count, res_strings);
+
+		for (int i = 0; i < j->res_count; i++)
+		{
+			free(res_strings[i]);
+		}
+
+		free(res_strings);
+	}
+
+	if (j->pid)
+		JSONAddInt(buff, JOBPID, j->pid);
+
+	JSONAddInt(buff, EXITCODE, j->exitcode);
+	JSONAddInt(buff, SIGNAL, j->signal);
+
+	if (j->pend_reason)
+		JSONAddInt(buff, PENDREASON, j->pend_reason);
+
+	if (j->fail_reason)
+		JSONAddInt(buff, FAILREASON, j->fail_reason);
+
+	JSONEndObject(buff);
+	JSONEnd(buff);
+
+	return 0;
 }

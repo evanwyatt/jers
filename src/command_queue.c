@@ -33,6 +33,7 @@
 #include <fields.h>
 #include <error.h>
 #include <agent.h>
+#include <json.h>
 
 void * deserialize_add_queue(msg_t * msg) {
 	jersQueueAdd *q = calloc(sizeof(jersQueueAdd), 1);
@@ -196,28 +197,28 @@ int command_add_queue(client * c, void * args) {
 	return sendClientReturnCode(c, &q->obj, "0");
 }
 
-void serialize_jersQueue(resp_t * r, struct queue * q) {
-	respAddMap(r);
+void serialize_jersQueue(buff_t *b, struct queue * q) {
+	JSONStartObject(b, NULL);
 
-	addStringField(r, QUEUENAME, q->name);
+	JSONAddString(b, QUEUENAME, q->name);
 
 	if (q->desc)
-		addStringField(r, DESC, q->desc);
+		JSONAddString(b, DESC, q->desc);
 
-	addStringField(r, NODE, q->host);
-	addIntField(r, JOBLIMIT, q->job_limit);
-	addIntField(r, STATE, q->state);
-	addIntField(r, PRIORITY, q->priority);
-	addBoolField(r, DEFAULT, (server.defaultQueue == q));
+	JSONAddString(b, NODE, q->host);
+	JSONAddInt(b, JOBLIMIT, q->job_limit);
+	JSONAddInt(b, STATE, q->state);
+	JSONAddInt(b, PRIORITY, q->priority);
+	JSONAddBool(b, DEFAULT, (server.defaultQueue == q));
 
-	addIntField(r, STATSRUNNING, q->stats.running);
-	addIntField(r, STATSPENDING, q->stats.pending);
-	addIntField(r, STATSHOLDING, q->stats.holding);
-	addIntField(r, STATSDEFERRED, q->stats.deferred);
-	addIntField(r, STATSCOMPLETED, q->stats.completed);
-	addIntField(r, STATSEXITED, q->stats.exited);
+	JSONAddInt(b, STATSRUNNING, q->stats.running);
+	JSONAddInt(b, STATSPENDING, q->stats.pending);
+	JSONAddInt(b, STATSHOLDING, q->stats.holding);
+	JSONAddInt(b, STATSDEFERRED, q->stats.deferred);
+	JSONAddInt(b, STATSCOMPLETED, q->stats.completed);
+	JSONAddInt(b, STATSEXITED, q->stats.exited);
 
-	respCloseMap(r);
+	JSONEndObject(b);
 }
 
 int command_get_queue(client *c, void *args) {
@@ -226,7 +227,7 @@ int command_get_queue(client *c, void *args) {
 	int all = 0;
 	int64_t count = 0;
 
-	resp_t r;
+	buff_t b;
 
 	if (qf->filters.name != NULL && strchr(qf->filters.name, '?') == NULL && strchr(qf->filters.name, '*') == NULL) {
 		q = findQueue(qf->filters.name);
@@ -236,16 +237,12 @@ int command_get_queue(client *c, void *args) {
 			return 1;
 		}
 
-		initMessage(&r, "RESP", 1);
-		respAddArray(&r);
-		serialize_jersQueue(&r, q);
-		respCloseArray(&r);
-		return sendClientMessage(c, NULL, &r);
+		initResponse(&b, 1);
+		serialize_jersQueue(&b, q);
+		return sendClientMessage(c, NULL, &b);
 	}
 
-	initMessage(&r, "RESP", 1);
-
-	respAddArray(&r);
+	initResponse(&b, 1);
 
 	if (qf->filters.name == NULL || strcmp(qf->filters.name, "*") == 0)
 		all = 1;
@@ -255,13 +252,11 @@ int command_get_queue(client *c, void *args) {
 			continue;
 
 		/* Made it here, add it to our response */
-		serialize_jersQueue(&r, q);
+		serialize_jersQueue(&b, q);
 		count++;
 	}
 
-	respCloseArray(&r);
-
-	return sendClientMessage(c, NULL, &r);
+	return sendClientMessage(c, NULL, &b);
 }
 
 int command_mod_queue(client *c, void * args) {

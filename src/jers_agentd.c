@@ -57,12 +57,12 @@
 #include "jers.h"
 #include "logging.h"
 #include "common.h"
-#include "resp.h"
 #include "buffer.h"
 #include "fields.h"
 #include "cmd_defs.h"
 #include "auth.h"
 #include "proxy.h"
+#include "json.h"
 
 #define MAX_EVENTS 1024
 #define INITIAL_SIZE 0x1000
@@ -74,7 +74,6 @@
 #define DEFAULT_DAEMON_PORT 7000
 #define RECONNECT_WAIT 20 // Seconds
 
-int initMessage(resp_t * r, const char * resp_name, int version);
 void error_die(char *, ...);
 const char * getFailString(int);
 const char * getErrType(int jers_error);
@@ -639,21 +638,15 @@ void addJob (struct runningJob * j) {
 	agent.running_jobs++;
 }
 
-void send_msg(resp_t * r) {
+static void _sendMsg(buff_t *b) {
 	struct epoll_event ee;
-	char * buffer;
-	size_t length;
 	int add_epoll = 0;
 
 	if (agent.responses_sent <= agent.responses.used)
 		add_epoll = 1;
-
-	respCloseArray(r);
-
-	buffer = respFinish(r, &length);
-	buffAdd(&agent.responses, buffer, length);
-
-	free(buffer);
+print_msg(JERS_LOG_DEBUG, "Sending message:%.*s", b->used, b->data);
+	buffAddBuff(&agent.responses, b);
+	buffFree(b);
 
 	/* Only set EPOLLOUT if we have didn't already have it set */
 	if (!add_epoll)
@@ -666,44 +659,52 @@ void send_msg(resp_t * r) {
 		print_msg(JERS_LOG_WARNING, "Failed to set epoll EPOLLOUT on daemon_fd");
 	}
 
+	return;
 }
+
+void sendResponse(buff_t *b) {
+	closeResponse(b);
+	_sendMsg(b);
+	return;
+}
+
+void sendRequest(buff_t *b) {
+	closeRequest(b);
+	_sendMsg(b);
+	return;
+}
+
 int send_start(struct runningJob * j) {
-	resp_t r;
+	buff_t b;
 	print_msg(JERS_LOG_INFO, "Job started: JOBID:%d PID:%d", j->jobID, j->pid);
 
-	initMessage(&r, AGENT_JOB_STARTED, 1);
+	initRequest(&b, AGENT_JOB_STARTED, 1);
+	JSONAddInt(&b, JOBID, j->jobID);
+	JSONAddInt(&b, JOBPID, j->pid);
+	JSONAddInt(&b, STARTTIME, j->start_time);
 
-	respAddMap(&r);
-	addIntField(&r, JOBID, j->jobID);
-	addIntField(&r, JOBPID, j->pid);
-	addIntField(&r, STARTTIME, j->start_time);
-	respCloseMap(&r);
-
-	send_msg(&r);
+	sendRequest(&b);
 
 	return 0;
 }
 
 int send_job_initfail(jobid_t jobid, int status) {
-	resp_t r;
+	buff_t b;
 
 	print_msg(JERS_LOG_WARNING, "JOBID %d failed to initialise: %d (%s)", jobid, status, getFailString(status));
 
-	initMessage(&r, AGENT_JOB_COMPLETED, 1);
+	initRequest(&b, AGENT_JOB_COMPLETED, 1);
+	JSONAddInt(&b, JOBID, jobid);
+	JSONAddInt(&b, FINISHTIME, time(NULL));
+	JSONAddInt(&b, EXITCODE, status | JERS_EXIT_FAIL);
 
-	respAddMap(&r);
-	addIntField(&r, JOBID, jobid);
-	addIntField(&r, FINISHTIME, time(NULL));
-	addIntField(&r, EXITCODE, status | JERS_EXIT_FAIL);
-	respCloseMap(&r);
-
-	send_msg(&r);
+	sendRequest(&b);
 
 	return 0;
 }
 
 int send_completion(struct runningJob * j) {
-	resp_t r;
+	buff_t b;
 
 	if (j->socket)
 		close(j->socket);
@@ -716,32 +717,29 @@ int send_completion(struct runningJob * j) {
 		return 0;
 	}
 
-	initMessage(&r, AGENT_JOB_COMPLETED, 1);
+	initRequest(&b, AGENT_JOB_COMPLETED, 1);
 
 	print_msg(JERS_LOG_INFO, "Job complete: JOBID:%d PID:%d RC:%08x\n", j->jobID, j->pid, j->job_completion.exitcode);
 
-	respAddMap(&r);
-	addIntField(&r, JOBID, j->jobID);
-	addIntField(&r, EXITCODE, j->job_completion.exitcode);
-	addIntField(&r, FINISHTIME, j->job_completion.finish_time);
+	JSONAddInt(&b, JOBID, j->jobID);
+	JSONAddInt(&b, EXITCODE, j->job_completion.exitcode);
+	JSONAddInt(&b, FINISHTIME, j->job_completion.finish_time);
 
 	/* Usage info */
-	addIntField(&r, USAGE_UTIME_SEC,  j->job_completion.rusage.ru_utime.tv_sec);
-	addIntField(&r, USAGE_UTIME_USEC, j->job_completion.rusage.ru_utime.tv_usec);
-	addIntField(&r, USAGE_STIME_SEC,  j->job_completion.rusage.ru_stime.tv_sec);
-	addIntField(&r, USAGE_STIME_USEC, j->job_completion.rusage.ru_stime.tv_usec);
-	addIntField(&r, USAGE_MAXRSS,     j->job_completion.rusage.ru_maxrss);
-	addIntField(&r, USAGE_MINFLT,     j->job_completion.rusage.ru_minflt);
-	addIntField(&r, USAGE_MAJFLT,     j->job_completion.rusage.ru_majflt);
-	addIntField(&r, USAGE_INBLOCK,    j->job_completion.rusage.ru_inblock);
-	addIntField(&r, USAGE_OUBLOCK,    j->job_completion.rusage.ru_oublock);
-	addIntField(&r, USAGE_INBLOCK,    j->job_completion.rusage.ru_inblock);
-	addIntField(&r, USAGE_NVCSW,      j->job_completion.rusage.ru_nvcsw);
-	addIntField(&r, USAGE_NIVCSW,     j->job_completion.rusage.ru_nivcsw);
+	JSONAddInt(&b, USAGE_UTIME_SEC,  j->job_completion.rusage.ru_utime.tv_sec);
+	JSONAddInt(&b, USAGE_UTIME_USEC, j->job_completion.rusage.ru_utime.tv_usec);
+	JSONAddInt(&b, USAGE_STIME_SEC,  j->job_completion.rusage.ru_stime.tv_sec);
+	JSONAddInt(&b, USAGE_STIME_USEC, j->job_completion.rusage.ru_stime.tv_usec);
+	JSONAddInt(&b, USAGE_MAXRSS,     j->job_completion.rusage.ru_maxrss);
+	JSONAddInt(&b, USAGE_MINFLT,     j->job_completion.rusage.ru_minflt);
+	JSONAddInt(&b, USAGE_MAJFLT,     j->job_completion.rusage.ru_majflt);
+	JSONAddInt(&b, USAGE_INBLOCK,    j->job_completion.rusage.ru_inblock);
+	JSONAddInt(&b, USAGE_OUBLOCK,    j->job_completion.rusage.ru_oublock);
+	JSONAddInt(&b, USAGE_INBLOCK,    j->job_completion.rusage.ru_inblock);
+	JSONAddInt(&b, USAGE_NVCSW,      j->job_completion.rusage.ru_nvcsw);
+	JSONAddInt(&b, USAGE_NIVCSW,     j->job_completion.rusage.ru_nivcsw);
 
-	respCloseMap(&r);
-
-	send_msg(&r);
+	sendRequest(&b);
 
 	removeJob(j);
 	free(j);
@@ -751,15 +749,16 @@ int send_completion(struct runningJob * j) {
 /* Sent upon connection to confirm who we are */
 
 int send_login(void) {
-	resp_t r;
+	buff_t b;
 	char host[256];
 
 	gethostname(host, sizeof(host) - 1);
 	host[sizeof(host) - 1] = '\0';
 
-	initMessage(&r, AGENT_LOGIN, 1);
 	print_msg(JERS_LOG_INFO, "Sending login");
-	send_msg(&r);
+
+	initRequest(&b, AGENT_LOGIN, 1);
+	sendRequest(&b);
 	return 0;
 }
 
@@ -1067,7 +1066,7 @@ int signal_command(msg_t * m) {
 
 int recon_command(msg_t * m) {
 	int32_t count = 0;
-	resp_t r;
+	buff_t b;
 	char * hmac = NULL;
 	time_t datetime = 0;
 	char datetime_str[32];
@@ -1116,8 +1115,7 @@ int recon_command(msg_t * m) {
 	/* The master daemon is requesting a list of all the jobs we have in memory.
 	 * We will remove the jobs in memory only when the master daemon confirms it's processed the recon message */
 
-	initMessage(&r, AGENT_RECON_RESP, 1);
-	respAddArray(&r);
+	initNamedResponse(&b, AGENT_RECON_RESP, 1);
 
 	print_msg(JERS_LOG_INFO, "=== Start Recon ===\n");
 
@@ -1125,29 +1123,29 @@ int recon_command(msg_t * m) {
 		print_msg(JERS_LOG_INFO, "JobID: %d PID:%d ExitCode:%d StartTime:%ld FinishTime:%ld\n", j->jobID, j->pid, j->job_completion.exitcode, j->start_time, j->job_completion.finish_time);
 
 		/* Add job to recon message request */
-		respAddMap(&r);
-		addIntField(&r, JOBID, j->jobID);
-		addIntField(&r, STARTTIME, j->start_time);
+		JSONStartObject(&b, NULL);
+		JSONAddInt(&b, JOBID, j->jobID);
+		JSONAddInt(&b, STARTTIME, j->start_time);
 
 		switch (j->pid) {
 			case -1:
 				/* Job complete */
-				addIntField(&r, EXITCODE, j->job_completion.exitcode);
-				addIntField(&r, FINISHTIME, j->job_completion.finish_time);
+				JSONAddInt(&b, EXITCODE, j->job_completion.exitcode);
+				JSONAddInt(&b, FINISHTIME, j->job_completion.finish_time);
 
 				/* Usage info */
-				addIntField(&r, USAGE_UTIME_SEC,  j->job_completion.rusage.ru_utime.tv_sec);
-				addIntField(&r, USAGE_UTIME_USEC, j->job_completion.rusage.ru_utime.tv_usec);
-				addIntField(&r, USAGE_STIME_SEC,  j->job_completion.rusage.ru_stime.tv_sec);
-				addIntField(&r, USAGE_STIME_USEC, j->job_completion.rusage.ru_stime.tv_usec);
-				addIntField(&r, USAGE_MAXRSS,     j->job_completion.rusage.ru_maxrss);
-				addIntField(&r, USAGE_MINFLT,     j->job_completion.rusage.ru_minflt);
-				addIntField(&r, USAGE_MAJFLT,     j->job_completion.rusage.ru_majflt);
-				addIntField(&r, USAGE_INBLOCK,    j->job_completion.rusage.ru_inblock);
-				addIntField(&r, USAGE_OUBLOCK,    j->job_completion.rusage.ru_oublock);
-				addIntField(&r, USAGE_INBLOCK,    j->job_completion.rusage.ru_inblock);
-				addIntField(&r, USAGE_NVCSW,      j->job_completion.rusage.ru_nvcsw);
-				addIntField(&r, USAGE_NIVCSW,     j->job_completion.rusage.ru_nivcsw);
+				JSONAddInt(&b, USAGE_UTIME_SEC,  j->job_completion.rusage.ru_utime.tv_sec);
+				JSONAddInt(&b, USAGE_UTIME_USEC, j->job_completion.rusage.ru_utime.tv_usec);
+				JSONAddInt(&b, USAGE_STIME_SEC,  j->job_completion.rusage.ru_stime.tv_sec);
+				JSONAddInt(&b, USAGE_STIME_USEC, j->job_completion.rusage.ru_stime.tv_usec);
+				JSONAddInt(&b, USAGE_MAXRSS,     j->job_completion.rusage.ru_maxrss);
+				JSONAddInt(&b, USAGE_MINFLT,     j->job_completion.rusage.ru_minflt);
+				JSONAddInt(&b, USAGE_MAJFLT,     j->job_completion.rusage.ru_majflt);
+				JSONAddInt(&b, USAGE_INBLOCK,    j->job_completion.rusage.ru_inblock);
+				JSONAddInt(&b, USAGE_OUBLOCK,    j->job_completion.rusage.ru_oublock);
+				JSONAddInt(&b, USAGE_INBLOCK,    j->job_completion.rusage.ru_inblock);
+				JSONAddInt(&b, USAGE_NVCSW,      j->job_completion.rusage.ru_nvcsw);
+				JSONAddInt(&b, USAGE_NIVCSW,     j->job_completion.rusage.ru_nivcsw);
 				break;
 
 			case 0:
@@ -1156,19 +1154,16 @@ int recon_command(msg_t * m) {
 
 			default:
 				/* Running */
-				addIntField(&r, JOBPID, j->pid);
+				JSONAddInt(&b, JOBPID, j->pid);
 				break;
 		}
 
-		respCloseMap(&r);
-
+		JSONEndObject(&b);
 		count++;
 		j = j->next;
 	}
 
-	respCloseArray(&r);
-
-	send_msg(&r);
+	sendResponse(&b);
 
 	agent.in_recon = 1;
 
@@ -1202,13 +1197,12 @@ int recon_complete(msg_t * m) {
 int proxy_response(msg_t *m) {
 	pid_t pid = 0;
 	char *data = NULL;
-	size_t data_length = 0;
 	msg_item * item = &m->items[0];
 
 	for (int i = 0; i < item->field_count; i++) {
 		switch(item->fields[i].number) {
 			case PID: pid = getNumberField(&item->fields[i]); break;
-			case PROXYDATA: data = getBlobStringField(&item->fields[i], &data_length); break;
+			case PROXYDATA: data = getStringField(&item->fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", item->fields[i].name); break;
 		}
@@ -1229,7 +1223,7 @@ int proxy_response(msg_t *m) {
 		return 0;
 	}
 
-	buffAdd(&c->response, data, data_length);
+	buffAdd(&c->response, data, strlen(data));
 	pollSetWritable(&c->connection);
 
 	free(data);
@@ -1279,16 +1273,14 @@ int auth_challenge(msg_t *m) {
 	const char *hmac_input[] = {nonce, agent.nonce, time_now_str, NULL};
 	hmac = generateHMAC(hmac_input, agent.secret_hash, sizeof(agent.secret_hash));
 
-	resp_t auth_resp;
-	initMessage(&auth_resp, AGENT_AUTH_RESP, 1);
-	respAddMap(&auth_resp);
+	buff_t auth_resp;
+	initRequest(&auth_resp, AGENT_AUTH_RESP, 1);
 
-	addIntField(&auth_resp, DATETIME, time_now);
-	addStringField(&auth_resp, NONCE, agent.nonce);
-	addStringField(&auth_resp, MSG_HMAC, hmac);
+	JSONAddInt(&auth_resp, DATETIME, time_now);
+	JSONAddString(&auth_resp, NONCE, agent.nonce);
+	JSONAddString(&auth_resp, MSG_HMAC, hmac);
 
-	respCloseMap(&auth_resp);
-	send_msg(&auth_resp);
+	sendRequest(&auth_resp);
 
 	free(hmac);
 
@@ -1320,23 +1312,45 @@ int process_message(msg_t * m) {
 
 	free_message(m);
 
-	if (buffRemove(&agent.requests, m->reader.pos, 0x10000)) {
-		m->reader.pos = 0;
-		respReadUpdate(&m->reader, agent.requests.data, agent.requests.used);
-	}
-
 	return status;
 }
 
 /* Loop through processing messages. */
 void process_messages(void) {
-	while (load_message(&agent.msg, &agent.requests) == 0) {
-		if (process_message(&agent.msg) != 0) {
-			// Trigger a disconnect from the main daemon process
+	char *p = agent.requests.data;
+	size_t consumed = 0;
+
+	if (agent.requests.used == 0)
+		return;
+
+	while (1) { 
+		char *nl = memchr(p, '\n', agent.requests.used - consumed);
+
+		if (nl == NULL)
+			break;
+
+		*nl = '\0';
+		nl++;
+
+		size_t request_len = nl - p;
+
+		if (load_message(p, &agent.msg) != 0) {
+			print_msg(JERS_LOG_WARNING, "Failed to load agent message");
 			disconnectFromDaemon();
 			break;
 		}
+
+		if (process_message(&agent.msg) != 0) {
+			disconnectFromDaemon();
+			break;
+		}
+
+		p += request_len;
+		consumed += request_len;
 	}
+
+	if (consumed)
+		buffRemove(&agent.requests, consumed, 0);
 }
 
 /* Connect to the main JERS daemon
@@ -1451,6 +1465,10 @@ void disconnectFromDaemon(void) {
 	close(agent.daemon_fd);
 	agent.daemon_fd = -1;
 	agent.next_connect = time(NULL) + RECONNECT_WAIT;
+
+	agent.requests.used = 0;
+	agent.responses.used = 0;
+	agent.responses_sent = 0;
 }
 
 void shutdownHandler(int signum) {
@@ -1505,41 +1523,35 @@ void setupProxySocket(const char *path) {
 }
 
 int send_proxy_connect(proxyClient *c) {
-	resp_t connRequest;
-	initMessage(&connRequest, AGENT_PROXY_CONN, 1);
-	respAddMap(&connRequest);
+	buff_t connRequest;
+	initRequest(&connRequest, AGENT_PROXY_CONN, 1);
 
-	addIntField(&connRequest, PID, c->pid);
-	addIntField(&connRequest, UID, c->uid);
+	JSONAddInt(&connRequest, PID, c->pid);
+	JSONAddInt(&connRequest, UID, c->uid);
 
-	respCloseMap(&connRequest);
-	send_msg(&connRequest);
+	sendRequest(&connRequest);
 
 	return 0;
 }
 
 int send_proxy_data(proxyClient *c, char *data, size_t size) {
-	resp_t dataRequest;
-	initMessage(&dataRequest, AGENT_PROXY_DATA, 1);
-	respAddMap(&dataRequest);
+	buff_t dataRequest;
+	initRequest(&dataRequest, AGENT_PROXY_DATA, 1);
 
-	addIntField(&dataRequest, PID, c->pid);
-	addBlobStringField(&dataRequest, PROXYDATA, data, size);
+	JSONAddInt(&dataRequest, PID, c->pid);
+	JSONAddStringN(&dataRequest, PROXYDATA, data, size);
 
-	respCloseMap(&dataRequest);
-	send_msg(&dataRequest);
+	sendRequest(&dataRequest);
 	return 0;
 }
 
 int send_proxy_close(proxyClient *c) {
-	resp_t closeRequest;
-	initMessage(&closeRequest, AGENT_PROXY_CLOSE, 1);
-	respAddMap(&closeRequest);
+	buff_t closeRequest;
+	initRequest(&closeRequest, AGENT_PROXY_CLOSE, 1);
 
-	addIntField(&closeRequest, PID, c->pid);
+	JSONAddInt(&closeRequest, PID, c->pid);
 
-	respCloseMap(&closeRequest);
-	send_msg(&closeRequest);
+	sendRequest(&closeRequest);
 	return 0;
 }
 
@@ -1553,21 +1565,21 @@ void proxy_cleanup(proxyClient *c) {
 }
 
 void sendProxyError(proxyClient *c, int error, const char *msg) {
-	resp_t error_resp;
-	char *buff;
-	size_t buff_length = 0;
+	buff_t error_resp;
 	char error_message[128];
 	const char * error_type = getErrType(error);
 
-	sprintf(error_message, "%s %s", error_type, msg ? msg : "");
+	snprintf(error_message, sizeof(error_message), "%s %s", error_type, msg ? msg : "");
 
-	respNew(&error_resp);
-	respAddSimpleError(&error_resp, error_message);
-	buff = respFinish(&error_resp, &buff_length);
-	buffAdd(&c->response, buff, buff_length);
+	buffNew(&error_resp, 256);
+	JSONStart(&error_resp);
+	JSONAddString(&error_resp, ERROR, error_message);
+	JSONEnd(&error_resp);
+
+	buffAddBuff(&c->response, &error_resp);
 	pollSetWritable(&c->connection);
 
-	free(buff);
+	buffFree(&error_resp);
 }
 
 void check_proxy_clients(void) {
@@ -1599,7 +1611,7 @@ void check_proxy_clients(void) {
 				c = next;
 				continue;
 			}
-
+print_msg(JERS_LOG_DEBUG, "Sending connect for proxy client");
 			if (send_proxy_connect(c) != 0) {
 				handleClientProxyDisconnect(c);
 				proxy_cleanup(c);
@@ -1613,7 +1625,7 @@ void check_proxy_clients(void) {
 		if (c->request_forwarded < c->request.used) {
 			/* Forward more data to the main daemon */
 			send_proxy_data(c, c->request.data + c->request_forwarded, c->request.used - c->request_forwarded);
-			c->request_forwarded += c->request.used - c->request_forwarded;
+			c->request.used = c->request_forwarded = 0;
 		}
 
 		c = next;

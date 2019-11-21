@@ -30,12 +30,29 @@
 #ifndef _JSON_H
 #define _JSON_H
 
-#include <server.h>
 #include <buffer.h>
+#include <fields.h>
 
-int jobToJSON(struct job *j, buff_t *buf);
-int queueToJSON(struct queue *q, buff_t *buf);
-int resourceToJSON(struct resource *r, buff_t *buf);
+int JSONStart(buff_t *buff);
+int JSONEnd(buff_t *buff);
+int JSONStartObject(buff_t *buff, const char *name);
+int JSONEndObject(buff_t *buff);
+int JSONStartArray(buff_t *buff, const char *name);
+int JSONEndArray(buff_t *buff);
 
-int msgToJSON(struct journal_hdr *hdr, msg_t *msg, int64_t id, buff_t *buf);
+int JSONAddInt(buff_t *buff, int field_no, int64_t value);
+int JSONAddString(buff_t *buff, int field_no, const char *value);
+int JSONAddStringN(buff_t *buff, int field_no, const char *value, size_t len);
+int JSONAddStringArray(buff_t *buff, int field_no, int64_t count, char **values);
+int JSONAddBool(buff_t *buff, int field_no, int value);
+int JSONAddMap(buff_t *buff, int field_no, int64_t count, key_val_t *values);
+
+char *JSONGetObject(char **json);
+char *JSONGetName(char **json);
+int JSONGetString(char **json, char **value);
+int JSONGetNum(char **json, int64_t *value);
+int JSONGetBool(char **json, char *value);
+int64_t JSONGetStringArray(char **json, char ***strings);
+int64_t JSONGetMap(char **json, key_val_t **map);
+
 #endif

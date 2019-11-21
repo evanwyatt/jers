@@ -217,11 +217,8 @@ time_t getRollOver(time_t now) {
  * Records are formatted as tab seperated fields. newline, tabs and
  * backslashes are escaped before being written to disk.
  * 
- *  TIME\tUID\tCMDt\tFIELDS...
- *
- * For example:
- *  1544430918.333\t1001\tADD_JOB\tJOBID=12345\tNAME=JOB_1\tARGS[0]=Argument\\twith\\ttabs\n
- *
+ *  TIME\tUID\tCMDt\tJOBID\tREVISION\tJSON.
+  *
  * Note: There is a space at the start of line, this space will have a '*' character written
  *       to this position when these transaction have been commited to disk as the job/queue/resource state files
  *       A '$' will be written to this position as a 'End of journal' marker when rotating the journal files */
@@ -261,7 +258,7 @@ int stateSaveCmd(uid_t uid, char * cmd, char * msg, jobid_t jobid, int64_t revis
 
 	/* Expand the msg */
 	while (1) {
-		len = snprintf(msg_string, msg_size, " %ld.%03d\t%d\t%s\t%d\t%ld\t%s\n", now.tv_sec, (int)(now.tv_nsec / 1000000), uid, cmd, jobid, revision, msg ? escapeString(msg, NULL):"");
+		len = snprintf(msg_string, msg_size, " %ld.%03d\t%d\t%s\t%d\t%ld\t%s\n", now.tv_sec, (int)(now.tv_nsec / 1000000), uid, cmd, jobid, revision, msg ? msg :"");
 
 		if (len < msg_size)
 			break;
@@ -329,7 +326,7 @@ off_t checkForLastCommit(char * journal) {
 
 /* Convert a journal entry into a message that can be used for recovering state */
 
-void convertJournalEntry(msg_t *msg, buff_t *message_buffer, char *entry) {
+int convertJournalEntry(msg_t *msg, char *entry) {
 	time_t timestamp_s;
 	int timestamp_ms;
 	uid_t uid;
@@ -338,13 +335,10 @@ void convertJournalEntry(msg_t *msg, buff_t *message_buffer, char *entry) {
 	int64_t revision;
 	int field_count = 0;
 	int msg_offset = 0;
+	char *json;
+	size_t json_len = 0;
 
 	memset(msg, 0, sizeof(msg_t));
-
-	message_buffer->used = 0;
-
-	if (buffResize(message_buffer, strlen(entry)) != 0)
-		error_die("Failed to allocate memory for journal buffer");
 
 	field_count = sscanf(entry, " %ld.%d\t%d\t%64s\t%u\t%ld\t%n", &timestamp_s, &timestamp_ms, (int *)&uid, command, &jobid, &revision, &msg_offset);
 
@@ -353,13 +347,15 @@ void convertJournalEntry(msg_t *msg, buff_t *message_buffer, char *entry) {
 		error_die("Failed to load journal entry. Got %d fields, wanted 6\n", field_count);
 	}
 
-	strcpy(message_buffer->data, entry + msg_offset);
+	json = strdup(entry + msg_offset);
 
-	if (*message_buffer->data) {
-		unescapeString(message_buffer->data);
-		message_buffer->used = strlen(message_buffer->data);
+	if (json == NULL)
+		error_die("Failed to copy message for replaying: %s\n", strerror(errno));
 
-		if (load_message(msg, message_buffer) != 0)
+	if (*json) {
+		json_len = strlen(json);
+
+		if (load_message(json, msg) != 0)
 			error_die("Failed to load message from journal entry");
 	}
 
@@ -367,13 +363,13 @@ void convertJournalEntry(msg_t *msg, buff_t *message_buffer, char *entry) {
 	server.recovery.uid = uid;
 	server.recovery.jobid = jobid;
 	server.recovery.revision = revision;
+	server.recovery.buffer = json;
 
-	print_msg(JERS_LOG_DEBUG, "Replaying cmd:%s uid:%d time:%ld jobid:%d revision:%ld", command, uid, timestamp_s, jobid, revision);
+	return json_len;
 }
 
 void replayTransaction(char * line) {
 	msg_t msg;
-	buff_t buff;
 
 	/* Remove the newline */
 	line[strcspn(line, "\n")] = 0;
@@ -385,16 +381,13 @@ void replayTransaction(char * line) {
 	if (line[0] == 0)
 		return;
 
-	if (buffNew(&buff, 0) != 0)
-		error_die("Failed to resize buffer to replayTransaction");
-
 	/* Load the fields into a msg_t and call the appropriate command handler */
-	convertJournalEntry(&msg, &buff, line);
-
-	if (buff.used != 0)
+	if (convertJournalEntry(&msg, line))
 		replayCommand(&msg);
 
-	buffFree(&buff);
+	free(server.recovery.buffer);
+	server.recovery.buffer = NULL;
+
 	return;
 }
 

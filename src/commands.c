@@ -38,6 +38,7 @@
 #include <fields.h>
 #include <error.h>
 #include <agent.h>
+#include <json.h>
 
 const char * getErrType(int jers_error);
 
@@ -117,7 +118,7 @@ void freeSortedCommands(void) {
 	sorted_commands = NULL;
 	sorted_agentcommands = NULL;
 }
-void runComplexCommand(client * c) {
+int runCommand(client *c) {
 	static int cmd_count = sizeof(commands) / sizeof(command_t);
 	uint64_t start, end;
 	command_t * command_to_run = NULL;
@@ -127,7 +128,7 @@ void runComplexCommand(client * c) {
 
 	if (unlikely(c->msg.command == NULL)) {
 		fprintf(stderr, "Bad request from client\n");
-		return;
+		return 1;
 	}
 
 	if (likely(sorted_commands != NULL)) {
@@ -146,13 +147,13 @@ void runComplexCommand(client * c) {
 
 	if (unlikely(command_to_run == NULL)) {
 		print_msg(JERS_LOG_WARNING, "Got unknown command from client");
-		return;
+		return 1;
 	}
 
 	if (validateUserAction(c, command_to_run->perm) != 0) {
 		sendError(c, JERS_ERR_NOPERM, NULL);
 		print_msg(JERS_LOG_INFO, "User %d not authorized to run %s", c->uid, c->msg.command);
-		return;
+		return 1;
 	}
 
 	/* Don't allow update commands when in readonly mode. - Just return an error to the caller */
@@ -160,7 +161,7 @@ void runComplexCommand(client * c) {
 		if (command_to_run->flags &CMDFLG_REPLAY) {
 			sendError(c, JERS_ERR_READONLY, NULL);
 			print_msg(JERS_LOG_INFO, "Not running update command %s from user %d - Readonly mode.", c->msg.command, c->uid);
-			return;
+			return 1;
 		}
 	}
 
@@ -169,7 +170,7 @@ void runComplexCommand(client * c) {
 
 		if (unlikely(args == NULL)) {
 			print_msg(JERS_LOG_WARNING, "Failed to deserialize %s args\n", c->msg.command);
-			return;
+			return 1;
 		}
 	}
 
@@ -177,7 +178,7 @@ void runComplexCommand(client * c) {
 
 	/* Write to the journal if the transaction was an update and successful */
 	if (command_to_run->flags &CMDFLG_REPLAY && status == 0) {
-		stateSaveCmd(c->uid, c->msg.command, c->msg.reader.msg_cpy, c->msg.jobid, c->msg.revision);
+		stateSaveCmd(c->uid, c->msg.command, c->msg.msg_cpy, c->msg.jobid, c->msg.revision);
 	}
 
 	if (likely(command_to_run->free_func != NULL))
@@ -188,6 +189,7 @@ void runComplexCommand(client * c) {
 	print_msg(JERS_LOG_DEBUG, "Command '%s' took %ldms\n", c->msg.command, end - start);
 
 	free_message(&c->msg);
+	return status;
 }
 
 int runAgentCommand(agent * a) {
@@ -218,54 +220,43 @@ int runAgentCommand(agent * a) {
 
 	/* Write to the journal if the transaction was an update and successful */
 	if (status == 0 && command_to_run->flags &CMDFLG_REPLAY)
-		stateSaveCmd(0, a->msg.command, a->msg.reader.msg_cpy, 0, 0);
+		stateSaveCmd(0, a->msg.command, a->msg.msg_cpy, 0, 0);
 
 	free_message(&a->msg);
-
-	if (buffRemove(&a->requests, a->msg.reader.pos, 0)) {
-		a->msg.reader.pos = 0;
-		respReadUpdate(&a->msg.reader, a->requests.data, a->requests.used);
-	}
 
 	/* Always a good return for agent commands */
 	return 0;
 }
 
-static int _sendMessage(struct connectionType * connection, buff_t * b, resp_t * r) {
-	size_t buff_length = 0;
-	char * buff = respFinish(r, &buff_length);
-
-	if (buff == NULL)
-		return 1;
-
+static int _sendMessage(struct connectionType *connection, buff_t *b, buff_t *message) {
 	if (connection->proxy.agent) {
 		/* Send the response to the agent the client is connected to */
 		agent *a = connection->proxy.agent;
-		resp_t forward;
+		buff_t forward;
 
+		/* Null terminate it so it can be treated as a string */
+		buffAdd(message, "\0", 1);
 
-		if (initMessage(&forward, AGENT_PROXY_DATA, 1) != 0)
+		if (initRequest(&forward, AGENT_PROXY_DATA, 1) != 0)
 			return 0;
 
-		respAddMap(&forward);
-		addIntField(&forward, PID, connection->proxy.pid);
-		addBlobStringField(&forward, PROXYDATA, buff, buff_length);
-		respCloseMap(&forward);
-
+		JSONAddInt(&forward, PID, connection->proxy.pid);
+		JSONAddString(&forward, PROXYDATA, message->data);
+	
 		sendAgentMessage(a, &forward);
 
 	} else {
-		buffAdd(b, buff, buff_length);
+		buffAddBuff(b, message);
 		pollSetWritable(connection);
 	}
-
-	free(buff);
+fprintf(stderr, "Sending message: %s\n", message->data);
+	buffFree(message);
 
 	return 0;
 }
 
-void sendError(client * c, int error, const char * err_msg) {
-	resp_t response;
+void sendError(client *c, int error, const char *err_msg) {
+	buff_t response;
 	char str[1024];
 	const char * error_type = getErrType(error);
 
@@ -277,17 +268,18 @@ void sendError(client * c, int error, const char * err_msg) {
 		return;
 	}
 
-	respNew(&response);
+	buffNew(&response, 128);
+	JSONStart(&response);
 
 	snprintf(str, sizeof(str), "%s %s", error_type, err_msg ? err_msg : "");
-
-	respAddSimpleError(&response, str);
+	JSONAddString(&response, ERROR, str);
+	JSONEnd(&response);
 
 	_sendMessage(&c->connection, &c->response, &response);
 }
 
-int sendClientReturnCode(client * c, jers_object * obj, const char * ret) {
-	resp_t r;
+int sendClientReturnCode(client *c, jers_object *obj, const char *ret) {
+	buff_t rc;
 
 	if (c == NULL) {
 		if (server.recovery.in_progress)
@@ -297,67 +289,44 @@ int sendClientReturnCode(client * c, jers_object * obj, const char * ret) {
 		return 1;
 	}
 
-	if (obj) {
+	if (obj)
 		c->msg.revision = obj->revision;
-	}
 
-	respNew(&r);
-	respAddSimpleString(&r, ret);
+	buffNew(&rc, 32);
 
-	return _sendMessage(&c->connection, &c->response, &r);
+	JSONStart(&rc);
+	JSONStartObject(&rc, "resp");
+
+	JSONAddString(&rc, RETURNCODE, ret);
+	JSONEndObject(&rc);
+	JSONEnd(&rc);
+
+	return _sendMessage(&c->connection, &c->response, &rc);
 }
 
-int sendClientMessage(client *c, jers_object *obj, resp_t *r) {
-	respCloseArray(r);
- 
+int sendClientMessage(client *c, jers_object *obj, buff_t *msg) {
 	if (c == NULL) {
 		if (server.recovery.in_progress)
 			return 0;
-		
+
 		print_msg(JERS_LOG_WARNING, "Trying to send a response, but no client provided");
 		return 1;
 	}
 
-	if (obj) {
+	if (obj)
 		c->msg.revision = obj->revision;
-	}
 
-	return _sendMessage(&c->connection, &c->response, r);
+	/* Close the data array and the objects */
+	closeResponse(msg);
+
+	return _sendMessage(&c->connection, &c->response, msg);
 }
 
-void sendAgentMessage(agent * a, resp_t * r) {
-	respCloseArray(r);
-
-	_sendMessage(&a->connection, &a->responses, r);
+void sendAgentMessage(agent * a, buff_t *msg) {
+	/* Close the request */
+	closeRequest(msg);
+	_sendMessage(&a->connection, &a->responses, msg);
 	return;
-}
-
-/* Run either a simple or complex command, which will
- * populate a response to send back to the client */
-
-int runCommand(client * c) {
-	if (c->msg.version == 0) {
-		runSimpleCommand(c);
-	} else {
-		runComplexCommand(c);
-	}
-
-	return 0;
-}
-
-void runSimpleCommand(client * c) {
-	resp_t response;
-
-	 if (strcmp(c->msg.command, "PING") == 0) {
-		respNew(&response);
-		respAddSimpleString(&response, "PONG");
-	} else {
-		fprintf(stderr, "Unknown command passed: %s\n", c->msg.command);
-		return;
-	}
-
-	_sendMessage(&c->connection, &c->response, &response);
-	free_message(&c->msg);
 }
 
 void replayCommand(msg_t * msg) {
@@ -367,6 +336,8 @@ void replayCommand(msg_t * msg) {
 
 	if (msg->command == NULL)
 		return;
+
+	print_msg(JERS_LOG_DEBUG, "Replaying message: %s\n", msg->command);
 
 	/* Match the command name */
 	for (int i = 0; i < cmd_count; i++) {
@@ -403,32 +374,26 @@ void replayCommand(msg_t * msg) {
 			}
 		}
 	}
-
-	free_message(msg);
 	
 	return;
 }
 
-int command_get_agent(client * c, void * args) {
+int command_get_agent(client *c, void *args) {
 	jersAgentFilter * f = args;
-	resp_t r;
+	buff_t b;
 
-	initMessage(&r, "RESP", 1);
-
-	respAddArray(&r);
+	initResponse(&b, 1);
 
 	for (agent *a = agentList; a; a = a->next) {
 		if (f->host == NULL || matches(f->host, a->host) == 0) {
-			respAddMap(&r);
-			addStringField(&r, NODE, a->host);
-			addBoolField(&r, CONNECTED, a->logged_in);
-			respCloseMap(&r);
+			JSONStartObject(&b, NULL);
+			JSONAddString(&b, NODE, a->host);
+			JSONAddBool(&b, CONNECTED, a->logged_in);
+			JSONEndObject(&b);
 		}
 	}
 
-	respCloseArray(&r);
-
-	return sendClientMessage(c, NULL, &r);
+	return sendClientMessage(c, NULL, &b);
 }
 
 void * deserialize_get_agent(msg_t * t) {
@@ -456,31 +421,30 @@ void free_get_agent(void *args, int status) {
 
 int command_stats(client * c, void * args) {
 	UNUSED(args);
-	resp_t r;
+	buff_t b;
 
-	initMessage(&r, "RESP", 1);
+	initResponse(&b, 1);
 
-	respAddMap(&r);
+	JSONStartObject(&b, NULL);
 
-	addIntField(&r, STATSRUNNING, server.stats.jobs.running);
-	addIntField(&r, STATSPENDING, server.stats.jobs.pending);
-	addIntField(&r, STATSDEFERRED, server.stats.jobs.deferred);
-	addIntField(&r, STATSHOLDING, server.stats.jobs.holding);
-	addIntField(&r, STATSCOMPLETED, server.stats.jobs.completed);
-	addIntField(&r, STATSEXITED, server.stats.jobs.exited);
-	addIntField(&r, STATSUNKNOWN, server.stats.jobs.unknown);
+	JSONAddInt(&b, STATSRUNNING, server.stats.jobs.running);
+	JSONAddInt(&b, STATSPENDING, server.stats.jobs.pending);
+	JSONAddInt(&b, STATSDEFERRED, server.stats.jobs.deferred);
+	JSONAddInt(&b, STATSHOLDING, server.stats.jobs.holding);
+	JSONAddInt(&b, STATSCOMPLETED, server.stats.jobs.completed);
+	JSONAddInt(&b, STATSEXITED, server.stats.jobs.exited);
+	JSONAddInt(&b, STATSUNKNOWN, server.stats.jobs.unknown);
 
-	addIntField(&r, STATSTOTALSUBMITTED, server.stats.total.submitted);
-	addIntField(&r, STATSTOTALSTARTED, server.stats.total.started);
-	addIntField(&r, STATSTOTALCOMPLETED, server.stats.total.completed);
-	addIntField(&r, STATSTOTALEXITED, server.stats.total.exited);
-	addIntField(&r, STATSTOTALDELETED, server.stats.total.deleted);
-	addIntField(&r, STATSTOTALUNKNOWN, server.stats.total.unknown);
+	JSONAddInt(&b, STATSTOTALSUBMITTED, server.stats.total.submitted);
+	JSONAddInt(&b, STATSTOTALSTARTED, server.stats.total.started);
+	JSONAddInt(&b, STATSTOTALCOMPLETED, server.stats.total.completed);
+	JSONAddInt(&b, STATSTOTALEXITED, server.stats.total.exited);
+	JSONAddInt(&b, STATSTOTALDELETED, server.stats.total.deleted);
+	JSONAddInt(&b, STATSTOTALUNKNOWN, server.stats.total.unknown);
 
+	JSONEndObject(&b);
 
-	respCloseMap(&r);
-
-	return sendClientMessage(c, NULL, &r);
+	return sendClientMessage(c, NULL, &b);
 }
 
 /* Load a users permissions based on groups in the config file */

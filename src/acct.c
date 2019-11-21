@@ -31,6 +31,10 @@
 #include <acct.h>
 #include <json.h>
 
+int jobToJSON(struct job *j, buff_t *buf);
+int queueToJSON(struct queue *q, buff_t *buf);
+int resourceToJSON(struct resource *r, buff_t *buf);
+
 acctClient *acctClientList = NULL;
 
 static void acctMain(acctClient *a, int journal_fd, off_t stream_start);
@@ -405,18 +409,26 @@ static void acctMain(acctClient *a, int journal_fd, off_t stream_start) {
 				error_die("Accounting Stream: Failed to load journal entry. Got %d fields, wanted 6\n", field_count);
 			}
 
-			strcpy(line.data, temp.data + msg_offset);
+			if (*(temp.data + msg_offset)) {
+				/* Construct an 'update' message */
+				buffClear(&line, line.used);
+				JSONStart(&line);
+				JSONStartObject(&line, "update");
 
-			if (*line.data) {
-				unescapeString(line.data);
-				line.used = strlen(line.data);
+				JSONAddInt(&line, DATETIME, hdr.timestamp_s);
+				JSONAddInt(&line, UID, hdr.uid);
+				
+				if (hdr.jobid)
+					JSONAddInt(&line, JOBID, hdr.jobid);
 
-				msg_t msg = {{0}};
+				buffAdd(&line, "update:", 7);
+				buffAdd(&line, temp.data + msg_offset, strlen(temp.data + msg_offset));
 
-				if (load_message(&msg, &line) != 0)
-					error_die("Accounting Stream: Failed to load message from journal entry");
+				JSONEndObject(&line);
+				JSONEnd(&line);
 
-				msgToJSON(&hdr, &msg, 0, &a->response);
+				fprintf(stderr, "Sending: '%.*s' to accounting stream\n", (int)line.used, line.data);
+				buffAddBuff(&a->response, &line);
 				pollSetWritable(&a->connection);
 			}
 

@@ -32,6 +32,7 @@
 #include <errno.h>
 #include <time.h>
 #include <commands.h>
+#include <json.h>
 
 int __comp(const void * a_, const void * b_) {
 	const struct job * a = *((struct job **) a_);
@@ -52,45 +53,43 @@ int __comp(const void * a_, const void * b_) {
 }
 
 void sendStartCmd(struct job * j) {
-	resp_t r;
+	buff_t b;
 
 	print_msg(JERS_LOG_INFO, "Sending start message for JobID:%-7d Queue:%s QueuePriority:%d Priority:%d", j->jobid, j->queue->name, j->queue->priority, j->priority);
 
-	initMessage(&r, "START_JOB", 1);
+	initRequest(&b, "START_JOB", 1);
 
-	respAddMap(&r);
-	addIntField(&r, JOBID, j->jobid);
-	addStringField(&r, JOBNAME, j->jobname);
-	addStringField(&r, QUEUENAME, j->queue->name);
-	addIntField(&r, UID, j->uid);
-	addIntField(&r, NICE, j->nice);
+	JSONAddInt(&b, JOBID, j->jobid);
+	JSONAddString(&b, JOBNAME, j->jobname);
+	JSONAddString(&b, QUEUENAME, j->queue->name);
+	JSONAddInt(&b, UID, j->uid);
+	JSONAddInt(&b, NICE, j->nice);
 
 	if (j->shell)
-		addStringField(&r, SHELL, j->shell);
+		JSONAddString(&b, SHELL, j->shell);
 
 	if (j->wrapper) {
-		addStringField(&r, WRAPPER, j->wrapper);
+		JSONAddString(&b, WRAPPER, j->wrapper);
 	} else {
 		if (j->pre_cmd)
-			addStringField(&r, PRECMD, j->pre_cmd);
+			JSONAddString(&b, PRECMD, j->pre_cmd);
 
 		if (j->post_cmd)
-			addStringField(&r, POSTCMD, j->post_cmd);
+			JSONAddString(&b, POSTCMD, j->post_cmd);
 	}
 
-	addStringArrayField(&r, ARGS, j->argc, j->argv);
+	JSONAddStringArray(&b, ARGS, j->argc, j->argv);
 
 	if (j->env_count)
-		addStringArrayField(&r, ENVS, j->env_count, j->envs);
+		JSONAddStringArray(&b, ENVS, j->env_count, j->envs);
 
 	if (j->stdout)
-		addStringField(&r, STDOUT, j->stdout);
+		JSONAddString(&b, STDOUT, j->stdout);
 
 	if (j->stderr)
-		addStringField(&r, STDERR, j->stderr);
+		JSONAddString(&b, STDERR, j->stderr);
 
-	respCloseMap(&r);
-	sendAgentMessage(j->queue->agent, &r);
+	sendAgentMessage(j->queue->agent, &b);
 	return;
 }
 

@@ -203,6 +203,17 @@ char * removeWhitespace(char * str) {
 	return str;
 }
 
+char *skipChars(char *str, const char *skip) {
+	while (*str != '\0' && strchr(skip, *str)) str++;
+	return str;
+}
+
+
+char *skipWhitespace(char *str) {
+	return skipChars(str, " \t");
+}
+
+
 char * gethost(void) {
 	static char host[1024] = "";
 

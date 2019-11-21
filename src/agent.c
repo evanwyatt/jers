@@ -155,8 +155,6 @@ int handleAgentDisconnect(agent * a) {
 
 	buffFree(&a->requests);
 	buffFree(&a->responses);
-	respReadFree(&a->msg.reader);
-
 	return 0;
 }
 

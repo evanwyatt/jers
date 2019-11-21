@@ -29,6 +29,7 @@
 
 #include <server.h>
 #include <commands.h>
+#include <json.h>
 
 int command_agent_login(agent * a, msg_t * msg) {
 	UNUSED(msg);
@@ -48,24 +49,22 @@ int command_agent_login(agent * a, msg_t * msg) {
 
 	/* If we had a secret specified in the configuration file, send an auth challenge */
 	if (server.secret) {
-		resp_t auth_challenge;
+		buff_t auth_challenge;
 		char * nonce = generateNonce(NONCE_SIZE);
 
 		if (nonce == NULL)
 			return 1;
 
-		initMessage(&auth_challenge, AGENT_AUTH_CHALLENGE, 1);
-		respAddMap(&auth_challenge);
-		addStringField(&auth_challenge, NONCE, nonce);
+		initRequest(&auth_challenge, AGENT_AUTH_CHALLENGE, 1);
+		JSONAddString(&auth_challenge, NONCE, nonce);
 
-		respCloseMap(&auth_challenge);
 		sendAgentMessage(a, &auth_challenge);
 
 		a->nonce = nonce;
 	} else {
 		/* Request a reconciliation from the agent */
-		resp_t recon;
-		initMessage(&recon, "RECON_REQ", 1);
+		buff_t recon;
+		initRequest(&recon, "RECON_REQ", 1);
 		sendAgentMessage(a, &recon);
 		print_msg(JERS_LOG_INFO, "Requested recon from %s\n", a->host);
 
@@ -138,16 +137,15 @@ int command_agent_authresp(agent * a, msg_t * msg) {
 	/* Client looks legitimate, send a recon request.
 	 * We include a HMAC of the client nonce and the datetime to
 	 * allow the client to validate we know the secret */
-	resp_t recon;
-	initMessage(&recon, "RECON_REQ", 1);
+	buff_t recon;
+	initRequest(&recon, "RECON_REQ", 1);
+
 	sprintf(datetime_str, "%ld", time_now);
 	const char *reconInput[] = {c_nonce, datetime_str, NULL};
 	char *recon_hmac = generateHMAC(reconInput, server.secret_hash, sizeof(server.secret_hash));
 
-	respAddMap(&recon);
-	addIntField(&recon, DATETIME, time_now);
-	addStringField(&recon, MSG_HMAC, recon_hmac);
-	respCloseMap(&recon);
+	JSONAddInt(&recon, DATETIME, time_now);
+	JSONAddString(&recon, MSG_HMAC, recon_hmac);
 
 	sendAgentMessage(a, &recon);
 
@@ -252,8 +250,8 @@ int command_agent_recon(agent * a, msg_t * msg) {
 	flush_journal(1);
 
 	/* Reply to the agent letting it know we've processed this message */
-	resp_t fin;
-	initMessage(&fin, "RECON_COMPLETE", 1);
+	buff_t fin;
+	initRequest(&fin, "RECON_COMPLETE", 1);
 	sendAgentMessage(a, &fin);
 
 	a->recon = 0;
@@ -410,7 +408,6 @@ int command_agent_proxyconn(agent *a, msg_t *msg) {
 		print_msg(JERS_LOG_WARNING, "Had previous proxy client connected on agent %d pid:%d", ((agent *)c->connection.proxy.agent)->host, c->connection.proxy.pid);
 		buffFree(&c->response);
 		buffFree(&c->request);
-		respReadFree(&c->msg.reader);
 		removeClient(c);
 		free(c);
 	}
@@ -434,12 +431,11 @@ int command_agent_proxyconn(agent *a, msg_t *msg) {
 int command_agent_proxydata(agent *a, msg_t *msg) {
 	pid_t pid = -1;
 	char *data = NULL;
-	size_t data_length;
 
 	for (int i = 0; i < msg->items[0].field_count; i++) {
 		switch(msg->items[0].fields[i].number) {
 			case PID : pid = getNumberField(&msg->items[0].fields[i]); break;
-			case PROXYDATA: data = getBlobStringField(&msg->items[0].fields[i], &data_length); break;
+			case PROXYDATA: data = getStringField(&msg->items[0].fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", msg->items[0].fields[i].name); break;
 		}
@@ -448,6 +444,8 @@ int command_agent_proxydata(agent *a, msg_t *msg) {
 	if (data == NULL) {
 		return 1;
 	}
+
+	fprintf(stderr, "Proxydata = %s\n", data);
 
 	/* Locate the client structure */
 	client *c = NULL;
@@ -465,7 +463,7 @@ int command_agent_proxydata(agent *a, msg_t *msg) {
 	}
 
 	/* Add the new data to the clients stream */
-	buffAdd(&c->request, data, data_length);
+	buffAdd(&c->request, data, strlen(data));
 	free(data);
 
 	return 0;
@@ -499,7 +497,6 @@ int command_agent_proxyclose(agent *a, msg_t *msg) {
 
 	buffFree(&c->response);
 	buffFree(&c->request);
-	respReadFree(&c->msg.reader);
 	removeClient(c);
 	free(c);
 

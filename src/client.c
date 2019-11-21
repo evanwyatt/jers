@@ -117,7 +117,6 @@ int handleClientDisconnect(client * c) {
 	close(c->connection.socket);
 	buffFree(&c->response);
 	buffFree(&c->request);
-	respReadFree(&c->msg.reader);
 	removeClient(c);
 	free(c);
 

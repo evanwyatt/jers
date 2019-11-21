@@ -31,8 +31,9 @@
 
 #include "comms.h"
 #include "buffer.h"
-#include "resp.h"
 #include "fields.h"
+
+#include <server.h>
 
 enum acctStates {
 	ACCT_STOPPED = 0,
@@ -74,11 +75,6 @@ extern acctClient *acctClientList;
 
 int handleAcctClientConnection(struct connectionType * connection);
 
-//int handleAcctDisconnect(client *c);
-//int handleAcctRead(client *c);
-//int handleAcctWrite(client *c);
-
 void addAcctClient(acctClient *a);
 void removeAcctClient(acctClient *a);
-
 #endif

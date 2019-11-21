@@ -31,8 +31,8 @@
 #include "cmd_defs.h"
 
 int sendClientReturnCode(client *c, jers_object * obj, const char *ret);
-int sendClientMessage(client *c, jers_object *obj, resp_t *r);
-void sendAgentMessage(agent * a, resp_t * r);
+int sendClientMessage(client *c, jers_object *obj, buff_t *b);
+void sendAgentMessage(agent * a, buff_t *b);
 void sendError(client * c, int error, const char * msg);
 
 void replayCommand(msg_t * msg);

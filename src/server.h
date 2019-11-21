@@ -44,7 +44,6 @@
 
 #include <jers.h>
 #include <common.h>
-#include <resp.h>
 #include <buffer.h>
 #include <comms.h>
 #include <fields.h>
@@ -267,6 +266,7 @@ struct jersServer {
 		time_t time;
 		jobid_t jobid;
 		int64_t revision;
+		char *buffer;
 	} recovery;
 	int initalising;
 

@@ -14,16 +14,16 @@ JERS_MAJOR=$(shell grep JERS_MAJOR jers.h | awk '{print $$3}')
 JERS_MINOR=$(shell grep JERS_MINOR jers.h | awk '{print $$3}')
 JERS_PATCH=$(shell grep JERS_PATCH jers.h | awk '{print $$3}')
 
-JERSD_OBJS=jersd.o error.o config.o event.o resp.o commands.o state.o jobs.o auth.o \
+JERSD_OBJS=jersd.o error.o config.o event.o  commands.o state.o jobs.o auth.o \
 	comms.o sched.o common.o queue.o buffer.o queue.o fields.o resource.o command_job.o \
 	command_agent.o command_queue.o command_resource.o logging.o setproctitle.o \
 	client.o agent.o email.o acct.o json.o
 
-JERSAGENTD_OBJS=jers_agentd.o common.o error.o resp.o buffer.o fields.o logging.o error.o setproctitle.o auth.o proxy.o comms.o
+JERSAGENTD_OBJS=jers_agentd.o common.o error.o buffer.o fields.o logging.o error.o setproctitle.o auth.o proxy.o comms.o json.o
 JERS_OBJS=jers.o jers_cli.o common.o
 
 JERS_DUMP_OBJS=jers_dump_env.o
-LIBJERS_OBJS=api.o resp.o fields.o buffer.o common.o error.o
+LIBJERS_OBJS=api.o fields.o buffer.o common.o error.o json.o
 
 all: jersd jers_agentd jers_dump_env jers
 

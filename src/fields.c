@@ -31,95 +31,103 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <resp.h>
+#include <common.h>
+#include <json.h>
 #include <fields.h>
 
+static int loadFields(char *obj, msg_t *m);
+static int loadItemArray(char **json, msg_t *m);
+
 field fields[] = {
-	{JOBID,      RESP_TYPE_INT,        "JOBID"},
-	{JOBNAME,    RESP_TYPE_BLOBSTRING, "JOBNAME"},
-	{QUEUENAME,  RESP_TYPE_BLOBSTRING, "QUEUENAME"},
-	{ARGS,       RESP_TYPE_ARRAY,      "ARGS"},
-	{ENVS,       RESP_TYPE_ARRAY,      "ENVS"},
-	{UID,        RESP_TYPE_INT,        "UID"},
-	{SHELL,      RESP_TYPE_BLOBSTRING, "SHELL"},
-	{PRIORITY,   RESP_TYPE_INT,        "PRIORITY"},
-	{HOLD,       RESP_TYPE_BOOL,       "HOLD"},
-	{PRECMD,     RESP_TYPE_BLOBSTRING, "PRECMD"},
-	{POSTCMD,    RESP_TYPE_BLOBSTRING, "POSTCMD"},
-	{DEFERTIME,  RESP_TYPE_INT,        "DEFERTIME"},
-	{SUBMITTIME, RESP_TYPE_INT,        "SUBMITTIME"},
-	{STARTTIME,  RESP_TYPE_INT,        "STARTIME"},
+	{JOBID,      FIELD_TYPE_NUM,         "JOBID"},
+	{JOBNAME,    FIELD_TYPE_STRING,      "JOBNAME"},
+	{QUEUENAME,  FIELD_TYPE_STRING,      "QUEUENAME"},
+	{ARGS,       FIELD_TYPE_STRINGARRAY, "ARGS"},
+	{ENVS,       FIELD_TYPE_STRINGARRAY, "ENVS"},
+	{UID,        FIELD_TYPE_NUM,         "UID"},
+	{SHELL,      FIELD_TYPE_STRING,      "SHELL"},
+	{PRIORITY,   FIELD_TYPE_NUM,         "PRIORITY"},
+	{HOLD,       FIELD_TYPE_BOOL,        "HOLD"},
+	{PRECMD,     FIELD_TYPE_STRING,      "PRECMD"},
+	{POSTCMD,    FIELD_TYPE_STRING,      "POSTCMD"},
+	{DEFERTIME,  FIELD_TYPE_NUM,         "DEFERTIME"},
+	{SUBMITTIME, FIELD_TYPE_NUM,         "SUBMITTIME"},
+	{STARTTIME,  FIELD_TYPE_NUM,         "STARTIME"},
 
-	{TAGS,       RESP_TYPE_MAP,        "TAGS"},
-	{STATE,      RESP_TYPE_INT,        "STATE"},
-	{NICE,       RESP_TYPE_INT,        "NICE"},
-	{STDOUT,     RESP_TYPE_BLOBSTRING, "STDOUT"},
-	{STDERR,     RESP_TYPE_BLOBSTRING, "STDERR"},
-	{FINISHTIME, RESP_TYPE_INT,        "FINISHTIME"},
-	{NODE,       RESP_TYPE_BLOBSTRING, "NODE"},
-	{RESOURCES,  RESP_TYPE_ARRAY,      "RESOURCES"},
-	{RETFIELDS,  RESP_TYPE_INT,        "RETFIELDS"},
-	{JOBPID,     RESP_TYPE_INT,        "JOBPID"},
-	{EXITCODE,   RESP_TYPE_INT,        "EXITCODE"},
-	{DESC,       RESP_TYPE_BLOBSTRING, "DESC"},
-	{JOBLIMIT,   RESP_TYPE_INT,        "JOBLIMIT"},
-	{RESTART,    RESP_TYPE_BOOL,       "RESTART"},
-	{RESNAME,    RESP_TYPE_BLOBSTRING, "RESNAME"},
-	{RESCOUNT,   RESP_TYPE_INT,        "RESCOUNT"},
+	{TAGS,       FIELD_TYPE_MAP,         "TAGS"},
+	{STATE,      FIELD_TYPE_NUM,         "STATE"},
+	{NICE,       FIELD_TYPE_NUM,         "NICE"},
+	{STDOUT,     FIELD_TYPE_STRING,      "STDOUT"},
+	{STDERR,     FIELD_TYPE_STRING,      "STDERR"},
+	{FINISHTIME, FIELD_TYPE_NUM,         "FINISHTIME"},
+	{NODE,       FIELD_TYPE_STRING,      "NODE"},
+	{RESOURCES,  FIELD_TYPE_STRINGARRAY, "RESOURCES"},
+	{RETFIELDS,  FIELD_TYPE_NUM,         "RETFIELDS"},
+	{JOBPID,     FIELD_TYPE_NUM,         "JOBPID"},
+	{EXITCODE,   FIELD_TYPE_NUM,         "EXITCODE"},
+	{DESC,       FIELD_TYPE_STRING,      "DESC"},
+	{JOBLIMIT,   FIELD_TYPE_NUM,         "JOBLIMIT"},
+	{RESTART,    FIELD_TYPE_BOOL,        "RESTART"},
+	{RESNAME,    FIELD_TYPE_STRING,      "RESNAME"},
+	{RESCOUNT,   FIELD_TYPE_NUM,         "RESCOUNT"},
+ 
+	{STATSRUNNING,   FIELD_TYPE_NUM, "STATSRUNNING"},
+	{STATSPENDING,   FIELD_TYPE_NUM, "STATSPENDING"},
+	{STATSDEFERRED,  FIELD_TYPE_NUM, "STATSDEFERRED"},
+	{STATSHOLDING,   FIELD_TYPE_NUM, "STATSHOLDING"},
+	{STATSCOMPLETED, FIELD_TYPE_NUM, "STATSCOMPLETED"},
+	{STATSEXITED,    FIELD_TYPE_NUM, "STATSEXITED"},
+	{STATSUNKNOWN,   FIELD_TYPE_NUM, "STATSUNKNOW"},
 
-	{STATSRUNNING,   RESP_TYPE_INT, "STATSRUNNING"},
-	{STATSPENDING,   RESP_TYPE_INT, "STATSPENDING"},
-	{STATSDEFERRED,  RESP_TYPE_INT, "STATSDEFERRED"},
-	{STATSHOLDING,   RESP_TYPE_INT, "STATSHOLDING"},
-	{STATSCOMPLETED, RESP_TYPE_INT, "STATSCOMPLETED"},
-	{STATSEXITED,    RESP_TYPE_INT, "STATSEXITED"},
-	{STATSUNKNOWN,   RESP_TYPE_INT, "STATSUNKNOW"},
+	{STATSTOTALSUBMITTED, FIELD_TYPE_NUM, "STATSTOTALSUBMITTED"},
+	{STATSTOTALSTARTED,   FIELD_TYPE_NUM, "STATSTOTALSTARTED"},
+	{STATSTOTALCOMPLETED, FIELD_TYPE_NUM, "STATSTOTALCOMPLETED"},
+	{STATSTOTALEXITED,    FIELD_TYPE_NUM, "STATSTOTALEXITED"},
+	{STATSTOTALDELETED,   FIELD_TYPE_NUM, "STATSTOTALDELETED"},
+	{STATSTOTALUNKNOWN,   FIELD_TYPE_NUM, "STATSTOTALUNKNOWN"},
 
-	{STATSTOTALSUBMITTED, RESP_TYPE_INT, "STATSTOTALSUBMITTED"},
-	{STATSTOTALSTARTED,   RESP_TYPE_INT, "STATSTOTALSTARTED"},
-	{STATSTOTALCOMPLETED, RESP_TYPE_INT, "STATSTOTALCOMPLETED"},
-	{STATSTOTALEXITED,    RESP_TYPE_INT, "STATSTOTALEXITED"},
-	{STATSTOTALDELETED,   RESP_TYPE_INT, "STATSTOTALDELETED"},
-	{STATSTOTALUNKNOWN,   RESP_TYPE_INT, "STATSTOTALUNKNOWN"},
+	{WRAPPER,  FIELD_TYPE_STRING, "WRAPPER"},
+	{COMMENT,  FIELD_TYPE_STRING, "COMMENT"},
+	{RESINUSE, FIELD_TYPE_NUM,   "RESINUSE"},
+	{SIGNAL,   FIELD_TYPE_NUM,     "SIGNAL"},
 
-	{WRAPPER, RESP_TYPE_BLOBSTRING, "WRAPPER"},
-	{COMMENT, RESP_TYPE_BLOBSTRING, "COMMENT"},
-	{RESINUSE, RESP_TYPE_INT, "RESINUSE"},
-	{SIGNAL, RESP_TYPE_INT, "SIGNAL"},
+	{TAG_KEY,    FIELD_TYPE_STRING, "TAG_KEY"},
+	{TAG_VALUE,  FIELD_TYPE_STRING, "TAG_VALUE"},
+	{PENDREASON, FIELD_TYPE_NUM,   "PENDREASON"},
+	{FAILREASON, FIELD_TYPE_NUM,   "FAILREASON"},
+	{SUBMITTER,  FIELD_TYPE_NUM,    "SUBMITTER"},
+	{DEFAULT,    FIELD_TYPE_BOOL,   "DEFAULT"},
 
-	{TAG_KEY,   RESP_TYPE_BLOBSTRING, "TAG_KEY"},
-	{TAG_VALUE, RESP_TYPE_BLOBSTRING, "TAG_VALUE"},
-	{PENDREASON, RESP_TYPE_INT, "PENDREASON"},
-	{FAILREASON, RESP_TYPE_INT, "FAILREASON"},
-	{SUBMITTER, RESP_TYPE_INT, "SUBMITTER"},
-	{DEFAULT,   RESP_TYPE_BOOL, "DEFAULT"},
+	{USAGE_UTIME_SEC,  FIELD_TYPE_NUM, "USAGE_UTIME_SEC"},
+	{USAGE_UTIME_USEC, FIELD_TYPE_NUM, "USAGE_UTIME_USEC"},
+	{USAGE_STIME_SEC,  FIELD_TYPE_NUM, "USAGE_STIME_SEC"},
+	{USAGE_STIME_USEC, FIELD_TYPE_NUM, "USAGE_STIME_USEC"},
+	{USAGE_MAXRSS,     FIELD_TYPE_NUM, "USAGE_MAXRSS"},
+	{USAGE_MINFLT,     FIELD_TYPE_NUM, "USAGE_MINFLT"},
+	{USAGE_MAJFLT,     FIELD_TYPE_NUM, "USAGE_MAJFLT"},
+	{USAGE_INBLOCK,    FIELD_TYPE_NUM, "USAGE_INBLOCK"},
+	{USAGE_OUBLOCK,    FIELD_TYPE_NUM, "USAGE_OUBLOCK"},
+	{USAGE_NVCSW,      FIELD_TYPE_NUM, "USAGE_NVCSW"},
+	{USAGE_NIVCSW,     FIELD_TYPE_NUM, "USAGE_NIVCSW"},
 
-	{USAGE_UTIME_SEC,  RESP_TYPE_INT, "USAGE_UTIME_SEC"},
-	{USAGE_UTIME_USEC, RESP_TYPE_INT, "USAGE_UTIME_USEC"},
-	{USAGE_STIME_SEC,  RESP_TYPE_INT, "USAGE_STIME_SEC"},
-	{USAGE_STIME_USEC, RESP_TYPE_INT, "USAGE_STIME_USEC"},
-	{USAGE_MAXRSS,     RESP_TYPE_INT, "USAGE_MAXRSS"},
-	{USAGE_MINFLT,     RESP_TYPE_INT, "USAGE_MINFLT"},
-	{USAGE_MAJFLT,     RESP_TYPE_INT, "USAGE_MAJFLT"},
-	{USAGE_INBLOCK,    RESP_TYPE_INT, "USAGE_INBLOCK"},
-	{USAGE_OUBLOCK,    RESP_TYPE_INT, "USAGE_OUBLOCK"},
-	{USAGE_NVCSW,      RESP_TYPE_INT, "USAGE_NVCSW"},
-	{USAGE_NIVCSW,     RESP_TYPE_INT, "USAGE_NIVCSW"},
+	{CLEARRES,         FIELD_TYPE_BOOL, "CLEARRES"},
 
-	{CLEARRES,         RESP_TYPE_BOOL, "CLEARRES"},
+	{NONCE,    FIELD_TYPE_STRING, "NONCE"},
+	{DATETIME, FIELD_TYPE_NUM,    "DATETIME"},
+	{MSG_HMAC, FIELD_TYPE_STRING, "HMAC"},
 
-	{NONCE,    RESP_TYPE_BLOBSTRING, "NONCE"},
-	{DATETIME, RESP_TYPE_INT,        "DATETIME"},
-	{MSG_HMAC, RESP_TYPE_BLOBSTRING, "HMAC"},
+	{CONNECTED, FIELD_TYPE_BOOL, "CONNECTED"},
 
-	{CONNECTED, RESP_TYPE_BOOL, "CONNECTED"},
+	{PID,       FIELD_TYPE_NUM,          "PID"},
+	{PROXYDATA, FIELD_TYPE_STRING, "PROXYDATA"},
 
-	{PID, RESP_TYPE_INT, "PID"},
-	{PROXYDATA, RESP_TYPE_BLOBSTRING, "PROXYDATA"},
+	{ACCT_ID, FIELD_TYPE_NUM,   "ACCT_ID"},
+	{ERROR,   FIELD_TYPE_STRING,"ERROR"},
 
-	{ACCT_ID, RESP_TYPE_INT, "ACCT_ID"},
+	{RETURNCODE, FIELD_TYPE_STRING, "RETURN_CODE"},
+	{VERSION,    FIELD_TYPE_NUM,    "VERSION"},
 
-	{ENDOFFIELDS, RESP_TYPE_INT, "ENDOFFIELDS"}
+	{ENDOFFIELDS, FIELD_TYPE_NUM, "ENDOFFIELDS"}
 };
 
 static inline void setField(unsigned char * bitmap, int field_no) {
@@ -159,24 +167,7 @@ void freeStringMap(int count, key_val_t ** keys) {
 }
 
 char * getStringField(field *f) {
-	char * ret = strdup(f->value.string.value ? f->value.string.value : "");
-	return ret;
-}
-
-char * getBlobStringField(field *f, size_t *length) {
-	char * ret;
-
-	if (length)
-		*length = 0;
-
-	ret = malloc(f->value.string.length);
-
-	if (ret == NULL)
-		return NULL;
-
-	memcpy(ret, f->value.string.value, f->value.string.length);
-	*length = f->value.string.length;
-
+	char * ret = strdup(f->value.string ? f->value.string : "");
 	return ret;
 }
 
@@ -226,7 +217,7 @@ static int compfield(const void * _a, const void * _b) {
 	const field * a = _a;
 	const field * b = _b;
 
-	return strcmp(a->name, b->name);
+	return strcasecmp(a->name, b->name);
 }
 
 field * sortedFields = NULL;
@@ -260,7 +251,7 @@ int fieldtonum(const char * in) {
 		return found->number;
 	} else {
 		for (i = 0; i < num_fields; i++) {
-			if (strcmp(in, fields[i].name) == 0) return i;
+			if (strcasecmp(in, fields[i].name) == 0) return i;
 		}
 	}
 
@@ -275,7 +266,7 @@ int setIntField(field * f, int field_no, int64_t value) {
 	f->name = fields[field_no].name;
 	f->type = fields[field_no].type;
 
-	if (f->type != RESP_TYPE_INT)
+	if (f->type != FIELD_TYPE_NUM)
 		return -1;
 
 	f->value.number = value;
@@ -290,138 +281,25 @@ const char * getFieldName(int field_no) {
 	return fields[field_no].name;
 }
 
-static int load_fields(msg_t * msg) {
-	int64_t item_count = 0, map_count = 0;
-	int64_t i, item;
-	int rc = 0;
-	int type;
-
-	type = respGetType(&msg->reader);
-
-	if (type == RESP_TYPE_ARRAY) {
-		if (respGetArray(&msg->reader, &item_count)) {
-			fprintf(stderr, "Failed to load fields - didn't get expected array item\n");
-			return -1;
-		}
-	} else if (type == RESP_TYPE_MAP) {
-		item_count = 1;
-	} else if (type == RESP_TYPE_NONE) {
-		item_count = 0;
-	} else {
-		fprintf(stderr, "Unexpected type while loading request\n");
-		return -1;
-	}
-
-	msg->item_count = item_count;
-
-	if (msg->item_count == 0) {
-		msg->items = NULL;
-		return msg->item_count;
-	}
-
-	msg->items = malloc(sizeof(msg_item) * item_count);
-
-	for (item = 0; item < item_count; item++) {
-		if (respGetMap(&msg->reader, &map_count)) {
-			return -1;
-		}
-
-		msg->items[item].field_count = map_count;
-		msg->items[item].fields = malloc(sizeof(field) * msg->items[item].field_count);
-		memset(msg->items[item].bitmap, 0, sizeof(msg->items[item].bitmap));
-
-		/* Load each key value pair
-		 * Keys are always simple strings, we look these up
-		 * in a table to determine the field type, etc. */
-
-		for (i = 0; i < msg->items[item].field_count; i++) {
-			char * key;
-
-			if (respGetSimpleString(&msg->reader, &key))
-				return -1;
-
-			msg->items[item].fields[i].number = fieldtonum(key);
-
-			if (msg->items[item].fields[i].number < 0)
-				return -1;
-
-			setField(msg->items[item].bitmap, msg->items[item].fields[i].number);
-
-			msg->items[item].fields[i].type = fields[msg->items[item].fields[i].number].type;
-			msg->items[item].fields[i].name = fields[msg->items[item].fields[i].number].name;
-
-			/* Load the value */
-			switch (fields[msg->items[item].fields[i].number].type) {
-				case RESP_TYPE_BLOBSTRING:
-					rc = respGetBlobString(&msg->reader, &msg->items[item].fields[i].value.string.value, &msg->items[item].fields[i].value.string.length);
-					break;
-				case RESP_TYPE_INT:
-					rc = respGetNum(&msg->reader, &msg->items[item].fields[i].value.number);
-					break;
-				case RESP_TYPE_BOOL:
-					rc = respGetBool(&msg->reader, &msg->items[item].fields[i].value.boolean);
-					break;
-				case RESP_TYPE_ARRAY:
-					rc = respGetArray(&msg->reader, &msg->items[item].fields[i].value.string_array.count);
-
-					if (rc)
-						break;
-
-					msg->items[item].fields[i].value.string_array.strings = malloc(sizeof(char *) * msg->items[item].fields[i].value.string_array.count);
-
-					for (int j = 0; j < msg->items[item].fields[i].value.string_array.count; j++) {
-						rc = respGetBlobString(&msg->reader, &msg->items[item].fields[i].value.string_array.strings[j], NULL);
-
-						if (rc)
-							break;
-					}
-
-					break;
-
-				case RESP_TYPE_MAP:
-					rc = respGetMap(&msg->reader, &msg->items[item].fields[i].value.map.count);
-
-					if (rc)
-						break;
-
-					msg->items[item].fields[i].value.map.keys = malloc(sizeof(key_val_t) * msg->items[item].fields[i].value.map.count);
-
-					for (int j = 0; j <msg->items[item].fields[i].value.map.count; j++) {
-						if ((rc = respGetBlobString(&msg->reader, &msg->items[item].fields[i].value.map.keys[j].key, NULL)))
-							break;
-
-						if ((rc = respGetBlobString(&msg->reader, &msg->items[item].fields[i].value.map.keys[j].value, NULL)))
-							break;
-					}
-					break;
-			}
-
-			if (rc)
-				return -1;
-		}
-	}
-
-	return msg->item_count;
-}
-
 void free_message(msg_t * msg) {
 	int i,j;
 
 	for (j = 0; j < msg->item_count; j++) {
 
 		for (i = 0; i < msg->items[j].field_count; i++) {
-			if (fields[msg->items[j].fields[i].number].type == RESP_TYPE_ARRAY) {
+			if (fields[msg->items[j].fields[i].number].type == FIELD_TYPE_STRINGARRAY) {
 				free(msg->items[j].fields[i].value.string_array.strings);
-			} else if (fields[msg->items[j].fields[i].number].type == RESP_TYPE_MAP) {
+			} else if (fields[msg->items[j].fields[i].number].type == FIELD_TYPE_MAP) {
 				free(msg->items[j].fields[i].value.map.keys);
 			}
 		}
+
 		free(msg->items[j].fields);
 		msg->items[j].field_count = 0;
 		msg->items[j].fields = NULL;
 	}
 
-	respReadReset(&msg->reader);
+	free(msg->msg_cpy);
 	free(msg->items);
 
 	msg->items = NULL;
@@ -429,133 +307,269 @@ void free_message(msg_t * msg) {
 	msg->command = NULL;
 	msg->version = 0;
 	msg->error = NULL;
+	msg->msg_cpy = NULL;
 }
 
-/* Load our string into a message structure
- *   Returns:
- *   <0 on error
- *    1 If there isn't enough data to load a request
- *    0 If loaded succesfully */
 
-int load_message(msg_t * msg, buff_t * buff) {
-	msg->version = 0;
-	msg->item_count = 0;
-	msg->items = NULL;
-	msg->error = NULL;
-	msg->command = NULL;
+/* Load a message, based on a passed in JSON object.
+ * The input json string is modified by this routine */
+int load_message(char *json, msg_t *m)
+{
+	char *object;
+	memset(m, 0, sizeof(msg_t));
+	m->msg_cpy = strdup(json);
 
-	respReadUpdate(&msg->reader, buff->data, buff->used);
+	fprintf(stderr, "Loading message: %s\n", json);
 
-	if (buff->used == 0)
+	object = JSONGetObject(&json);
+
+	if (object == NULL) {
+		fprintf(stderr, "Invalid JSON message received: %s\n", m->msg_cpy);
 		return 1;
-
-	if (msg->reader.pos == msg->reader.length)
-		return 1;
-
-	int rc = respReadLoad(&msg->reader);
-
-	/* Not enough data to load this request */
-	if (rc == RESP_INCOMP) {
-		return 1;
-	} else if (rc != RESP_OK) {
-		respReadFree(&msg->reader);
-		fprintf(stderr, "Failed to parse request\n");
-		return -1;
 	}
 
-	/* If its just a simple string, its a simple message */
-	int type = respGetType(&msg->reader);
+	/* The very first token should tell us what to expect, ie "add_job" or "resp" */
+	char *name = JSONGetName(&object);
 
-	if (type == RESP_TYPE_SIMPLESTRING) {
-		if (respGetSimpleString(&msg->reader, &msg->command)) {
-			respReadFree(&msg->reader);
-			return -1;
-		}
-	} else if (type == RESP_TYPE_SIMPLEERROR) {
-		if (respGetSimpleError(&msg->reader, &msg->error)) {
-			respReadFree(&msg->reader);
-			return -1;
-		}
-	} else if (type == RESP_TYPE_ARRAY) {
-		int64_t count;
+	if (name == NULL) {
+		fprintf(stderr, "Invalid JSON message received - No name\n");
+		return 1;
+	}
 
-		if (respGetArray(&msg->reader, &count)) {
-			respReadFree(&msg->reader);
-			return -1;
+	/* Handle error messages here */
+	if (strcasecmp(name, "error") == 0) {
+		char *err_msg;
+
+		if (JSONGetString(&object, &err_msg)) {
+			fprintf(stderr, "Got an error processing an error message from: %s\n", m->msg_cpy);
+			return 1;
 		}
 
-		/* Get command & version number */
+		m->error = strdup(err_msg);
+		return 0;
+	}
 
-		if (respGetSimpleString(&msg->reader, &msg->command)) {
-			respReadFree(&msg->reader);
-			return -1;
-		}
+	/* Get the next nested object */
+	char * cmd_object = JSONGetObject(&object);
 
-		if (respGetNum(&msg->reader, &msg->version)) {
-			respReadFree(&msg->reader);
-			return -1;
-		}
+	if (cmd_object == NULL) {
+		fprintf(stderr, "Invalid JSON message received - No object\n");
+		return 1;
+	}
 
-		/* Next up should be an array of map types containing fields */
-		if (load_fields(msg) < 0) {
-			respReadFree(&msg->reader);
-			return -1;
+	/* Work out what to do based on the name */
+
+	if (strcasecmp(name, "resp") == 0) {
+		m->command = name;
+		uppercasestring(m->command);
+
+		/* Responses should contain either a return code, or a version number and an data array of items */
+		while ((name = JSONGetName(&cmd_object)) != NULL) {
+			if (strcasecmp(name, "return_code") == 0) {
+				if (JSONGetString(&cmd_object, &m->command))
+					return 1;
+
+				/* Nothing else is expected when a return code is provided */
+				return 0;
+			}
+
+			if (strcasecmp(name, "version") == 0) {
+				if (JSONGetNum(&cmd_object, &m->version))
+					return 1;
+			} else if (strcasecmp(name, "data") == 0) {
+				/* "data" should be an array of items */
+				if (loadItemArray(&cmd_object, m))
+					return 1;
+			}
 		}
 	} else {
-		/* No clue what they sent us */
-		respReadFree(&msg->reader);
-		return -1;
+		/* This should be a command, which has a version number and fields object */
+		m->command = name;
+		uppercasestring(m->command);
+
+		while ((name = JSONGetName(&cmd_object)) != NULL) {
+			if (strcasecmp(name, "version") == 0) {
+				/* Consume the version */
+				if (JSONGetNum(&cmd_object, &m->version))
+					return 1;
+			} else if (strcasecmp(name, "fields") == 0) {
+				char *field_object = JSONGetObject(&cmd_object);
+
+				if (field_object == NULL)
+					return 1;
+
+				if (loadFields(field_object, m))
+					return 1;
+			}
+		}
 	}
 
 	return 0;
 }
 
-/* Initalise a new message */
+/* Load a JSON object into a msg structure */
+static int loadFields(char *obj, msg_t *m) {
+	char *name;
+	msg_item *item;
 
-int initMessage(resp_t * r, const char * resp_name, int version) {
-	if (respNew(r) != 0)
+	/* Allocate a new item structure if needed */
+	if (m->item_count == m->item_max) {
+		int64_t new_max = m->item_max ? m->item_max * 2 : 8;
+		m->items = realloc(m->items, sizeof(msg_item) * new_max);
+
+		if (m->items == NULL)
+			return 1;
+
+		m->item_max = new_max;
+	}
+
+	item = &m->items[m->item_count];
+	item->field_max = 0;
+	item->field_count = 0;
+	item->fields = NULL;
+
+	/* Load the fields in the item */
+	while ((name = JSONGetName(&obj)) != NULL) {
+		/* Allocate room for more fields if needed */
+		if (item->field_count == item->field_max) {
+			int64_t new_max = item->field_max ? item->field_max * 2 : 8;
+			item->fields = realloc (item->fields, sizeof(field) * new_max);
+
+			if (item->fields == NULL)
+				return 1;
+
+			item->field_max = new_max;
+		}
+
+		field *f = &item->fields[item->field_count++];
+		int field_number = fieldtonum(name);
+
+		if (field_number < 0) {
+			fprintf(stderr, "Invalid field received in command: %s\n", name);
+			return 1;
+		}
+
+		setField(m->items->bitmap, field_number);
+		f->number = field_number;
+		f->type = fields[field_number].type;
+		f->name = fields[field_number].name;
+
+		switch (fields[field_number].type) {
+			case FIELD_TYPE_NUM:
+				if (JSONGetNum(&obj, &f->value.number))
+					return 1;
+				break;
+
+			case FIELD_TYPE_BOOL:
+				if (JSONGetBool(&obj, &f->value.boolean))
+					return 1;
+				break;
+
+			case FIELD_TYPE_STRING:
+				if (JSONGetString(&obj, &f->value.string))
+					return 1;
+				break;
+
+			case FIELD_TYPE_STRINGARRAY:
+				if ((f->value.string_array.count = JSONGetStringArray(&obj, &f->value.string_array.strings)) < 0)
+					return 1;
+
+				break;
+
+			case FIELD_TYPE_MAP:
+				if ((f->value.map.count = JSONGetMap(&obj, &f->value.map.keys)) < 0)
+					return 1;
+
+				break;
+
+			default:
+				fprintf(stderr, "Invalid field type for field %s\n", name);
+				return 1;
+		}
+
+	}
+
+	m->item_count++;
+
+	return 0;
+}
+
+/* Load an array of items, advancing the json string */
+static int loadItemArray(char **json, msg_t *m) {
+	char *pos = *json;
+	char *obj = NULL;
+
+	pos = skipWhitespace(pos);
+
+	if (*pos != '[')
 		return 1;
 
-	respAddArray(r);
-	respAddSimpleString(r, resp_name);
-	respAddInt(r, version);
+	pos++; /* Consume the start of the array */
+
+	/* Each item is its own object */
+	while ((obj = JSONGetObject(&pos))) {
+		if (loadFields(obj, m))
+			return 1;
+
+		/* Consume up until the next object */
+		while (*pos != '\0' && *pos != ',' && *pos != ']') pos++;
+
+		if (*pos == ']')
+			break;
+
+		if (*pos == ',')
+			pos++;
+	}
+
+	pos++; /* Consume the end of the array */
+	*json = pos;
 
 	return 0;
 }
 
-void addIntField(resp_t * r, int field_no, int64_t value) {
-	respAddSimpleString(r, fields[field_no].name);
-	respAddInt(r, value);
+/* Initalise a new request */
+
+int initRequest(buff_t *b, const char *resp_name, int version) {
+	if (buffNew(b, 1024) != 0)
+		return 1;
+
+	JSONStart(b);
+	JSONStartObject(b, resp_name);
+	JSONAddInt(b, VERSION, version);
+	JSONStartObject(b, "fields");
+
+	return 0;
 }
 
-void addStringField(resp_t * r, int field_no, const char * value) {
-	respAddSimpleString(r, fields[field_no].name);
-	respAddBlobString(r, value, value ? strlen(value) : 0);
+int closeRequest(buff_t *b) {
+	JSONEndObject(b); /* Fields object */
+	JSONEndObject(b); /* Request object */
+	JSONEnd(b);
+
+	return 0;
 }
 
-void addBlobStringField(resp_t * r, int field_no, const char * value, size_t length) {
-	respAddSimpleString(r, fields[field_no].name);
-	respAddBlobString(r, value, value ? length : 0);
+int initNamedResponse(buff_t *b, const char *name, int version) {
+	if (buffNew(b, 1024) != 0)
+		return 1;
+
+	JSONStart(b);
+	JSONStartObject(b, name ? name : "resp");
+	JSONAddInt(b, VERSION, version);
+	JSONStartArray(b, "data");
+
+	return 0;
 }
 
-void addStringMapField(resp_t * r, int field_no, int count, const key_val_t * keys) {
-	respAddSimpleString(r, fields[field_no].name);
-	respAddMap(r);
-
-	for (int i = 0; i < count; i++) {
-		respAddBlobString(r, keys[i].key, strlen(keys[i].key));
-		respAddString(r, keys[i].value);
-	}
-
-	respCloseMap(r);
+/* Initalise a new reponse */
+int initResponse(buff_t *b, int version) {
+	return initNamedResponse(b, NULL, version);
 }
 
-void addBoolField(resp_t * r, int field_no, char value) {
-	respAddSimpleString(r, fields[field_no].name);
-	respAddBool(r, value);
-}
+int closeResponse(buff_t *b) {
+	JSONEndArray(b);  /* Data array */
+	JSONEndObject(b); /* Response object */
+	JSONEnd(b);
 
-void addStringArrayField(resp_t * r, int field_no, int count, char ** strings) {
-	respAddSimpleString(r, fields[field_no].name);
-	respAddStringArray(r, count, strings);
+	return 0;
 }

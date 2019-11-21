@@ -35,7 +35,6 @@
 
 #include "server.h"
 #include "comms.h"
-#include "resp.h"
 
 #include "client.h"
 #include "agent.h"

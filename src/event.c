@@ -70,17 +70,28 @@ void freeEvents(void) {
 
 void checkClientEvent(void) {
 	client * c = clientList;
-	int rc;
 
 	/* Check the connected clients for commands to action,
-	 * we can limit the amount of time we spend running command here.
-	 * If we action a command and the client has more data, reinitalise
-	 * the reader structure to run the next command */
+	 * we can limit the amount of time we spend running command here. */
 
 	while (c) {
-		rc = load_message(&c->msg, &c->request);
+		if (c->request.used == 0) {
+			c = c->next;
+			continue;
+		}
 
-		if (rc < 0) {
+		/* Check if the client has a full request to process */
+		char *nl = memchr(c->request.data, '\n', c->request.used);
+
+		if (nl == NULL) {
+			c = c->next;
+			continue;
+		}
+
+		*nl = '\0';
+		nl++;
+
+		if (load_message(c->request.data, &c->msg)) {
 			client * c_next = c->next;
 			print_msg(JERS_LOG_WARNING, "Failed to load client request, disconnecting them.");
 			handleClientDisconnect(c);
@@ -88,8 +99,10 @@ void checkClientEvent(void) {
 			continue;
 		}
 
-		if (rc == 0)
-			runCommand(c);
+		runCommand(c);
+
+		/* Remove the used data from the clients request stream */
+		buffRemove(&c->request, (size_t)(nl - c->request.data), 0);
 
 		c = c->next;
 	}
@@ -99,24 +112,35 @@ void checkAgentEvent(void) {
 	agent * a = agentList;
 
 	while (a) {
-		int rc = 0;
 		agent * a_next = a->next;
+		size_t consumed = 0;
+		char *p = a->requests.data;
 
-		while (rc == 0) {
-			rc = load_message(&a->msg, &a->requests);
+		while (1) {
+			char *nl = memchr(p, '\n', a->requests.used - consumed);
 
-			if (rc < 0) {
+			if (nl == NULL)
+				break;
+
+			*nl = '\0';
+			nl++;
+
+			size_t request_len = nl - p;
+
+			if (load_message(p, &a->msg)) {
 				print_msg(JERS_LOG_WARNING, "Failed to load agent message - Disconnecting them");
 				handleAgentDisconnect(a);
-				break;
+				break;		
 			}
 
-			if (rc == 0) {
-				if (runAgentCommand(a) != 0)
-					break;
-			}
+			if (runAgentCommand(a) != 0)
+				break;
+
+			consumed += request_len;
+			p += request_len;
 		}
 
+		buffRemove(&a->requests, consumed, 0);
 		a = a_next;
 	}
 }

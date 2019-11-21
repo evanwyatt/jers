@@ -34,6 +34,8 @@
 #include <server.h>
 #include <jers.h>
 
+#include <json.h>
+
 /* Create, validate and add a queue
  * Return: 0 = Success
  *         1 = validation failure
@@ -114,4 +116,32 @@ void markQueueStopped(agent *a) {
 			q->state &= ~JERS_QUEUE_FLAG_STARTED;
 		}
 	}
+}
+
+int queueToJSON(struct queue *q, buff_t *buff)
+{
+	JSONStart(buff);
+	JSONStartObject(buff, "QUEUE");
+
+	JSONAddString(buff, QUEUENAME, q->name);
+
+	if (q->desc)
+		JSONAddString(buff, DESC, q->desc);
+
+	JSONAddString(buff, NODE, q->host);
+	JSONAddInt(buff, JOBLIMIT, q->job_limit);
+	JSONAddInt(buff, STATE, q->state);
+	JSONAddInt(buff, PRIORITY, q->priority);
+	JSONAddBool(buff, DEFAULT, (server.defaultQueue == q));
+
+	JSONAddInt(buff, STATSRUNNING, q->stats.running);
+	JSONAddInt(buff, STATSPENDING, q->stats.pending);
+	JSONAddInt(buff, STATSHOLDING, q->stats.holding);
+	JSONAddInt(buff, STATSDEFERRED, q->stats.deferred);
+	JSONAddInt(buff, STATSCOMPLETED, q->stats.completed);
+	JSONAddInt(buff, STATSEXITED, q->stats.exited);
+
+	JSONEndObject(buff);
+	JSONEnd(buff);
+	return 0;
 }

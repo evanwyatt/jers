@@ -38,7 +38,6 @@
 
 #include "comms.h"
 #include "buffer.h"
-#include "resp.h"
 #include "fields.h"
 
 typedef struct _client {

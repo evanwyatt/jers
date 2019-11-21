@@ -117,7 +117,6 @@ void serverShutdown(void) {
 		close(c->connection.socket);
 		buffFree(&c->response);
 		buffFree(&c->request);
-		respReadFree(&c->msg.reader);
 		removeClient(c);
 		free(c);
 
@@ -131,7 +130,6 @@ void serverShutdown(void) {
 		close(a->connection.socket);
 		buffFree(&a->requests);
 		buffFree(&a->responses);
-		respReadFree(&a->msg.reader);
 		free(a->host);
 		free(a->nonce);
 		removeAgent(a);

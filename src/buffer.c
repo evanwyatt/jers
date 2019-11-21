@@ -116,12 +116,14 @@ int buffAdd(buff_t * b, const char * new_data, size_t data_size) {
 	return 0;
 }
 
+/* Add the data from a buffer to the this buffer */
+int buffAddBuff(buff_t *b, buff_t *new_data) {
+	return buffAdd(b, new_data->data, new_data->used);
+}
+
 /* Remove the data at start of the buffer of length 'data_size' if
  * its over a threshold */
 int buffRemove(buff_t * b, size_t data_size, int shrink) {
-	if (data_size < BUFF_USED_THRESHOLD)
-		return 0;
-
 	memmove(b->data, b->data + data_size, b->used - data_size);
 	b->used -= data_size;
 
@@ -131,7 +133,6 @@ int buffRemove(buff_t * b, size_t data_size, int shrink) {
 
 	return 1;
 }
-
 
 void buffClear(buff_t * b, size_t size) {
 	b->used = 0;

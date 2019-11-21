@@ -49,6 +49,7 @@ int buffResize(buff_t * b, size_t length);
 void buffShrink(buff_t * b, size_t min_size);
 
 int buffAdd(buff_t * b, const char * new_data, size_t data_size);
+int buffAddBuff(buff_t *b, buff_t *new_data);
 int buffRemove(buff_t * b, size_t data_size, int shrink);
 
 #endif

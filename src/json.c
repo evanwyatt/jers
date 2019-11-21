@@ -31,11 +31,10 @@
 #include <fields.h>
 #include <json.h>
 
-static int JSONStartObject(buff_t *buff, const char *name);
-static int JSONEndObject(buff_t *buff);
-static const char *JSONescapeString(const char *string);
+static const char *JSONescapeString(const char *string, size_t size);
 
-static int JSONAddInt(buff_t *buff, int field_no, int64_t value) {
+int JSONAddInt(buff_t *buff, int field_no, int64_t value)
+{
 	const char *field_name = getFieldName(field_no);
 	size_t name_len = strlen(field_name);
 
@@ -59,11 +58,17 @@ static int JSONAddInt(buff_t *buff, int field_no, int64_t value) {
 	return 0;
 }
 
-static int JSONAddString(buff_t *buff, int field_no, const char *value) {
+int JSONAddStringN(buff_t *buff, int field_no, const char *value, size_t value_len)
+{
 	const char *field_name = getFieldName(field_no);
 	size_t name_len = strlen(field_name);
-	value = value ? JSONescapeString(value) : value;
-	size_t value_len = value ? strlen(value) : 4; // 4 = null
+
+	if (value == NULL) {
+		value_len = 4; // 4 = null
+	} else {
+		value = JSONescapeString(value, value_len);
+		value_len = strlen(value);
+	}
 
 	/* Ensure we have room for '"field_name":"value",' */
 	size_t required = name_len + value_len + 6;
@@ -78,12 +83,15 @@ static int JSONAddString(buff_t *buff, int field_no, const char *value) {
 	p[len++] = '"';
 	p[len++] = ':';
 
-	if (value) {
+	if (value)
+	{
 		p[len++] = '"';
 		memcpy(p + len, value, value_len);
 		len += value_len;
 		p[len++] = '"';
-	} else {
+	}
+	else
+	{
 		memcpy(p + len, "null", 4);
 		len += 4;
 	}
@@ -95,7 +103,13 @@ static int JSONAddString(buff_t *buff, int field_no, const char *value) {
 	return 0;
 }
 
-static int JSONAddStringArray(buff_t *buff, int field_no, int64_t count, char **values) {
+int JSONAddString(buff_t *buff, int field_no, const char *value)
+{
+	return JSONAddStringN(buff, field_no, value, value ? strlen(value) : 0);
+}
+
+int JSONAddStringArray(buff_t *buff, int field_no, int64_t count, char **values)
+{
 	const char *field_name = getFieldName(field_no);
 	size_t name_len = strlen(field_name);
 	size_t required = name_len + 6;
@@ -117,15 +131,16 @@ static int JSONAddStringArray(buff_t *buff, int field_no, int64_t count, char **
 	p[len++] = '"';
 	p[len++] = ':';
 	p[len++] = '[';
-	
-	for (int64_t i = 0; i < count; i++) {
+
+	for (int64_t i = 0; i < count; i++)
+	{
 		size_t value_len = strlen(values[i]);
 
 		if (i != 0)
 			p[len++] = ',';
 
 		p[len++] = '"';
-		const char *escaped = JSONescapeString(values[i]);
+		const char *escaped = JSONescapeString(values[i], 0);
 		value_len = strlen(escaped);
 		memcpy(p + len, escaped, value_len);
 		len += value_len;
@@ -136,11 +151,12 @@ static int JSONAddStringArray(buff_t *buff, int field_no, int64_t count, char **
 	p[len++] = ',';
 
 	buff->used += len;
-	
+
 	return 0;
 }
 
-static int JSONAddBool(buff_t *buff, int field_no, int value) {
+int JSONAddBool(buff_t *buff, int field_no, int value)
+{
 	const char *field_name = getFieldName(field_no);
 	size_t name_len = strlen(field_name);
 	size_t required = name_len + 8;
@@ -164,13 +180,15 @@ static int JSONAddBool(buff_t *buff, int field_no, int value) {
 	return 0;
 }
 
-static int JSONAddMap(buff_t *buff, int field_no, int64_t count, key_val_t *values) {
+int JSONAddMap(buff_t *buff, int field_no, int64_t count, key_val_t *values)
+{
 	const char *field_name = getFieldName(field_no);
 	size_t required = 0;
 	size_t len = 0;
 
 	JSONStartObject(buff, field_name);
-	for (int64_t i = 0; i < count; i++) {
+	for (int64_t i = 0; i < count; i++)
+	{
 		required += strlen(values[i].key);
 		required += strlen(values[i].value);
 		required += 6;
@@ -179,7 +197,8 @@ static int JSONAddMap(buff_t *buff, int field_no, int64_t count, key_val_t *valu
 	buffResize(buff, required);
 	char *p = buff->data + buff->used;
 
-	for (int64_t i = 0; i < count; i++) {
+	for (int64_t i = 0; i < count; i++)
+	{
 		size_t key_len = strlen(values[i].key);
 		size_t value_len = strlen(values[i].value);
 		p[len++] = '"';
@@ -202,7 +221,46 @@ static int JSONAddMap(buff_t *buff, int field_no, int64_t count, key_val_t *valu
 	return 0;
 }
 
-static int JSONStartObject(buff_t *buff, const char *name) {
+int JSONStartObject(buff_t *buff, const char *name)
+{
+	int name_len = name ? strlen(name) : 0;
+	size_t required = name_len + 4;
+	char *p = buff->data + buff->used;
+	int len = 0;
+
+	buffResize(buff, required);
+
+	if (name) {
+		p[len++] = '"';
+		memcpy(p + len, name, name_len);
+		len += name_len;
+		p[len++] = '"';
+		p[len++] = ':';
+	}
+
+	p[len++] = '{';
+	buff->used += len;
+
+	return 0;
+}
+
+int JSONEndObject(buff_t *buff)
+{
+	if (*(buff->data + buff->used - 1) == ',')
+	{
+		*(buff->data + buff->used - 1) = '}';
+		buffAdd(buff, ",", 1);
+	}
+	else
+	{
+		buffAdd(buff, "},", 2);
+	}
+
+	return 0;
+}
+
+int JSONStartArray(buff_t *buff, const char *name)
+{
 	int name_len = strlen(name);
 	size_t required = name_len + 4;
 	char *p = buff->data + buff->used;
@@ -214,98 +272,95 @@ static int JSONStartObject(buff_t *buff, const char *name) {
 	len += name_len;
 	p[len++] = '"';
 	p[len++] = ':';
-	p[len++] = '{';
+	p[len++] = '[';
 	buff->used += len;
 
 	return 0;
 }
 
-static int JSONEndObject(buff_t *buff) {
-	if (*(buff->data + buff->used - 1) == ',') {
-		*(buff->data + buff->used -1 ) = '}';
+int JSONEndArray(buff_t *buff)
+{
+	if (*(buff->data + buff->used - 1) == ',')
+	{
+		*(buff->data + buff->used - 1) = ']';
 		buffAdd(buff, ",", 1);
-	} else {
-		buffAdd(buff, "},", 2);
+	}
+	else
+	{
+		buffAdd(buff, "],", 2);
 	}
 
 	return 0;
 }
 
-static int JSONStart(buff_t *buf) {
+int JSONStart(buff_t *buf)
+{
 	buffAdd(buf, "{", 1);
 	return 0;
 }
 
-static int JSONEnd(buff_t *buf) {
+int JSONEnd(buff_t *buf)
+{
 	/* Slight hack. We always append a ',' to the end of a field.
 	 * We can just replace this with the '}', then add the newline */
 
-	if (*(buf->data + buf->used - 1) == ',') {
-		*(buf->data + buf->used -1 ) = '}';
+	if (*(buf->data + buf->used - 1) == ',')
+	{
+		*(buf->data + buf->used - 1) = '}';
 		buffAdd(buf, "\n", 1);
-	} else {
+	}
+	else
+	{
 		buffAdd(buf, "}\n", 2);
 	}
 
 	return 0;
 }
 
-//HACK:
-static char ** _convertResourceToStrings(int res_count, struct jobResource * res) {
-	char ** res_strings = NULL;
-	int i;
-
-	res_strings = malloc(sizeof(char *) * res_count);
-
-
-	for (i = 0; i < res_count; i++) {
-		res_strings[i] = malloc(strlen(res[i].res->name) + 16);
-		sprintf(res_strings[i], "%s:%d", res[i].res->name, res[i].needed);
-	}
-
-	return res_strings; 
-}
-
-static const char * JSONescapeString(const char *string) {
-	static char * escaped = NULL;
+static const char *JSONescapeString(const char *string, size_t size)
+{
+	static char *escaped = NULL;
 	static size_t escaped_size = 0;
-	size_t string_length = strlen(string);
-	const char * temp = string;
-	char * dest;
+	size_t string_length = size == 0 ? strlen(string) : size;
+	const char *temp = string;
+	char *dest;
 
 	/* Assume we have to escape everything */
-	if (escaped_size <= string_length * 2 ) {
-		escaped_size = string_length *2;
+	if (escaped_size <= string_length * 2)
+	{
+		escaped_size = string_length * 2;
 		escaped = realloc(escaped, escaped_size);
 	}
 
 	dest = escaped;
 
-	while (*temp != '\0') {
-		switch (*temp) {
-			case '\\':
-				*dest++ = '\\';
-				*dest++ = '\\';
-				break;
+	while (*temp != '\0')
+	{
+		switch (*temp)
+		{
+		case '\\':
+			*dest++ = '\\';
+			*dest++ = '\\';
+			break;
 
-			case '\t':
-				*dest++ = '\\';
-				*dest++ = 't';
-				break;
+		case '\t':
+			*dest++ = '\\';
+			*dest++ = 't';
+			break;
 
-			case '\n':
-				*dest++ = '\\';
-				*dest++ = 'n';
-				break;
+		case '\n':
+			*dest++ = '\\';
+			*dest++ = 'n';
+			break;
 
-			case '"':
-				*dest++ = '\\';
-				*dest++ = '"';
-				break;
+		case '"':
+			*dest++ = '\\';
+			*dest++ = '"';
+			break;
 
-			default:
-				*dest++ = *temp;
-				break;
+		default:
+			*dest++ = *temp;
+			break;
 		}
 
 		temp++;
@@ -315,198 +370,322 @@ static const char * JSONescapeString(const char *string) {
 	return escaped;
 }
 
-/* Convert a JERS object to json */
-int jobToJSON(struct job *j, buff_t *buff) {
-	JSONStart(buff);
-	JSONStartObject(buff, "JOB");
+/* Modifies the string in place, unescaping certain characters */
+static void JSONunescapeString(char *string)
+{
+	char *temp = string;
+	char *dst = string;
+	int modified = 0;
 
-    JSONAddInt(buff, JOBID, j->jobid);
-    JSONAddString(buff, JOBNAME, j->jobname);
-    JSONAddString(buff, QUEUENAME, j->queue->name);
-    JSONAddInt(buff, STATE, j->state);
-    JSONAddInt(buff, UID, j->uid);
-    JSONAddInt(buff, SUBMITTER,j->submitter);
-    JSONAddInt(buff, PRIORITY, j->priority);
-    JSONAddInt(buff, SUBMITTIME, j->submit_time);
-    JSONAddInt(buff, NICE, j->nice);
-    JSONAddStringArray(buff, ARGS, j->argc, j->argv);
-    JSONAddString(buff, NODE, j->queue->host);
-    JSONAddString(buff, STDOUT, j->stdout);
-    JSONAddString(buff, STDERR, j->stderr);	
+	if (string == NULL)
+		return;
 
-	if (j->defer_time)
-		JSONAddInt(buff, DEFERTIME, j->defer_time);
+	while (*temp != '\0')
+	{
+		if (*temp != '\\')
+		{
+			if (modified)
+				*dst++ = *temp;
 
-	if (j->start_time)
-		JSONAddInt(buff, STARTTIME, j->start_time);
-
-	if (j->finish_time)
-		JSONAddInt(buff, FINISHTIME, j->finish_time);
-
-	if (j->tag_count)
-		JSONAddMap(buff, TAGS, j->tag_count, j->tags);
-
-	if (j->shell)
-		JSONAddString(buff, SHELL, j->shell);	
-
-	if (j->pre_cmd)
-		JSONAddString(buff, POSTCMD, j->pre_cmd);
-
-	if (j->post_cmd)
-		JSONAddString(buff, PRECMD, j->post_cmd);
-
-	if (j->res_count) {
-        char ** res_strings = _convertResourceToStrings(j->res_count, j->req_resources);
-        JSONAddStringArray(buff, RESOURCES, j->res_count, res_strings);
-
-        for (int i = 0; i < j->res_count; i++) {
-            free(res_strings[i]);
-        }
-
-        free(res_strings);
-	}
-
-	if (j->pid)
-		JSONAddInt(buff, JOBPID, j->pid);
-
-	JSONAddInt(buff, EXITCODE, j->exitcode);
-	JSONAddInt(buff, SIGNAL, j->signal);
-
-	if (j->pend_reason)
-		JSONAddInt(buff, PENDREASON, j->pend_reason);
-
-	if (j->fail_reason)
-		JSONAddInt(buff, FAILREASON, j->fail_reason);
-
-	JSONEndObject(buff);
-	JSONEnd(buff);
-
-	return 0;
-}
-
-
-int queueToJSON(struct queue *q, buff_t *buff) {
-	JSONStart(buff);
-	JSONStartObject(buff, "QUEUE");
-
-	JSONAddString(buff, QUEUENAME, q->name);
-
-	if (q->desc)
-		JSONAddString(buff, DESC, q->desc);
-
-	JSONAddString(buff, NODE, q->host);
-	JSONAddInt(buff, JOBLIMIT, q->job_limit);
-	JSONAddInt(buff, STATE, q->state);
-	JSONAddInt(buff, PRIORITY, q->priority);
-	JSONAddBool(buff, DEFAULT, (server.defaultQueue == q));
-
-	JSONAddInt(buff, STATSRUNNING, q->stats.running);
-	JSONAddInt(buff, STATSPENDING, q->stats.pending);
-	JSONAddInt(buff, STATSHOLDING, q->stats.holding);
-	JSONAddInt(buff, STATSDEFERRED, q->stats.deferred);
-	JSONAddInt(buff, STATSCOMPLETED, q->stats.completed);
-	JSONAddInt(buff, STATSEXITED, q->stats.exited);
-
-	JSONEndObject(buff);
-	JSONEnd(buff);
-	return 0;
-}
-
-
-int resourceToJSON(struct resource *r, buff_t *buff) {
-	JSONStart(buff);
-	JSONStartObject(buff, "RESOURCE");
-
-	JSONAddString(buff, RESNAME, r->name);
-	JSONAddInt(buff, RESCOUNT, r->count);
-	JSONAddInt(buff, RESINUSE, r->in_use);
-
-	JSONEndObject(buff);
-	JSONEnd(buff);
-	return 0;
-}
-
-/* Convert a Msg to JSON */
-
-int msgToJSON(struct journal_hdr *hdr, msg_t *msg, int64_t id, buff_t *buff) {
-	JSONStart(buff);
-	JSONStartObject(buff, msg->command);
-
-	/* Add in the header */
-	if (id)
-		JSONAddInt(buff, ACCT_ID, id);
-
-	if (hdr->jobid)
-		JSONAddInt(buff, JOBID, hdr->jobid);
-
-	JSONAddInt(buff, UID, hdr->uid);
-
-	JSONStartObject(buff, "FIELDS");
-
-	for (int64_t i = 0; i < msg->items[0].field_count; i++) {
-		switch(msg->items[0].fields[i].type) {
-			case RESP_TYPE_BLOBSTRING:
-				JSONAddString(buff, msg->items[0].fields[i].number, msg->items[0].fields[i].value.string.value);
-				break;
-			case RESP_TYPE_INT:
-				JSONAddInt(buff, msg->items[0].fields[i].number, msg->items[0].fields[i].value.number);
-				break;
-			case RESP_TYPE_BOOL:
-				JSONAddBool(buff, msg->items[0].fields[i].number, msg->items[0].fields[i].value.boolean);
-				break;
-
-			case RESP_TYPE_ARRAY:
-				JSONAddStringArray(buff, msg->items[0].fields[i].number, msg->items[0].fields[i].value.string_array.count, msg->items[0].fields[i].value.string_array.strings);
-				break;
-
-			case RESP_TYPE_MAP:
-				JSONAddMap(buff, msg->items[0].fields[i].number, msg->items[0].fields[i].value.map.count, msg->items[0].fields[i].value.map.keys);
-				break;
+			temp++;
+			continue;
 		}
+
+		if (*(temp + 1) == 'n')
+			*dst++ = '\n';
+		else if (*(temp + 1) == '\\')
+			*dst++ = '\\';
+		else if (*(temp + 1) == 't')
+			*dst++ = '\t';
+		else if (*(temp + 1) == '"')
+			*dst++ = '"';
+
+		modified = 1;
+		temp++;
 	}
 
-	JSONEndObject(buff);
-	JSONEndObject(buff);
-	JSONEnd(buff);
+	*dst = '\0';
+	return;
+}
+
+/* Return a pointer to after the opening of an object,
+ * null terminating the ending '}' */
+
+char *JSONGetObject(char **json) {
+	char *pos = *json;
+	char *start;
+	int i = 0;
+	int quoted = 0;
+
+	pos = skipWhitespace(pos);
+
+	if (*pos != '{')
+		return NULL;
+
+	pos++; /* Consume the '{' */
+	start = pos;
+
+	/* Find the trailing '}'
+	 * Allow for {} characters embedded in quotes */
+	while (*pos != '\0') {
+		switch (*pos) {
+			case '"':
+				// Was it escaped?
+				if (*(pos -1) == '\\')
+					break;
+
+				quoted ^= 1; // Flip quoted flag
+				break;
+
+			case '{':
+				if (!quoted)
+					i++;
+				break;
+
+			case '}':
+				if (!quoted && i-- == 0)
+					break;
+		}
+
+		if (i < 0)
+			break;
+
+		pos++;
+	}
+
+	if (*pos != '}')
+		return NULL;
+
+	*pos = '\0';
+	pos++;
+
+	*json = pos;
+	return start;
+}
+
+/* Get and consume a JSON name, positioning the stream after the ':'
+ * We might be at the end of a token, so we'll need to skip whitespace
+ * and commas. */
+char *JSONGetName(char **json) {
+	char *name;
+	char *pos = *json;
+	pos = skipChars(pos, " \t,]}");
+
+	if (JSONGetString(&pos, &name))
+		return NULL;
+
+	pos = skipChars(pos, " \t:");
+
+	*json = pos;
+	return name;
+}
+
+int JSONGetString(char **json, char **value) {
+	char *string;
+	char *pos = *json;
+	char *dst = NULL;
+	int modifying = 0;
+
+	pos = skipWhitespace(pos);
+
+	*value = NULL;
+
+	if (*pos != '"') {
+		/* Check if this is a null string */
+		if (strncmp(pos, "null", 4) == 0) {
+			*value = NULL;
+			pos += 4;
+			return 0;
+		}
+
+		return 1;
+	}
+
+	pos++; // Consume the "
+	string = dst = pos;
+
+	/* Find the closing quote, unescaping the string along the way,
+	 * allowing for \" sequences */
+	while (*pos != '\0') {
+		if (*pos == '\\') {
+			/* Escape sequence */
+			pos++; /* Skip the \ */
+			if (*pos == '\0')
+				break;
+
+			switch (*pos) {
+				case '"': *dst++ = '"'; break;
+				case '\\': *dst++ = '\\'; break;
+				case 't': *dst++ = '\t'; break;
+				case 'n': *dst++ = '\t'; break;
+			}
+
+			modifying = 1;
+			pos++; /* Skip the next character */
+			continue;
+		}
+
+		if (*pos == '"')
+			break;
+
+		if (modifying)
+			*dst++ = *pos;
+
+		pos++;
+	}
+
+	if (*pos != '"')
+		return 1;
+
+	/* NULL terminate and update the position in the provided string */
+	*dst = '\0';
+	*json = ++pos;
+	*value = string;
+
+	//JSONunescapeString(string);
 	return 0;
 }
 
-#ifdef _MAIN
-int main (int argc, char *argv[]) {
-	printf("Testing JSON...\n");
+static inline int64_t strtoint64(const char *str, int64_t *result) {
+	/* Given str, read in an int64_t, returning the number of bytes read */
+	*result = 0;
+	char neg = 0;
+	const char *pos = str;
 
-	buff_t buff;
-	buffNew(&buff, 1);
+	if (*pos == '-') {
+		neg = 1;
+		pos++;
+	}
 
-	JSONStart(&buff);
+	while (*pos != '\0') {
+		if (*pos < '0' || *pos > '9')
+			break;
 
-	JSONAddInt(&buff, JOBID, 1234);
-	JSONAddString(&buff,JOBNAME, "Test batch job");
-	JSONAddBool(&buff, HOLD, 1);
-	char *args[] = {"arg1", "arg2", "arg t h r e e"};
-	JSONAddStringArray(&buff, ARGS, 3, args);
+		*result = (*result * 10) + *pos - '0';
+		pos++;
+	}
 
-	JSONStartObject(&buff, "FIELDS");
+	if (neg)
+		*result = -(*result);
 
-	JSONAddInt(&buff, JOBPID, 1111111);
-	JSONAddString(&buff, DESC, "My desc here");
+	return pos - str;
+}
 
-	JSONAddBool(&buff, STATE, 0);
+int JSONGetNum(char **json, int64_t *value) {
+	char *pos = *json;
 
-	key_val_t map[] = {{"key1", "value"},{"key 2", "V A L U E"}};
-	JSONAddMap(&buff, TAGS, 2, map);
-
-	JSONAddBool(&buff, RESTART, 1);
-
-
-	JSONEndObject(&buff);
-	JSONEnd(&buff);
-
-	printf("Result: %.*s\n", buff.used, buff.data);
-
-	buffFree(&buff);
+	pos = skipWhitespace(pos);
+	pos += strtoint64(pos, value);
+	*json = pos;
 
 	return 0;
 }
 
-#endif
+int JSONGetBool(char **json, char *value) {
+	char *pos = *json;
+	pos = skipWhitespace(pos);
+
+	if (strncmp(pos, "true", 4) == 0) {
+		*value = 1;
+		pos += 4;
+	}
+	else if (strncmp(pos, "false", 5) == 0) {
+		*value = 0;
+		pos += 5;
+	}
+	else
+		return 1;
+
+	*json = pos;
+
+	return 0;
+}
+
+int64_t JSONGetStringArray(char **json, char ***strings) {
+	int64_t count = 0;
+	int64_t max_strings = 8;
+	char *pos = *json;
+	char *str;
+
+	/* Find the start and sanity check there is an end */
+	pos = skipWhitespace(pos);
+
+	if (*pos != '[')
+		return -1;
+
+	pos++; /* Consume the '[' */
+
+	*strings = malloc(sizeof(char *) * max_strings);
+
+	if (*strings == NULL)
+		return -1;
+
+	while (JSONGetString(&pos, &str) == 0) {
+		/* Resize if needed */
+		if (count >= max_strings) {
+			*strings = realloc(*strings, sizeof(char *) * (max_strings *= 2));
+
+			if (*strings == NULL)
+				return -1;
+		}
+
+		(*strings)[count++] = str;
+
+		/* Consume up until the next string */
+		while (*pos != '\0' && *pos != ',' && *pos != ']') pos++;
+
+		if (*pos == ']')
+			break;
+
+		if (*pos == ',')
+			pos++;
+	}
+
+	pos++; /* Consume the ']' */
+	*json = pos;
+
+	return count;
+}
+
+int64_t JSONGetMap(char **json, key_val_t **map) {
+	char *map_object;
+	char *pos = *json;
+	char *name;
+	int64_t count = 0;
+	int64_t max_keys = 8;
+
+	/* A Map is object with key/values */
+	map_object = JSONGetObject(&pos);
+
+	if (map_object == NULL)
+		return -1;
+
+	/* Guess about how many object we will have */
+	*map = malloc(sizeof(key_val_t) * max_keys);
+
+	if (*map == NULL)
+		return -1;
+
+	while ((name = JSONGetName(&map_object)) != NULL) {
+		char *value;
+
+		if (JSONGetString(&map_object, &value))
+			return -1;
+
+		if (count >= max_keys) {
+			*map = realloc(*map, sizeof(key_val_t) * (max_keys *= 2));
+
+			if (*map == NULL)
+				return -1;
+		}
+
+		(*map)[count].key = name;
+		(*map)[count].value = value;
+
+		count++;
+	}
+
+	*json = pos;
+
+	return count;
+}

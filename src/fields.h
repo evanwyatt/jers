@@ -30,57 +30,52 @@
 #define _FIELDS_H
 
 #include <jers.h>
-#include <resp.h>
 #include <buffer.h>
 
 typedef struct {
-	char * key;
-	char * value;
+	char *key;
+	char *value;
 } key_val_t;
 
 typedef struct {
 	int number;
 	int type;
-	const char * name;
+	const char *name;
 
 	union {
-		struct {
-			char * value;
-			int64_t length;
-		} string;
+		/* FIELD_TYPE_STRING */
+		char *string;
+
+		/* FIELD_TYPE_NUM */
 		int64_t number;
+
+		/* FIELD_TYPE_BOOL */
 		char boolean;
 
+		/* FIELD_TYPE_STRINGARRAY */
 		struct {
 			int64_t count;
-			char ** strings;
+			char **strings;
 		} string_array;
 
+		/* FIELD_TYPE_MAP */
 		struct {
 			int64_t count;
-			key_val_t * keys;
+			key_val_t *keys;
 		} map;
 	} value;
 } field;
 
-typedef struct {
-	unsigned char bitmap[64];	/* Bitmap of fields that have been set */
-	int64_t field_count;		/* Number of fields set in 'fields' */
-	field * fields;				/* Fields in message */
-} msg_item;
+enum field_types {
+	FIELD_TYPE_BOOL = 1,
+	FIELD_TYPE_STRING,
+	FIELD_TYPE_NUM,
+	FIELD_TYPE_STRINGARRAY,
+	FIELD_TYPE_MAP,
 
-typedef struct {
-	resp_read_t reader;
-	char * command;
-	char * error;
-	int64_t version;
-	int64_t item_count;
-	msg_item * items;
+	FIELD_TYPE_NONE = 100
+};
 
-	/* These fields are filled in by a command so that it can be saved in the transaction journal */
-	jobid_t jobid;
-	int64_t revision;
-} msg_t;
 
 enum field_type {
 	JOBID = 0,
@@ -165,18 +160,43 @@ enum field_type {
 	PROXYDATA,
 
 	ACCT_ID,
+	ERROR,
+	RETURNCODE,
+	VERSION,
+	JOBS,
 
 	ENDOFFIELDS
 };
+
+typedef struct {
+	unsigned char bitmap[64];	/* Bitmap of fields that have been set */
+	int64_t field_count;		/* Number of fields set in 'fields' */
+	int64_t field_max;
+	field *fields;	/* Fields in message */
+} msg_item;
+
+typedef struct {
+	char *command;
+	char *error;
+	int64_t version;
+	int64_t item_count;
+	int64_t item_max;
+	msg_item *items;
+
+	char *msg_cpy;
+
+	/* These fields are filled in by a command so that it can be saved in the transaction journal */
+	jobid_t jobid;
+	int64_t revision;
+} msg_t;
+
 void sortfields(void);
 void freeSortedFields(void);
 
 const char *getFieldName(int field_no);
 
-int load_message(msg_t * msg, buff_t * buff);
+int load_message(char *json, msg_t *m);
 void free_message(msg_t * msg);
-int initMessage(resp_t * r, const char * resp_name, int version);
-
 int fieldtonum(const char * in);
 
 int isFieldSet(unsigned char * bitmap, int field_no);
@@ -185,18 +205,26 @@ int setIntField(field * f, int field_no, int64_t value);
 void freeStringArray(int count, char *** array);
 void freeStringMap(int count, key_val_t ** keys);
 
+char * getStringField(field * f);
+int64_t getNumberField(field * f);
+char getBoolField(field *f);
+int64_t getStringArrayField(field *f, char *** array);
+int64_t getStringMapField(field * f, key_val_t ** array);
+
+
+int initRequest(buff_t *b, const char *resp_name, int version);
+int initResponse(buff_t *b, int version);
+int initNamedResponse(buff_t *b, const char *name, int version);
+int closeRequest(buff_t *b);
+int closeResponse(buff_t *b);
+
+/*
 void addIntField(resp_t * r, int field_no, int64_t value);
 void addStringField(resp_t * r, int field_no, const char * value);
 void addBoolField(resp_t * r, int field_no, char value);
 void addStringArrayField(resp_t * r, int field_no, int count, char ** strings);
 void addStringMapField(resp_t * r, int field_no, int count, const key_val_t * keys);
 void addBlobStringField(resp_t * r, int field_no, const char * value, size_t length);
+*/
 
-
-char * getStringField(field * f);
-char * getBlobStringField(field *f, size_t *length);
-int64_t getNumberField(field * f);
-char getBoolField(field *f);
-int64_t getStringArrayField(field *f, char *** array);
-int64_t getStringMapField(field * f, key_val_t ** array);
 #endif

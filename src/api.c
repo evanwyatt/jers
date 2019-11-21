@@ -39,7 +39,7 @@
 #include <sys/time.h>
 
 #include <jers.h>
-#include <resp.h>
+#include <json.h>
 #include <fields.h>
 #include <buffer.h>
 #include <commands.h>
@@ -47,6 +47,7 @@
 #define JERS_EXPORT __attribute__((visibility("default")))
 
 #define DEFAULT_CLIENT_TIMEOUT 60 // seconds
+#define DEFAULT_REQUEST_SIZE 1024
 
 JERS_EXPORT int jers_errno = JERS_ERR_OK;
 char * jers_err_string = NULL;
@@ -91,7 +92,7 @@ static int customInit(const char * custom_config) {
 }
 
 static int defaultInit(void) {
-	socket_path[0] = "/run/jers/jers.sock";
+	socket_path[0] = "/run/jers/jers.sock_";
 	socket_path[1] = "/run/jers/proxy.sock";
 
 	return 0;
@@ -123,8 +124,6 @@ JERS_EXPORT int jersInitAPI(const char * custom_config) {
 	}
 
 	buffNew(&response, 0);
-	respReadInit(&msg.reader, NULL, 0);
-
 	initalised = 1;
 
 	return rc;
@@ -133,8 +132,6 @@ JERS_EXPORT int jersInitAPI(const char * custom_config) {
 JERS_EXPORT void jersFinish(void) {
 	close(fd);
 	free_message(&msg);
-	respReadFree(&msg.reader);
-
 	buffFree(&response);
 
 	initalised = 0;
@@ -161,11 +158,12 @@ static int jersConnect(void) {
 
 		strncpy(addr.sun_path, socket_path[i], sizeof(addr.sun_path));
 		addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
-
+		printf("Trying: %s\n", socket_path[i]);
 		if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1)
 			continue;
 
 		status = 0;
+		printf("Connected to: %s\n", socket_path[i]);
 		break;
 	}
 
@@ -186,19 +184,17 @@ static int jersConnect(void) {
 }
 
 /* Block until the entire request is sent */
-static int sendRequest(resp_t * r) {
+static int sendRequest(buff_t *b) {
 	size_t total_sent = 0;
-	size_t length = 0;
-	char * request = NULL;
+	size_t length;
+	char *request;
 
-        respCloseMap(r);
-        respCloseArray(r);
+	JSONEndObject(b);
+	JSONEndObject(b);
+	JSONEnd(b);
 
-        request = respFinish(r, &length);
-
-	if (request == NULL) {
-		return 1;
-	}
+	length = b->used;
+	request = b->data;
 
 	while (total_sent < length) {
 		ssize_t sent = send(fd, request + total_sent, length - total_sent, MSG_NOSIGNAL);
@@ -206,27 +202,14 @@ static int sendRequest(resp_t * r) {
 		if (sent == -1 && errno != EINTR) {
 			setJersErrno(JERS_ERR_ESEND, strerror(errno));
 			fprintf(stderr, "send to jers daemon failed: %s\n", strerror(errno));
-			free(request);
+			buffFree(b);
 			return 1;
 		}
 
 		total_sent += sent;
 	}
 
-	free(request);
-
-	return 0;
-}
-
-/* Initalise a new request */
-
-static int initRequest(resp_t * r, char * cmd, int version) {
-	respNew(r);
-
-	respAddArray(r);
-	respAddSimpleString(r, cmd);
-	respAddInt(r, version);
-	respAddMap(r);
+	buffFree(b);
 
 	return 0;
 }
@@ -257,18 +240,25 @@ static int readResponse(void) {
 		}
 		response.used += bytes_read;
 
-		/* Got a full response yet? */
-		int rc = load_message(&msg, &response);
+		/* Got a full message yet? */
+		char *nl = memchr(response.data, '\n', response.used);
 
-		if (rc == 1)
+		if (nl == NULL)
 			continue;
 
-		if (rc < 0) {
+		/* Try and process the request */
+		*nl = '\0';
+		nl++;
+
+		if (load_message(response.data, &msg)) {
 			setJersErrno(JERS_ERR_INVRESP, NULL);
 			fprintf(stderr, "Failed to parse response from jers daemon\n");
 			free_message(&msg);
 			return 1;
 		}
+
+		/* Remove the request from the buffer */
+		buffRemove(&response, nl - response.data, 0);
 
 		break;
 	}
@@ -439,42 +429,42 @@ JERS_EXPORT int jersGetJob(jobid_t jobid, const jersJobFilter * filter, jersJobI
 	job_info->count = 0;
 	job_info->jobs = NULL;
 
-	resp_t r;
+	buff_t b;
 
-	initRequest(&r, CMD_GET_JOB, 1);
+	initRequest(&b, CMD_GET_JOB, 1);
 
 	if (jobid) {
-		addIntField(&r, JOBID, jobid);
+		JSONAddInt(&b, JOBID, jobid);
 	} else if (filter) {
 		if (filter->filter_fields) {
 
 			if (filter->filter_fields & JERS_FILTER_JOBNAME)
-				addStringField(&r, JOBNAME, filter->filters.job_name);
+				JSONAddString(&b, JOBNAME, filter->filters.job_name);
 
 			if (filter->filter_fields & JERS_FILTER_QUEUE)
-				addStringField(&r, QUEUENAME, filter->filters.queue_name);
+				JSONAddString(&b, QUEUENAME, filter->filters.queue_name);
 
 			if (filter->filter_fields & JERS_FILTER_STATE)
-				addIntField(&r, STATE, filter->filters.state);
+				JSONAddInt(&b, STATE, filter->filters.state);
 
 			if (filter->filter_fields & JERS_FILTER_TAGS)
-				addStringMapField(&r, TAGS, filter->filters.tag_count, (key_val_t *)filter->filters.tags);
+				JSONAddMap(&b, TAGS, filter->filters.tag_count, (key_val_t *)filter->filters.tags);
 
 			if (filter->filter_fields & JERS_FILTER_RESOURCES)
-				addStringArrayField(&r, RESOURCES, filter->filters.res_count, filter->filters.resources);
+				JSONAddStringArray(&b, RESOURCES, filter->filters.res_count, filter->filters.resources);
 
 			if (filter->filter_fields & JERS_FILTER_UID)
-				addIntField(&r, UID, filter->filters.uid);
+				JSONAddInt(&b, UID, filter->filters.uid);
 
 			if (filter->filter_fields & JERS_FILTER_SUBMITTER)
-				addIntField(&r, SUBMITTER, filter->filters.submitter);
+				JSONAddInt(&b, SUBMITTER, filter->filters.submitter);
 		}
 
 		if (filter->return_fields)
-			addIntField(&r, RETFIELDS, filter->return_fields);
+			JSONAddInt(&b, RETFIELDS, filter->return_fields);
 	}
 
-	if (sendRequest(&r))
+	if (sendRequest(&b))
 		return 1;
 
 	if (readResponse())
@@ -500,13 +490,13 @@ JERS_EXPORT int jersDelJob(jobid_t jobid) {
 	if (jersInitAPI(NULL))
 		return 1;
 
-	resp_t r;
+	buff_t b;
 
-	initRequest(&r, CMD_DEL_JOB, 1);
+	initRequest(&b, CMD_DEL_JOB, 1);
 
-	addIntField(&r, JOBID, jobid);
+	JSONAddInt(&b, JOBID, jobid);
 
-	if (sendRequest(&r))
+	if (sendRequest(&b))
 		return 1;
 
 	if (readResponse())
@@ -545,79 +535,71 @@ JERS_EXPORT jobid_t jersAddJob(const jersJobAdd * j) {
 		return 0;
 	}
 
-	resp_t r;
-	initRequest(&r, CMD_ADD_JOB, 1);
+	buff_t b;
+	initRequest(&b, CMD_ADD_JOB, 1);
 
-	addStringArrayField(&r, ARGS, j->argc, j->argv);
+	JSONAddStringArray(&b, ARGS, j->argc, j->argv);
 
 	if (j->name)
-		addStringField(&r, JOBNAME, j->name);
+		JSONAddString(&b, JOBNAME, j->name);
 
 	if (j->queue)
-		addStringField(&r, QUEUENAME, j->queue);
+		JSONAddString(&b, QUEUENAME, j->queue);
 
 	if (j->uid > 0)
-		addIntField(&r, UID, j->uid);
+		JSONAddInt(&b, UID, j->uid);
 
 	if (j->shell)
-		addStringField(&r, SHELL, j->shell);
+		JSONAddString(&b, SHELL, j->shell);
 
 	if (j->priority >= 0)
-		addIntField(&r, PRIORITY, j->priority);
+		JSONAddInt(&b, PRIORITY, j->priority);
 
 	if (j->hold)
-		addBoolField(&r, HOLD, 1);
+		JSONAddBool(&b, HOLD, 1);
 
-	if (j->nice) {
-		addIntField(&r, NICE, j->nice);
-	}
+	if (j->nice)
+		JSONAddInt(&b, NICE, j->nice);
 
-	if (j->tag_count) {
-		addStringMapField(&r, TAGS, j->tag_count, (key_val_t *)j->tags);
-	}
+	if (j->tag_count)
+		JSONAddMap(&b, TAGS, j->tag_count, (key_val_t *)j->tags);
 
-	if (j->res_count) {
-		addStringArrayField(&r, RESOURCES, j->res_count, j->resources);
-	}
+	if (j->res_count)
+		JSONAddStringArray(&b, RESOURCES, j->res_count, j->resources);
 
-	if (j->env_count) {
-		addStringArrayField(&r, ENVS, j->env_count, j->envs);
-	}
+	if (j->env_count)
+		JSONAddStringArray(&b, ENVS, j->env_count, j->envs);
 
-	if (j->jobid) {
-		addIntField(&r, JOBID, j->jobid);
-	}
+	if (j->jobid)
+		JSONAddInt(&b, JOBID, j->jobid);
 
 	if (j->wrapper) {
-		addStringField(&r, WRAPPER, j->wrapper);
+		JSONAddString(&b, WRAPPER, j->wrapper);
 	} else {
-		if (j->pre_cmd) {
-			addStringField(&r, PRECMD, j->pre_cmd);
-		}
+		if (j->pre_cmd)
+			JSONAddString(&b, PRECMD, j->pre_cmd);
 
-		if (j->post_cmd) {
-			addStringField(&r, POSTCMD, j->post_cmd);
-		}
+		if (j->post_cmd)
+			JSONAddString(&b, POSTCMD, j->post_cmd);
 	}
 
 	if (j->stdout)
-		addStringField(&r, STDOUT, j->stdout);
+		JSONAddString(&b, STDOUT, j->stdout);
 
 	if (j->stderr)
-		addStringField(&r, STDERR, j->stderr);
+		JSONAddString(&b, STDERR, j->stderr);
 
 	if (j->defer_time != -1)
-		addIntField(&r, DEFERTIME, j->defer_time);
+		JSONAddInt(&b, DEFERTIME, j->defer_time);
 
-	if (sendRequest(&r)) {
+	if (sendRequest(&b))
 		return 0;
-	}
 
 	if(readResponse())
 		return 0;
 
 	/* Should just have a single JOBID field returned */
-	if (msg.item_count != 1 || msg.items[0].field_count != 1 || msg.items[0].fields[0].type != RESP_TYPE_INT) {
+	if (msg.item_count != 1 || msg.items[0].field_count != 1 || msg.items[0].fields[0].number != JOBID) {
 		setJersErrno(JERS_ERR_INVRESP, NULL);
 		return 0;
 	}
@@ -645,46 +627,45 @@ JERS_EXPORT int jersModJob(const jersJobMod *j) {
 		return 1;
 	}
 
-	resp_t r;
+	buff_t b;
+	initRequest(&b, CMD_MOD_JOB, 1);
 
-	initRequest(&r, CMD_MOD_JOB, 1);
-
-	addIntField(&r, JOBID, j->jobid);
+	JSONAddInt(&b, JOBID, j->jobid);
 
 	if (j->name)
-		addStringField(&r, JOBNAME, j->name);
+		JSONAddString(&b, JOBNAME, j->name);
 
 	if (j->queue)
-		addStringField(&r, QUEUENAME, j->queue);
+		JSONAddString(&b, QUEUENAME, j->queue);
 
 	if (j->defer_time != -1)
-		addIntField(&r, DEFERTIME, j->defer_time);
+		JSONAddInt(&b, DEFERTIME, j->defer_time);
 
 	if (j->restart)
-		addBoolField(&r, RESTART, 1);
+		JSONAddBool(&b, RESTART, 1);
 
 	if (j->nice != -1)
-		addIntField(&r, NICE, j->nice);
+		JSONAddInt(&b, NICE, j->nice);
 
 	if (j->priority != -1)
-		addIntField(&r, PRIORITY, j->priority);
+		JSONAddInt(&b, PRIORITY, j->priority);
 
 	if (j->hold != -1)
-		addBoolField(&r, HOLD, j->hold);
+		JSONAddBool(&b, HOLD, j->hold);
 
 	if (j->env_count)
-		addStringArrayField(&r, ENVS, j->env_count, j->envs);
+		JSONAddStringArray(&b, ENVS, j->env_count, j->envs);
 
 	if (j->tag_count)
-		addStringMapField(&r, TAGS, j->tag_count, (key_val_t *)j->tags);
+		JSONAddMap(&b, TAGS, j->tag_count, (key_val_t *)j->tags);
 
 	if (j->res_count)
-		addStringArrayField(&r, RESOURCES, j->res_count, j->resources);
+		JSONAddStringArray(&b, RESOURCES, j->res_count, j->resources);
 
 	if (j->clear_resources)
-		addBoolField(&r, CLEARRES, 1);
+		JSONAddBool(&b, CLEARRES, 1);
 
-	if (sendRequest(&r)) {
+	if (sendRequest(&b)) {
 		return 1;
 	}
 
@@ -712,19 +693,19 @@ JERS_EXPORT int jersSignalJob(jobid_t id, int signum) {
 	}
 
 	/* Serialise the request */
-	resp_t r;
+	buff_t b;
 
-	initRequest(&r, CMD_SIG_JOB, 1);
+	initRequest(&b, CMD_SIG_JOB, 1);
 
-	addIntField(&r, JOBID, id);
-	addIntField(&r, SIGNAL, signum);
+	JSONAddInt(&b, JOBID, id);
+	JSONAddInt(&b, SIGNAL, signum);
 
-	if (sendRequest(&r))
+	if (sendRequest(&b))
 		return 1;
 
 	if(readResponse())
 		return 1;
-
+printf("msg.command: %s\n", msg.command);
 	if (msg.command && strcmp(msg.command, "0") == 0)
 		status = 0;
 
@@ -765,16 +746,16 @@ JERS_EXPORT int jersGetQueue(const char * name, const jersQueueFilter * filter, 
 	info->count = 0;
 	info->queues = NULL;
 
-	resp_t r;
+	buff_t b;
 
-	initRequest(&r, CMD_GET_QUEUE, 1);
+	initRequest(&b, CMD_GET_QUEUE, 1);
 
 	if (name)
-		addStringField(&r, QUEUENAME, name);
+		JSONAddString(&b, QUEUENAME, name);
 	else
-		addStringField(&r, QUEUENAME, "*");
+		JSONAddString(&b, QUEUENAME, "*");
 
-	if (sendRequest(&r))
+	if (sendRequest(&b))
 		return 1;
 
 	if(readResponse())
@@ -825,29 +806,29 @@ JERS_EXPORT int jersAddQueue(const jersQueueAdd *q) {
 		return 1;
 	}
 
-	resp_t r;
+	buff_t b;
 
-	initRequest(&r, CMD_ADD_QUEUE, 1);
+	initRequest(&b, CMD_ADD_QUEUE, 1);
 
-	addStringField(&r, QUEUENAME, q->name);
-	addStringField(&r, NODE, q->node);
+	JSONAddString(&b, QUEUENAME, q->name);
+	JSONAddString(&b, NODE, q->node);
 
 	if (q->desc)
-		addStringField(&r, DESC, q->desc);
+		JSONAddString(&b, DESC, q->desc);
 
 	if (q->job_limit != -1)
-		addIntField(&r, JOBLIMIT, q->job_limit);
+		JSONAddInt(&b, JOBLIMIT, q->job_limit);
 
 	if (q->priority != -1)
-		addIntField(&r, PRIORITY, q->priority);
+		JSONAddInt(&b, PRIORITY, q->priority);
 
 	if (q->state != -1)
-		addIntField(&r, STATE, q->state);
+		JSONAddInt(&b, STATE, q->state);
 
 	if (q->default_queue != -1)
-		addBoolField(&r, DEFAULT, q->default_queue);
+		JSONAddBool(&b, DEFAULT, q->default_queue);
 
-	if (sendRequest(&r))
+	if (sendRequest(&b))
 		return 1;
 
 	if(readResponse())
@@ -872,31 +853,31 @@ JERS_EXPORT int jersModQueue(const jersQueueMod *q) {
 		return 1;
 	}
 
-	resp_t r;
+	buff_t b;
 
-	initRequest(&r, CMD_MOD_QUEUE, 1);
+	initRequest(&b, CMD_MOD_QUEUE, 1);
 
-	addStringField(&r, QUEUENAME, q->name);
+	JSONAddString(&b, QUEUENAME, q->name);
 
 	if (q->node)
-		addStringField(&r, NODE, q->node);
+		JSONAddString(&b, NODE, q->node);
 
 	if (q->desc)
-		addStringField(&r, DESC, q->desc);
+		JSONAddString(&b, DESC, q->desc);
 
 	if (q->job_limit != -1)
-		addIntField(&r, JOBLIMIT, q->job_limit);
+		JSONAddInt(&b, JOBLIMIT, q->job_limit);
 
 	if (q->priority != -1)
-		addIntField(&r, PRIORITY, q->priority);
+		JSONAddInt(&b, PRIORITY, q->priority);
 
 	if (q->state != -1)
-		addIntField(&r, STATE, q->state);
+		JSONAddInt(&b, STATE, q->state);
 
 	if (q->default_queue != -1)
-		addBoolField(&r, DEFAULT, q->default_queue);
+		JSONAddBool(&b, DEFAULT, q->default_queue);
 
-	if (sendRequest(&r))
+	if (sendRequest(&b))
 		return 1;
 
 	if(readResponse())
@@ -911,13 +892,13 @@ JERS_EXPORT int jersDelQueue(const char *name) {
 	if (jersInitAPI(NULL))
 		return 1;
 
-	resp_t r;
+	buff_t b;
 
-	initRequest(&r, CMD_DEL_QUEUE, 1);
+	initRequest(&b, CMD_DEL_QUEUE, 1);
 
-	addStringField(&r, QUEUENAME, name);
+	JSONAddString(&b, QUEUENAME, name);
 
-	if (sendRequest(&r))
+	if (sendRequest(&b))
 		return 1;
 
 	if (readResponse())
@@ -937,16 +918,16 @@ JERS_EXPORT int jersAddResource(const char *name, int count) {
 		return 1;
 	}
 
-	resp_t r;
+	buff_t b;
 	
-	initRequest(&r, CMD_ADD_RESOURCE, 1);
+	initRequest(&b, CMD_ADD_RESOURCE, 1);
 
-	addStringField(&r, RESNAME, name);
+	JSONAddString(&b, RESNAME, name);
 
 	if (count)
-		addIntField(&r, RESCOUNT, count);
+		JSONAddInt(&b, RESCOUNT, count);
 
-	if (sendRequest(&r))
+	if (sendRequest(&b))
 		return 1;
 
 	if (readResponse())
@@ -965,16 +946,16 @@ JERS_EXPORT int jersGetResource(const char * name, const jersResourceFilter *fil
 	info->count = 0;
 	info->resources = NULL;
 
-	resp_t r;
+	buff_t b;
 
-	initRequest(&r, CMD_GET_RESOURCE, 1);
+	initRequest(&b, CMD_GET_RESOURCE, 1);
 
 	if (name)
-		addStringField(&r, RESNAME, name);
+		JSONAddString(&b, RESNAME, name);
 	else
-		addStringField(&r, RESNAME, "*");
+		JSONAddString(&b, RESNAME, "*");
 
-	if (sendRequest(&r))
+	if (sendRequest(&b))
 		return 1;
 
 	if(readResponse())
@@ -999,14 +980,14 @@ JERS_EXPORT int jersModResource(const char *name, int new_count) {
 	if (jersInitAPI(NULL))
 		return 1;
 
-	resp_t r;
+	buff_t b;
 
-	initRequest(&r, CMD_MOD_RESOURCE, 1);
+	initRequest(&b, CMD_MOD_RESOURCE, 1);
 
-	addStringField(&r, RESNAME, name);
-	addIntField(&r, RESCOUNT, new_count);
+	JSONAddString(&b, RESNAME, name);
+	JSONAddInt(&b, RESCOUNT, new_count);
 
-	if (sendRequest(&r))
+	if (sendRequest(&b))
 		return 1;
 
 	if (readResponse())
@@ -1021,13 +1002,13 @@ JERS_EXPORT int jersDelResource(const char *name) {
 	if (jersInitAPI(NULL))
 		return 1;
 
-	resp_t r;
+	buff_t b;
 
-	initRequest(&r, CMD_DEL_RESOURCE, 1);
+	initRequest(&b, CMD_DEL_RESOURCE, 1);
 
-	addStringField(&r, RESNAME, name);
+	JSONAddString(&b, RESNAME, name);
 
-	if (sendRequest(&r))
+	if (sendRequest(&b))
 		return 1;
 
 	if (readResponse())
@@ -1056,14 +1037,14 @@ JERS_EXPORT int jersGetAgents(const char * name, jersAgentInfo *info) {
 	info->count = 0;
 	info->agents = NULL;
 
-	resp_t r;
+	buff_t b;
 
-	initRequest(&r, CMD_GET_AGENT, 1);
+	initRequest(&b, CMD_GET_AGENT, 1);
 
 	if (name)
-		addStringField(&r, NODE, name);
+		JSONAddString(&b, NODE, name);
 
-	if (sendRequest(&r))
+	if (sendRequest(&b))
 		return 1;
 
 	if(readResponse())
@@ -1092,11 +1073,11 @@ JERS_EXPORT int jersGetStats(jersStats * s) {
 
 	memset(s, 0, sizeof(jersStats));
 
-	resp_t r;
+	buff_t b;
 
-	initRequest(&r, CMD_STATS, 1);
+	initRequest(&b, CMD_STATS, 1);
 
-	if (sendRequest(&r))
+	if (sendRequest(&b))
 		return 1;
 
 	if (readResponse())
@@ -1135,17 +1116,17 @@ JERS_EXPORT int jersSetTag(jobid_t id, const char * key, const char * value) {
 	if (jersInitAPI(NULL))
 		return 1;
 
-	resp_t r;
+	buff_t b;
 
-	initRequest(&r, CMD_SET_TAG, 1);
+	initRequest(&b, CMD_SET_TAG, 1);
 
-	addIntField(&r, JOBID, id);
-	addStringField(&r, TAG_KEY, key);
+	JSONAddInt(&b, JOBID, id);
+	JSONAddString(&b, TAG_KEY, key);
 
 	if (value)
-		addStringField(&r, TAG_VALUE, value);
+		JSONAddString(&b, TAG_VALUE, value);
 
-	if (sendRequest(&r))
+	if (sendRequest(&b))
 		return 1;
 
 	if(readResponse())
@@ -1160,14 +1141,14 @@ JERS_EXPORT int jersDelTag(jobid_t id, const char * key) {
 	if (jersInitAPI(NULL))
 		return 1;
 
-	resp_t r;
+	buff_t b;
 
-	initRequest(&r, CMD_DEL_TAG, 1);
+	initRequest(&b, CMD_DEL_TAG, 1);
 
-	addIntField(&r, JOBID, id);
-	addStringField(&r, TAG_KEY, key);
+	JSONAddInt(&b, JOBID, id);
+	JSONAddString(&b, TAG_KEY, key);
 
-	if (sendRequest(&r)) {
+	if (sendRequest(&b)) {
 		return 1;
 	}
 

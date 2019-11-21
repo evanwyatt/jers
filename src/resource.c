@@ -30,6 +30,8 @@
 #include <jers.h>
 #include <server.h>
 
+#include <json.h>
+
 int addRes(struct resource * r, int dirty) {
 	HASH_ADD_STR(server.resTable, name, r);
 
@@ -94,4 +96,18 @@ char ** convertResourceToStrings(int res_count, struct jobResource * res) {
 	}
 
 	return res_strings; 
+}
+
+int resourceToJSON(struct resource *r, buff_t *buff)
+{
+	JSONStart(buff);
+	JSONStartObject(buff, "RESOURCE");
+
+	JSONAddString(buff, RESNAME, r->name);
+	JSONAddInt(buff, RESCOUNT, r->count);
+	JSONAddInt(buff, RESINUSE, r->in_use);
+
+	JSONEndObject(buff);
+	JSONEnd(buff);
+	return 0;
 }

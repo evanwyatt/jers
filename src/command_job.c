@@ -32,6 +32,7 @@
 #include <commands.h>
 #include <fields.h>
 #include <error.h>
+#include <json.h>
 
 #include <time.h>
 #include <pwd.h>
@@ -240,73 +241,73 @@ void * deserialize_del_tag(msg_t * t) {
 	return td;
 }
 
-void serialize_jersJob(resp_t * r, struct job * j, int fields) {
-	respAddMap(r);
+void serialize_jersJob(buff_t *b, struct job *j, int fields) {
+	JSONStartObject(b, NULL);
 
 	if (fields == 0 || fields & JERS_RET_JOBID)
-		addIntField(r, JOBID, j->jobid);
+		JSONAddInt(b, JOBID, j->jobid);
 
 	if (fields == 0 || fields & JERS_RET_NAME)
-		addStringField(r, JOBNAME, j->jobname);
+		JSONAddString(b, JOBNAME, j->jobname);
 
 	if (fields == 0 || fields & JERS_RET_QUEUE)
-		addStringField(r, QUEUENAME, j->queue->name);
+		JSONAddString(b, QUEUENAME, j->queue->name);
 
 	if (fields == 0 || fields & JERS_RET_STATE)
-		addIntField(r, STATE, j->state);
+		JSONAddInt(b, STATE, j->state);
 
 	if (fields == 0 || fields & JERS_RET_UID)
-		addIntField(r, UID, j->uid);
+		JSONAddInt(b, UID, j->uid);
 
 	if (fields == 0 || fields & JERS_RET_SUBMITTER)
-		addIntField(r, SUBMITTER,j->submitter);
+		JSONAddInt(b, SUBMITTER,j->submitter);
 
 	if (fields == 0 || fields & JERS_RET_PRIORITY)
-		addIntField(r, PRIORITY, j->priority);
+		JSONAddInt(b, PRIORITY, j->priority);
 
 	if (fields == 0 || fields & JERS_RET_SUBMITTIME)
-		addIntField(r, SUBMITTIME, j->submit_time);
+		JSONAddInt(b, SUBMITTIME, j->submit_time);
 
 	if (fields == 0 || fields & JERS_RET_NICE)
-		addIntField(r, NICE, j->nice);
+		JSONAddInt(b, NICE, j->nice);
 
 	if (fields == 0 || fields & JERS_RET_ARGS)
-		addStringArrayField(r, ARGS, j->argc, j->argv);
+		JSONAddStringArray(b, ARGS, j->argc, j->argv);
 
 	if (fields == 0 || fields & JERS_RET_NODE)
-		addStringField(r, NODE, j->queue->host);
+		JSONAddString(b, NODE, j->queue->host);
 
 	if (j->stdout && (fields == 0 || fields & JERS_RET_STDOUT))
-		addStringField(r, STDOUT, j->stdout);
+		JSONAddString(b, STDOUT, j->stdout);
 
 	if (j->stderr && (fields == 0 || fields & JERS_RET_STDERR))
-		addStringField(r, STDERR, j->stderr);	
+		JSONAddString(b, STDERR, j->stderr);	
 
 	if (j->defer_time && (fields == 0 || fields & JERS_RET_DEFERTIME))
-		addIntField(r, DEFERTIME, j->defer_time);
+		JSONAddInt(b, DEFERTIME, j->defer_time);
 
 	if (j->start_time && (fields == 0 || fields & JERS_RET_STARTTIME))
-		addIntField(r, STARTTIME, j->start_time);
+		JSONAddInt(b, STARTTIME, j->start_time);
 
 	if (j->finish_time && (fields == 0 || fields & JERS_RET_FINISHTIME))
-		addIntField(r, FINISHTIME, j->finish_time);
+		JSONAddInt(b, FINISHTIME, j->finish_time);
 
 	if (j->tag_count && (fields == 0 || fields & JERS_RET_TAGS))
-		addStringMapField(r, TAGS, j->tag_count, j->tags);
+		JSONAddMap(b, TAGS, j->tag_count, j->tags);
 
 	if (j->shell && (fields == 0 || fields & JERS_RET_SHELL))
-		addStringField(r, SHELL, j->shell);	
+		JSONAddString(b, SHELL, j->shell);	
 
 	if (j->pre_cmd && (fields == 0 || fields & JERS_RET_PRECMD))
-		addStringField(r, POSTCMD, j->pre_cmd);
+		JSONAddString(b, POSTCMD, j->pre_cmd);
 
 	if (j->post_cmd && (fields == 0 || fields & JERS_RET_POSTCMD))
-		addStringField(r, PRECMD, j->post_cmd);
+		JSONAddString(b, PRECMD, j->post_cmd);
 
 	if (j->res_count && (fields == 0 || fields & JERS_RET_RESOURCES)) {
 			int i;
 			char ** res_strings = convertResourceToStrings(j->res_count, j->req_resources);
-			addStringArrayField(r, RESOURCES, j->res_count, res_strings);
+			JSONAddStringArray(b, RESOURCES, j->res_count, res_strings);
 
 			for (i = 0; i < j->res_count; i++) {
 				free(res_strings[i]);
@@ -316,18 +317,18 @@ void serialize_jersJob(resp_t * r, struct job * j, int fields) {
 	}
 
 	if (j->pid && (fields == 0 || fields & JERS_RET_PID))
-		addIntField(r, JOBPID, j->pid);
+		JSONAddInt(b, JOBPID, j->pid);
 
-	addIntField(r, EXITCODE, j->exitcode);
-	addIntField(r, SIGNAL, j->signal);
+	JSONAddInt(b, EXITCODE, j->exitcode);
+	JSONAddInt(b, SIGNAL, j->signal);
 
 	if (j->pend_reason)
-		addIntField(r, PENDREASON, j->pend_reason);
+		JSONAddInt(b, PENDREASON, j->pend_reason);
 
 	if (j->fail_reason)
-		addIntField(r, FAILREASON, j->fail_reason);
+		JSONAddInt(b, FAILREASON, j->fail_reason);
 
-	respCloseMap(r);
+	JSONEndObject(b);
 }
 
 int command_add_job(client * c, void * args) {
@@ -497,14 +498,14 @@ int command_add_job(client * c, void * args) {
 		return 0;
 
 	/* Return the jobid */
-	resp_t response;
+	buff_t response;
 
-	if (initMessage(&response, "RESP", 1) != 0)
+	if (initResponse(&response, 1) != 0)
 		return 0;
 
-	respAddMap(&response);
-	addIntField(&response, JOBID, j->jobid);
-	respCloseMap(&response);
+	JSONStartObject(&response, NULL);
+	JSONAddInt(&response, JOBID, j->jobid);
+	JSONEndObject(&response);
 
 	/* Populate the out jobid field */
 	c->msg.jobid = j->jobid;
@@ -512,7 +513,7 @@ int command_add_job(client * c, void * args) {
 	if (sendClientMessage(c, &j->obj, &response) != 0)
 		return 0;
 
-	print_msg(JERS_LOG_DEBUG, "SUBMIT - JOBID %d created", j->jobid);
+	print_msg(JERS_LOG_INFO, "JobID %d created. uid: %d", j->jobid, j->submitter);
 
 	server.stats.total.submitted++;
 
@@ -526,7 +527,7 @@ int command_get_job(client *c, void * args) {
 
 	int64_t count = 0;
 
-	resp_t r;
+	buff_t r;
 
 	/* JobId? Just look it up and return the result */
 	if (s->jobid) {
@@ -537,10 +538,9 @@ int command_get_job(client *c, void * args) {
 			return 1;
 		}
 
-		initMessage(&r, "RESP", 1);
+		initResponse(&r, 1);
 		serialize_jersJob(&r, j, 0);
 		count = 1;
-
 	} else {
 		/* If a queue filter has been provided, and its not a wildcard look it up first */
 		if (s->filter_fields & JERS_FILTER_QUEUE) {
@@ -556,9 +556,7 @@ int command_get_job(client *c, void * args) {
 			}
 		}
 
-		initMessage(&r, "RESP", 1);
-
-		respAddArray(&r);
+		initResponse(&r, 1);
 		/* Loop through all non-deleted jobs and match against the criteria provided
 		 * Add the jobs to the response as we go */
 
@@ -622,7 +620,6 @@ int command_get_job(client *c, void * args) {
 			serialize_jersJob(&r, j, s->return_fields);
 			count++;
 		}
-		respCloseArray(&r);
 	}
 
 	return sendClientMessage(c, NULL, &r);
@@ -855,13 +852,11 @@ int command_sig_job(client * c, void * args) {
 		return sendClientReturnCode(c, NULL, "0");
 
 	/* Send the requested signal to the job (via the agent) */
-	resp_t sig_message;
-	initMessage(&sig_message, CMD_SIG_JOB, 1);
+	buff_t sig_message;
+	initRequest(&sig_message, CMD_SIG_JOB, 1);
 
-	respAddMap(&sig_message);
-	addIntField(&sig_message, JOBID, js->jobid);
-	addIntField(&sig_message, SIGNAL, js->signum);
-	respCloseMap(&sig_message);
+	JSONAddInt(&sig_message, JOBID, js->jobid);
+	JSONAddInt(&sig_message, SIGNAL, js->signum);
 
 	sendAgentMessage(j->queue->agent, &sig_message);
 
