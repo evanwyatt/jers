@@ -122,6 +122,13 @@ void command_agent_recon(agent * a, msg_t * msg) {
 
 		if (pid) {
 			j->pid = pid;
+
+			/* Need to update the resources consumed by this job */
+			if (j->res_count) {
+				for (int res_idx = 0; res_idx < j->res_count; res_idx++)
+					j->req_resources[res_idx].res->in_use += j->req_resources[res_idx].needed;
+			}
+
 			changeJobState(j, JERS_JOB_RUNNING, NULL, 0);
 		}
 
