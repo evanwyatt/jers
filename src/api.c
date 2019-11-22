@@ -658,6 +658,9 @@ JERS_EXPORT int jersModJob(jersJobMod *j) {
 	if (j->res_count)
 		addStringArrayField(&r, RESOURCES, j->res_count, j->resources);
 
+	if (j->clear_resources)
+		addBoolField(&r, CLEARRES, 1);
+
 	if (sendRequest(&r)) {
 		return 1;
 	}

@@ -178,6 +178,8 @@ void * deserialize_mod_job(msg_t * t) {
 			case TAGS     : jm->tag_count = getStringMapField(&item->fields[i], (key_val_t **)&jm->tags); break;
 			case RESOURCES: jm->res_count = getStringArrayField(&item->fields[i], &jm->resources); break;
 
+			case CLEARRES : jm->clear_resources = getBoolField(&item->fields[i]); break;
+
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",t->items[0].fields[i].name); break;
 		}
 	}
@@ -634,6 +636,7 @@ int command_mod_job(client *c, void *args) {
 	int dirty = 0;
 	int hold = 0;
 	int completed = 0;
+	struct jobResource *new_resources = NULL;
 
 	if (mj->jobid == 0) {
 		sendError(c, JERS_ERR_NOJOB, NULL);
@@ -692,6 +695,15 @@ int command_mod_job(client *c, void *args) {
 		}
 	}
 
+	if (mj->clear_resources == 0 && mj->res_count > 0) {
+		new_resources = convertResourceStrings(mj->res_count, mj->resources);
+
+		if (new_resources == NULL) {
+			sendError(c, JERS_ERR_NORES, NULL);
+			return -1;
+		}
+	}
+
 	if (mj->name) {
 		free(j->jobname);
 		j->jobname = mj->name;
@@ -738,20 +750,21 @@ int command_mod_job(client *c, void *args) {
 		j->tags = (key_val_t *)mj->tags;
 	}
 
-	if (mj->res_count) {
-		struct jobResource * resources = NULL;
-
+	if (new_resources) {
 		if (j->res_count)
 			free(j->req_resources);
 
-		resources = convertResourceStrings(mj->res_count, mj->resources);
+		j->req_resources = new_resources;
+		j->res_count = mj->res_count;
 
-		if (resources == NULL) {
-			sendError(c, JERS_ERR_NORES, NULL);
-			return -1;
-		}
+		dirty = 1;
+	}
 
-		j->req_resources = resources;
+	if (mj->clear_resources) {
+		if (j->res_count)
+			free(j->req_resources);
+
+		j->req_resources = NULL;
 		j->res_count = mj->res_count;
 
 		dirty = 1;

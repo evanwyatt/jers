@@ -151,6 +151,8 @@ enum field_type {
 	USAGE_NVCSW,
 	USAGE_NIVCSW,
 
+	CLEARRES,
+
 	ENDOFFIELDS
 };
 void sortfields(void);
