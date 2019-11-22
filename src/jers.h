@@ -218,7 +218,10 @@ typedef struct {
 
 	int nice;
 	int priority;
+
 	char hold;
+	char clear_resources;
+	char filler[2];
 
 	int64_t env_count;
 	char ** envs;
