@@ -110,6 +110,9 @@ void command_agent_recon(agent * a, msg_t * msg) {
 		if (j == NULL)
 			error_die("Agent '%s' has sent recon for job %d, but we don't have it in memory.", a->host, jobid);
 
+		/* Remove the pending reason, we know the job is no longer pending */
+		j->pend_reason = 0;
+
 		if (start_time) {
 			j->start_time = start_time;
 		}
