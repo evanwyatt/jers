@@ -120,7 +120,7 @@ void command_agent_recon(agent * a, msg_t * msg) {
 		if (finish_time) {
 			j->finish_time = finish_time;
 			j->exitcode = exitcode;
-			changeJobState(j, JERS_JOB_COMPLETED, NULL, 1);
+			changeJobState(j, exitcode ? JERS_JOB_EXITED : JERS_JOB_COMPLETED, NULL, 1);
 		}
 
 		if (pid) {
