@@ -370,44 +370,6 @@ static const char *JSONescapeString(const char *string, size_t size)
 	return escaped;
 }
 
-/* Modifies the string in place, unescaping certain characters */
-static void JSONunescapeString(char *string)
-{
-	char *temp = string;
-	char *dst = string;
-	int modified = 0;
-
-	if (string == NULL)
-		return;
-
-	while (*temp != '\0')
-	{
-		if (*temp != '\\')
-		{
-			if (modified)
-				*dst++ = *temp;
-
-			temp++;
-			continue;
-		}
-
-		if (*(temp + 1) == 'n')
-			*dst++ = '\n';
-		else if (*(temp + 1) == '\\')
-			*dst++ = '\\';
-		else if (*(temp + 1) == 't')
-			*dst++ = '\t';
-		else if (*(temp + 1) == '"')
-			*dst++ = '"';
-
-		modified = 1;
-		temp++;
-	}
-
-	*dst = '\0';
-	return;
-}
-
 /* Return a pointer to after the opening of an object,
  * null terminating the ending '}' */
 
@@ -542,7 +504,6 @@ int JSONGetString(char **json, char **value) {
 	*json = ++pos;
 	*value = string;
 
-	//JSONunescapeString(string);
 	return 0;
 }
 

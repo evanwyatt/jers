@@ -38,7 +38,7 @@
 static int loadFields(char *obj, msg_t *m);
 static int loadItemArray(char **json, msg_t *m);
 
-field fields[] = {
+const field fields[] = {
 	{JOBID,      FIELD_TYPE_NUM,         "JOBID"},
 	{JOBNAME,    FIELD_TYPE_STRING,      "JOBNAME"},
 	{QUEUENAME,  FIELD_TYPE_STRING,      "QUEUENAME"},
