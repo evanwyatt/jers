@@ -69,6 +69,8 @@ char * generateNonce(int size) {
 }
 
 /* Generate a HMAC on the NULL terminated input char * array, using the provided key */
+
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 char * generateHMAC(const char ** input, const unsigned char *key, int key_len) {
 	unsigned char hmac_result[EVP_MAX_MD_SIZE];
 	unsigned int result_size = 0;
@@ -99,6 +101,42 @@ char * generateHMAC(const char ** input, const unsigned char *key, int key_len) 
 
 	return hexEncode(hmac_result, result_size, NULL);
 }
+#else
+char * generateHMAC(const char ** input, const unsigned char *key, int key_len) {
+	unsigned char hmac_result[EVP_MAX_MD_SIZE];
+	unsigned int result_size = 0;
+	HMAC_CTX *ctx;
+
+	ctx = HMAC_CTX_new();
+	if (ctx == NULL) {
+		print_msg(JERS_LOG_WARNING, "HMAC_CTX_new() failed\n");
+		return NULL;
+	}
+
+	if (HMAC_Init_ex(ctx, key, key_len, EVP_sha256(), NULL) != 1) {
+		print_msg(JERS_LOG_WARNING, "HMAC_Init_ex() failed\n");
+		return NULL;
+	}
+
+	for (int i = 0; input[i]; i++) {
+		if (HMAC_Update(ctx, (const unsigned char *)input[i], strlen(input[i])) != 1) {
+			print_msg(JERS_LOG_WARNING, "HMAC_Update() failed\n");
+			HMAC_CTX_free(ctx);
+			return NULL;
+		}
+	}
+
+	if (HMAC_Final(ctx, hmac_result, &result_size) != 1) {
+		print_msg(JERS_LOG_WARNING, "HMAC_Final() failed\n");
+		HMAC_CTX_free(ctx);
+		return NULL;
+	}
+
+	HMAC_CTX_free(ctx);
+
+	return hexEncode(hmac_result, result_size, NULL);
+}
+#endif
 
 /* Load the secret from 'secret_filename' storing the hash of the file in 'hash'.
  * 'hash' is assummed to be large enough to store a SHA256 hash (SHA256_DIGEST_LENGTH) */
