@@ -40,10 +40,10 @@ void * deserialize_add_queue(msg_t * msg) {
 	msg_item * item = &msg->items[0];
 	int i;
 
-	q->priority = JERS_QUEUE_DEFAULT_PRIORITY;
-	q->state = 0;
-	q->job_limit = 1;
-	q->default_queue = -1;
+	q->priority = UNSET_32;
+	q->state = UNSET_32;
+	q->job_limit = UNSET_32;
+	q->default_queue = UNSET_32;
 
 	for (i = 0; i < item->field_count; i++) {
 		switch(item->fields[i].number) {
@@ -83,10 +83,10 @@ void * deserialize_mod_queue(msg_t * msg) {
 	msg_item * item = &msg->items[0];
 	int i;
 
-	q->priority = -1;
-	q->state = -1;
-	q->job_limit = -1;
-	q->default_queue = -1;
+	q->priority = UNSET_32;
+	q->state = UNSET_32;
+	q->job_limit = UNSET_32;
+	q->default_queue = UNSET_32;
 
 	for (i = 0; i < item->field_count; i++) {
 		switch(item->fields[i].number) {
@@ -186,11 +186,11 @@ int command_add_queue(client * c, void * args) {
 	q->name = qa->name;
 	q->host = qa->node;
 	q->desc = qa->desc;
-	q->job_limit = qa->job_limit != -1 ? qa->job_limit : JERS_QUEUE_DEFAULT_LIMIT;
-	q->priority = qa->priority != -1 ? qa->priority : JERS_QUEUE_DEFAULT_PRIORITY;
-	q->state = qa->state != -1 ? qa->state : JERS_QUEUE_DEFAULT_STATE;
+	q->job_limit = qa->job_limit != UNSET_32 ? qa->job_limit : JERS_QUEUE_DEFAULT_LIMIT;
+	q->priority = qa->priority != UNSET_32 ? qa->priority : JERS_QUEUE_DEFAULT_PRIORITY;
+	q->state = qa->state != UNSET_32 ? qa->state : JERS_QUEUE_DEFAULT_STATE;
 	q->agent = a;
-	default_queue = qa->default_queue != -1 ? qa->default_queue : 0;
+	default_queue = qa->default_queue != UNSET_32 ? qa->default_queue : 0;
 
 	addQueue(q, default_queue, 1);
 
@@ -318,22 +318,22 @@ int command_mod_queue(client *c, void * args) {
 		dirty = 1;
 	}
 
-	if (qm->state != -1 && q->state != qm->state) {
+	if (qm->state != UNSET_32 && q->state != qm->state) {
 		q->state = qm->state;
 		dirty = 1;
 	}
 
-	if (qm->job_limit != -1 && q->job_limit != qm->job_limit) {
+	if (qm->job_limit != UNSET_32 && q->job_limit != qm->job_limit) {
 		q->job_limit = qm->job_limit;
 		dirty = 1;
 	}
 
-	if (qm->priority != -1 && q->priority != qm->priority) {
+	if (qm->priority != UNSET_32 && q->priority != qm->priority) {
 		q->priority = qm->priority;
 		dirty = 1;
 	}
 
-	if (qm->default_queue != -1) {
+	if (qm->default_queue != UNSET_32) {
 		/* Clear the existing default queue and set this one */
 		setDefaultQueue(q);
 		dirty = 1;

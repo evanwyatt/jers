@@ -77,12 +77,12 @@ struct jobResource * convertResourceStrings(int res_count, char ** res_strings) 
 }
 
 void * deserialize_add_job(msg_t * t) {
-	jersJobAdd * s = calloc(sizeof(jersJobAdd), 1);
-	int i;
+	jersJobAdd *s = calloc(sizeof(jersJobAdd), 1);
 
 	s->priority = JERS_JOB_DEFAULT_PRIORITY;
+	s->nice = JERS_JOB_DEFAULT_NICE;
 
-	for (i = 0; i < t->items[0].field_count; i++) {
+	for (int i = 0; i < t->items[0].field_count; i++) {
 		switch(t->items[0].fields[i].number) {
 			case JOBID    : s->jobid = getNumberField(&t->items[0].fields[i]); break;
 			case JOBNAME  : s->name = getStringField(&t->items[0].fields[i]); break;
@@ -113,9 +113,8 @@ void * deserialize_add_job(msg_t * t) {
 void * deserialize_get_job(msg_t * t) {
 	jersJobFilter * s = calloc(sizeof(jersJobFilter), 1);
 	msg_item * item = &t->items[0];
-	int i;
 
-	for (i = 0; i < item->field_count; i++) {
+	for (int i = 0; i < item->field_count; i++) {
 		switch(item->fields[i].number) {
 			case JOBID    : s->jobid = getNumberField(&item->fields[i]); break;
 			case JOBNAME  : s->filters.job_name = getStringField(&item->fields[i]); s->filter_fields |= JERS_FILTER_JOBNAME ; break;
@@ -140,16 +139,15 @@ void * deserialize_get_job(msg_t * t) {
 }
 
 void * deserialize_mod_job(msg_t * t) {
-	jersJobMod * jm = calloc(sizeof(jersJobMod), 1);
-	msg_item * item = &t->items[0];
-	int i;
+	jersJobMod *jm = calloc(sizeof(jersJobMod), 1);
+	msg_item *item = &t->items[0];
 
-	jm->defer_time = -1;
-	jm->nice = -1;
-	jm->priority = -1;
-	jm->hold = -1;
+	jm->hold = UNSET_8;
+	jm->nice = UNSET_32;
+	jm->priority = UNSET_32;
+	jm->defer_time = UNSET_TIME_T;
 
-	for (i = 0; i < item->field_count; i++) {
+	for (int i = 0; i < item->field_count; i++) {
 		switch(item->fields[i].number) {
 			case JOBID    : jm->jobid = getNumberField(&item->fields[i]); break;
 			case JOBNAME  : jm->name = getStringField(&item->fields[i]); break;
@@ -171,7 +169,6 @@ void * deserialize_mod_job(msg_t * t) {
 	}
 	return jm;
 }
-
 
 void * deserialize_del_job(msg_t * t) {
 	jersJobDel * jd = calloc(sizeof(jersJobDel), 1);
@@ -331,7 +328,7 @@ void serialize_jersJob(buff_t *b, struct job *j, int fields) {
 	JSONEndObject(b);
 }
 
-int command_add_job(client * c, void * args) {
+int command_add_job(client *c, void *args) {
 	jersJobAdd * s = args;
 	struct job * j = NULL;
 	struct queue * q = NULL;
@@ -677,7 +674,7 @@ int command_mod_job(client *c, void *args) {
 		return 0;
 	}
 
-	if (mj->priority != -1) {
+	if (mj->priority != UNSET_32) {
 		if (mj->priority < JERS_JOB_MIN_PRIORITY || mj->priority > JERS_JOB_MAX_PRIORITY) {
 			sendError(c, JERS_ERR_INVARG, "Invalid priority specified");
 			return 0;
@@ -708,25 +705,25 @@ int command_mod_job(client *c, void *args) {
 		dirty = 1;
 	}
 
-	if (mj->priority != -1) {
+	if (mj->priority != UNSET_32) {
 		j->priority = mj->priority;
 
 		dirty = 1;
 	}
 
-	if (mj->defer_time != -1) {
+	if (mj->defer_time != UNSET_TIME_T) {
 		j->defer_time = mj->defer_time;
 
 		dirty = 1;
 	}
 
-	if (mj->hold != -1) {
+	if (mj->hold != UNSET_8) {
 		hold = mj->hold == 0 ? 0 : 1;
 
 		dirty = 1;
 	}
  
-	if (mj->nice != -1) {
+	if (mj->nice != UNSET_32) {
 		j->nice = mj->nice;
 
 		dirty = 1;

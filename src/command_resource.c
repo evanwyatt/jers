@@ -37,11 +37,9 @@
 
 void * deserialize_add_resource(msg_t * msg) {
 	jersResourceAdd * ra = calloc(sizeof(jersResourceAdd), 1);
-
 	msg_item * item = &msg->items[0];
-	int i;
 
-	for (i = 0; i < item->field_count; i++) {
+	for (int i = 0; i < item->field_count; i++) {
 		switch(item->fields[i].number) {
 			case RESNAME  : ra->name = getStringField(&item->fields[i]); break;
 			case RESCOUNT : ra->count = getNumberField(&item->fields[i]); break;
@@ -76,9 +74,8 @@ void * deserialize_get_resource(msg_t * msg) {
 void * deserialize_mod_resource(msg_t * msg) {
 	jersResourceMod * rm = calloc(sizeof(jersResourceMod), 1);
 	msg_item * item = &msg->items[0];
-	int i;
 
-	for (i = 0; i < item->field_count; i++) {
+	for (int i = 0; i < item->field_count; i++) {
 		switch(item->fields[i].number) {
 			case RESNAME : rm->name = getStringField(&item->fields[i]); break;
 			case RESCOUNT: rm->count = getNumberField(&item->fields[i]); break;

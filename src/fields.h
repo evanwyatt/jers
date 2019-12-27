@@ -32,10 +32,19 @@
 #include <jers.h>
 #include <buffer.h>
 
+#define UNSET_8  INT8_MIN
+#define UNSET_16 INT16_MIN
+#define UNSET_32 INT32_MIN
+#define UNSET_64 INT64_MIN
+#define UNSET_TIME_T -1
+
+#pragma pack(push,1)
+/* This structure is aligned to match the jers_tag_t struct */
 typedef struct {
 	char *key;
 	char *value;
 } key_val_t;
+#pragma pack(pop)
 
 typedef struct {
 	int number;

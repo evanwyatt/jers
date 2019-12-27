@@ -508,7 +508,7 @@ JERS_EXPORT int jersDelJob(jobid_t jobid) {
 
 JERS_EXPORT void jersInitJobAdd(jersJobAdd * j) {
 	memset(j, 0, sizeof(jersJobAdd));
-	j->priority = -1;
+	j->priority = UNSET_32;
 	j->defer_time = -1;
 }
 
@@ -551,7 +551,7 @@ JERS_EXPORT jobid_t jersAddJob(const jersJobAdd * j) {
 	if (j->shell)
 		JSONAddString(&b, SHELL, j->shell);
 
-	if (j->priority >= 0)
+	if (j->priority != UNSET_32)
 		JSONAddInt(&b, PRIORITY, j->priority);
 
 	if (j->hold)
@@ -594,7 +594,7 @@ JERS_EXPORT jobid_t jersAddJob(const jersJobAdd * j) {
 	if (sendRequest(&b))
 		return 0;
 
-	if(readResponse())
+	if (readResponse())
 		return 0;
 
 	/* Should just have a single JOBID field returned */
@@ -611,10 +611,10 @@ JERS_EXPORT jobid_t jersAddJob(const jersJobAdd * j) {
 
 JERS_EXPORT void jersInitJobMod(jersJobMod *j) {
 	memset(j, 0, sizeof(jersJobMod));
-	j->nice = -1;
-	j->hold = -1;
-	j->priority = -1;
-	j->defer_time = -1;
+	j->nice = UNSET_32;
+	j->hold = UNSET_8;
+	j->priority = UNSET_32;
+	j->defer_time = UNSET_TIME_T;
 }
 
 JERS_EXPORT int jersModJob(const jersJobMod *j) {
@@ -637,19 +637,19 @@ JERS_EXPORT int jersModJob(const jersJobMod *j) {
 	if (j->queue)
 		JSONAddString(&b, QUEUENAME, j->queue);
 
-	if (j->defer_time != -1)
+	if (j->defer_time != UNSET_TIME_T)
 		JSONAddInt(&b, DEFERTIME, j->defer_time);
 
 	if (j->restart)
 		JSONAddBool(&b, RESTART, 1);
 
-	if (j->nice != -1)
+	if (j->nice != UNSET_32)
 		JSONAddInt(&b, NICE, j->nice);
 
-	if (j->priority != -1)
+	if (j->priority != UNSET_32)
 		JSONAddInt(&b, PRIORITY, j->priority);
 
-	if (j->hold != -1)
+	if (j->hold != UNSET_8)
 		JSONAddBool(&b, HOLD, j->hold);
 
 	if (j->env_count)
@@ -704,7 +704,7 @@ JERS_EXPORT int jersSignalJob(jobid_t id, int signum) {
 
 	if(readResponse())
 		return 1;
-printf("msg.command: %s\n", msg.command);
+
 	if (msg.command && strcmp(msg.command, "0") == 0)
 		status = 0;
 
@@ -718,20 +718,20 @@ JERS_EXPORT void jersInitQueueMod(jersQueueMod *q) {
 	q->name = NULL;
 	q->desc = NULL;
 	q->node = NULL;
-	q->state = -1;
-	q->job_limit = -1;
-	q->priority = -1;
-	q->default_queue = -1;
+	q->state = UNSET_32;
+	q->job_limit = UNSET_32;
+	q->priority = UNSET_32;
+	q->default_queue = UNSET_32;
 }
 
 JERS_EXPORT void jersInitQueueAdd(jersQueueAdd *q) {
 	q->name = NULL;
 	q->desc = NULL;
 	q->node = NULL;
-	q->state = -1;
-	q->job_limit = -1;
-	q->priority = -1;
-	q->default_queue = -1;
+	q->state = UNSET_32;
+	q->job_limit = UNSET_32;
+	q->priority = UNSET_32;
+	q->default_queue = UNSET_32;
 }
 
 /* Note: filter is currently not used for queues */

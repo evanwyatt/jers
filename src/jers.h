@@ -38,15 +38,16 @@
 
 typedef uint32_t jobid_t;
 
-#define JERS_MAJOR 0
-#define JERS_MINOR 1
-#define JERS_PATCH 9
+#define JERS_MAJOR 1
+#define JERS_MINOR 0
+#define JERS_PATCH 0
 
 #define JERS_RES_NAME_MAX 64
 #define JERS_TAG_MAX 64
 
 #define JERS_JOB_NAME_MAX 64
 #define JERS_JOB_DEFAULT_PRIORITY 100
+#define JERS_JOB_DEFAULT_NICE 0
 #define JERS_JOB_MAX_PRIORITY 255
 #define JERS_JOB_MIN_PRIORITY 0
 
@@ -179,6 +180,8 @@ enum jers_fail_codes {
 	JERS_FAIL_UNKNOWN
 };
 
+#pragma pack(push, 1)
+
 typedef struct {
 	char * key;
 	char * value;
@@ -217,6 +220,8 @@ typedef struct {
 
 	int64_t res_count;
 	char ** resources;
+
+	char filler[103];
 } jersJobAdd;
 
 typedef struct {
@@ -243,6 +248,8 @@ typedef struct {
 
 	int64_t res_count;
 	char ** resources;
+
+	char filler2[164];
 } jersJobMod;
 
 typedef struct {
@@ -284,6 +291,8 @@ typedef struct {
 
 	int res_count;
 	char ** resources;
+
+	char filler[76];
 } jersJob;
 
 typedef struct {
@@ -332,11 +341,15 @@ typedef struct {
 typedef struct {
 	char * name;
 	int count;
+
+	char filler[20];
 } jersResourceAdd;
 
 typedef struct {
 	char * name;
 	int count;
+
+	char filler[20];
 } jersResourceMod;
 
 typedef struct {
@@ -398,6 +411,8 @@ typedef struct {
 	int job_limit;
 	int priority;
 	int default_queue;
+
+	char filler[24];
 } jersQueueAdd;
 
 typedef struct {
@@ -408,6 +423,8 @@ typedef struct {
 	int job_limit;
 	int priority;
 	int default_queue;
+
+	char filler[24];
 } jersQueueMod;
 
 typedef struct {
@@ -433,6 +450,8 @@ typedef struct {
 		int64_t unknown;
 	} total;
 } jersStats;
+
+#pragma pack(pop)
 
 void jersInitJobAdd(jersJobAdd *j);
 void jersInitJobMod(jersJobMod *j);
