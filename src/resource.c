@@ -89,7 +89,6 @@ char ** convertResourceToStrings(int res_count, struct jobResource * res) {
 
 	res_strings = malloc(sizeof(char *) * res_count);
 
-
 	for (i = 0; i < res_count; i++) {
 		res_strings[i] = malloc(strlen(res[i].res->name) + 16);
 		sprintf(res_strings[i], "%s:%d", res[i].res->name, res[i].needed);

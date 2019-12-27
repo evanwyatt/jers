@@ -89,6 +89,13 @@ void sendStartCmd(struct job * j) {
 	if (j->stderr)
 		JSONAddString(&b, STDERR, j->stderr);
 
+	if (j->res_count) {
+		char **resources = convertResourceToStrings(j->res_count, j->req_resources);
+		JSONAddStringArray(&b, RESOURCES, j->res_count, resources);
+
+		free(resources);
+	}
+
 	sendAgentMessage(j->queue->agent, &b);
 	return;
 }

@@ -158,6 +158,9 @@ struct jersJobSpawn {
 	int64_t env_count;
 	char ** envs;
 
+	int64_t res_count;
+	char ** resources;
+
 	char * stdout;
 	char * stderr;
 
@@ -476,7 +479,7 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 		 *   are in a forked child.  */
 
 		/* Resize if needed */
-		int to_add = 8 + j->argc + j->env_count;
+		int to_add = 10 + j->argc + j->env_count + j->res_count;
 
 		if (to_add >= j->u->env_size - j->u->env_count)
 			j->u->users_env = realloc(j->u->users_env, sizeof(char *) * (j->u->env_count + to_add + 1));
@@ -495,6 +498,11 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 
 		for (i = 0; i < j->argc; i++)
 			if (asprintf(&j->u->users_env[j->u->env_count++],"JERS_ARGV%d=%s", i, j->argv[i]) <= 0) goto spawn_exit;
+
+		if (asprintf(&j->u->users_env[j->u->env_count++],"JERS_RESCOUNT=%ld", j->res_count) <= 0) goto spawn_exit;
+
+		for (i = 0; i < j->res_count; i++)
+			if (asprintf(&j->u->users_env[j->u->env_count++],"JERS_RES%d=%s", i, j->resources[i]) <= 0) goto spawn_exit;
 
 		/* A lot of things rely on having TMPDIR set */
 		if (asprintf(&j->u->users_env[j->u->env_count++],"TMPDIR=/tmp") <= 0) goto spawn_exit;
@@ -978,6 +986,7 @@ int start_command(msg_t * m) {
 			case STDOUT   : j.stdout = getStringField(&item->fields[i]); break;
 			case STDERR   : j.stderr = getStringField(&item->fields[i]); break;
 			case WRAPPER  : j.wrapper = getStringField(&item->fields[i]) ; break;
+			case RESOURCES: j.res_count = getStringArrayField(&item->fields[i], &j.resources); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", item->fields[i].name); break;
 		}
