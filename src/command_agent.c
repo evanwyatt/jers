@@ -445,8 +445,6 @@ int command_agent_proxydata(agent *a, msg_t *msg) {
 		return 1;
 	}
 
-	fprintf(stderr, "Proxydata = %s\n", data);
-
 	/* Locate the client structure */
 	client *c = NULL;
 	for (c = clientList; c; c = c->next) {

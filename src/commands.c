@@ -146,6 +146,7 @@ int runCommand(client *c) {
 	}
 
 	if (unlikely(command_to_run == NULL)) {
+		sendError(c, JERS_ERR_INVARG, "Unknown command");
 		print_msg(JERS_LOG_WARNING, "Got unknown command '%s' from client", c->msg.command);
 		return 1;
 	}
@@ -249,7 +250,6 @@ static int _sendMessage(struct connectionType *connection, buff_t *b, buff_t *me
 		buffAddBuff(b, message);
 		pollSetWritable(connection);
 	}
-fprintf(stderr, "Sending message: %s\n", message->data);
 	buffFree(message);
 
 	return 0;

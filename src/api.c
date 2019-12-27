@@ -92,7 +92,7 @@ static int customInit(const char * custom_config) {
 }
 
 static int defaultInit(void) {
-	socket_path[0] = "/run/jers/jers.sock_";
+	socket_path[0] = "/run/jers/jers.sock";
 	socket_path[1] = "/run/jers/proxy.sock";
 
 	return 0;
