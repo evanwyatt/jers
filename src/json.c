@@ -491,8 +491,9 @@ int JSONGetString(char **json, char **value) {
 			break;
 
 		if (modifying)
-			*dst++ = *pos;
+			*dst = *pos;
 
+		dst++;
 		pos++;
 	}
 
