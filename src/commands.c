@@ -146,7 +146,7 @@ int runCommand(client *c) {
 	}
 
 	if (unlikely(command_to_run == NULL)) {
-		print_msg(JERS_LOG_WARNING, "Got unknown command from client");
+		print_msg(JERS_LOG_WARNING, "Got unknown command '%s' from client", c->msg.command);
 		return 1;
 	}
 
