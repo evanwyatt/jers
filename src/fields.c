@@ -319,8 +319,6 @@ int load_message(char *json, msg_t *m)
 	memset(m, 0, sizeof(msg_t));
 	m->msg_cpy = strdup(json);
 
-	fprintf(stderr, "Loading message: %s\n", json);
-
 	object = JSONGetObject(&json);
 
 	if (object == NULL) {

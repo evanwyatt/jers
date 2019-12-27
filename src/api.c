@@ -158,12 +158,11 @@ static int jersConnect(void) {
 
 		strncpy(addr.sun_path, socket_path[i], sizeof(addr.sun_path));
 		addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
-		printf("Trying: %s\n", socket_path[i]);
+
 		if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1)
 			continue;
 
 		status = 0;
-		printf("Connected to: %s\n", socket_path[i]);
 		break;
 	}
 
