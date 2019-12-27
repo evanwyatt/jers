@@ -657,7 +657,10 @@ int command_mod_job(client *c, void *args) {
 	state = j->state;
 	hold = (j->state == JERS_JOB_HOLDING);
 
-	if ((j->state == JERS_JOB_COMPLETED || j->state == JERS_JOB_EXITED || j->state == JERS_JOB_UNKNOWN) && mj->restart != 1) {
+	if ((j->state == JERS_JOB_COMPLETED || j->state == JERS_JOB_EXITED || j->state == JERS_JOB_UNKNOWN))
+		completed = 1;
+
+	if (completed && mj->restart != 1) {
 		/* If a job is completed, we are allowed to run a subset of 'mod' actions.
 		 * Actions that are not allowed, unless the restart flag is set:
 		 *  - Hold
@@ -667,8 +670,6 @@ int command_mod_job(client *c, void *args) {
 			sendError(c, JERS_ERR_INVARG, "Unable to modify a completed job without restart flag");
 			return 0;
 		}
-
-		completed = 1;
 	}
 
 	if (j->state == JERS_JOB_RUNNING || j->internal_state &JERS_FLAG_JOB_STARTED) {
