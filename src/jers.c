@@ -41,46 +41,42 @@
 
 /* Commands + objects */
 
-struct command commands[] = {
-	{"add",    add_func},
-	{"mod",    mod_func},
-	{"delete", delete_func},
-	{"show",   show_func},
-	{"signal", signal_func},
+struct cmd objects[] = {
+	{"job",      job_func},
+	{"queue",    queue_func},
+	{"resource", resource_func},
+	{"agent",    agent_func},
 	{NULL, NULL}
 };
 
-struct object add_objects[] = {
-	{"job",      add_job},
-	{"queue",    add_queue},
-	{"resource", add_resource},
+struct cmd job_cmds[] = {
+	{"add",    add_job},
+	{"modify", modify_job},
+	{"delete", delete_job},
+	{"signal", signal_job},
+	{"show",   show_job},
+	{"start",  start_job},
 	{NULL, NULL}
 };
 
-struct object mod_objects[] = {
-	{"job",      mod_job},
-	{"queue",    mod_queue},
-	{"resource", mod_resource},
+struct cmd queue_cmds[] ={
+	{"add",    add_queue},
+	{"modify", modify_queue},
+	{"delete", delete_queue},
+	{"show",   show_queue},
 	{NULL, NULL}
 };
 
-struct object delete_objects[] = {
-	{"job",      delete_job},
-	{"queue",    delete_queue},
-	{"resource", delete_resource},
+struct cmd resource_cmds[] = {
+	{"add",    add_resource},
+	{"modify", modify_resource},
+	{"delete", delete_resource},
+	{"show",   show_resource},
 	{NULL, NULL}
 };
 
-struct object show_objects[] = {
-	{"job",      show_job},
-	{"queue",    show_queue},
-	{"resource", show_resource},
-	{"agent",    show_agent},
-	{NULL, NULL}
-};
-
-struct object signal_objects[] = {
-	{"job", signal_job},
+struct cmd agent_cmds[] = {
+	{"show", show_agent},
 	{NULL, NULL}
 };
 
@@ -132,11 +128,11 @@ int add_queue(int argc, char *argv[]) {
 	return 0;
 }
 
-int mod_job(int argc, char *argv[]) {
-	struct mod_job_args args;
+int modify_job(int argc, char *argv[]) {
+	struct modify_job_args args;
 	int rc = 0;
 
-	if (parse_mod_job(argc, argv, &args)) {
+	if (parse_modify_job(argc, argv, &args)) {
 		return 1;
 	}
 
@@ -155,11 +151,11 @@ int mod_job(int argc, char *argv[]) {
 	return rc;
 }
 
-int mod_queue(int argc, char *argv[]) {
-	struct mod_queue_args args;
+int modify_queue(int argc, char *argv[]) {
+	struct modify_queue_args args;
 	int rc = 0;
 
-	if (parse_mod_queue(argc, argv, &args))
+	if (parse_modify_queue(argc, argv, &args))
 		return 1;
 
 	if (args.queues == NULL) {
@@ -511,6 +507,37 @@ int signal_job(int argc, char *argv[]) {
 	return rc;
 }
 
+int start_job(int argc, char *argv[]) {
+	struct start_job_args args;
+	int rc = 0;
+
+	if (parse_start_job(argc, argv, &args))
+		return 1;
+
+	for (int i = 0; args.jobids[i]; i++) {
+		jersJobMod mod_request;
+
+		jersInitJobMod(&mod_request);
+
+		mod_request.jobid = args.jobids[i];
+		mod_request.hold = 0;
+		mod_request.defer_time = 0;
+
+		if (args.restart)
+			mod_request.restart = 1;
+		
+		if (jersModJob(&mod_request) != 0) {
+			fprintf(stderr, "Failed to start Job %d: %s\n", args.jobids[i], jersGetErrStr(jers_errno));
+			rc = 1;
+			continue;
+		}
+
+		printf("Job %d modified.\n", args.jobids[i]);
+	}
+
+	return rc;
+}
+
 int show_queue(int argc, char *argv[]) {
 	jersQueueInfo qInfo;
 	struct show_queue_args args;
@@ -596,11 +623,11 @@ int add_resource(int argc, char *argv[]) {
 	return rc;
 }
 
-int mod_resource(int argc, char *argv[]) {
-	struct mod_resource_args args;
+int modify_resource(int argc, char *argv[]) {
+	struct modify_resource_args args;
 	int rc = 0;
 
-	if (parse_mod_resource(argc, argv, &args)) {
+	if (parse_modify_resource(argc, argv, &args)) {
 		return 1;
 	}
 
@@ -674,98 +701,85 @@ int show_resource(int argc, char *argv[]) {
 
 void print_cmd_help(void) {
 	//TODO: Make this help better
-	printf("Expected one of the following commands:\n");
-	printf(" SHOW\n");
-	printf(" ADD\n");
-	printf(" MODIFY\n");
-	printf(" DELETE\n");
-	printf(" SIGNAL\n");
+	printf("Expected one of the following object names:\n");
+	printf(" JOB\n");
+	printf(" QUEUE\n");
+	printf(" RESOURCE\n");
+	printf(" AGENT\n");
 	printf("\n");
 }
 
 void print_obj_help(const char * cmd) {
 	//TODO: Make this help better
-	printf("Expected one of the following object types for command '%s':\n", cmd);
+	struct cmd (*cmd_ptr)[] = NULL;
 
-	if (strcasecmp(cmd, "ADD") == 0) {
-		printf(" JOB\n");
-		printf(" QUEUE\n");
-		printf(" RESOURCE\n");
-	} else if (strcasecmp(cmd, "SHOW") == 0) {
-		printf(" JOB\n");
-		printf(" QUEUE\n");
-		printf(" RESOURCE\n");
-	} else if (strcasecmp(cmd, "MODIFY") == 0) {
-		printf(" JOB\n");
-		printf(" QUEUE\n");
-		printf(" RESOURCE\n");
-	} else if (strcasecmp(cmd, "DELETE") == 0) {
-		printf(" JOB\n");
-		printf(" QUEUE\n");
-		printf(" RESOURCE\n");
-	} else if (strcasecmp(cmd, "SIGNAL") == 0) {
-		printf(" JOB\n");
+	if (strcasecmp(cmd, "JOB") == 0)
+		cmd_ptr = &job_cmds;
+	else if (strcasecmp(cmd, "QUEUE") == 0)
+		cmd_ptr = &queue_cmds;
+	else if (strcasecmp(cmd, "RESOURCE") == 0)
+		cmd_ptr = &resource_cmds;
+	else if (strcasecmp(cmd, "AGENT") == 0)
+		cmd_ptr = &agent_cmds;
+
+	if (cmd_ptr) {
+		printf("Expected one of the following commands for object '%s':\n", cmd);
+		for (int i = 0; (*cmd_ptr)[i].name; i++)
+			printf( "- %s\n", (*cmd_ptr)[i].name);
 	} else {
-		printf("Unknown command provided\n");
+		fprintf(stderr, "Unknown object '%s' specifed\n", cmd);
 	}
 
 	printf("\n");
 }
 
-int run_command(int argc, char  *argv[], struct object * objects) {
+int run_action(int argc, char  *argv[], struct cmd cmds[]) {
 	int cmd_len = strlen(argv[2]);
 
 	for (int n = 3; n <= cmd_len; n++) {
-		int i = 0;
 		int matches = 0;
-		struct object * obj = NULL;
+		struct cmd *cmd = NULL;
 
-		while (objects[i].object_name) {
-			if (strncasecmp(objects[i].object_name, argv[2], n) == 0) {
+		for (int i = 0; cmds[i].name; i++) {
+			if (strncasecmp(cmds[i].name, argv[2], n) == 0) {
 				matches++;
-				obj = &objects[i];
+				cmd = &cmds[i];
 			}
-
-			i++;
 		}
 
 		if (matches == 1)
-			return obj->func(argc, argv);
+			return cmd->func(argc, argv);
 	}
 
 	fprintf(stderr, "Unknown object '%s' provided\n", argv[2]);
 	return 1;
 }
 
-int add_func(int argc, char * argv[]) {
-	return run_command(argc, argv, add_objects);
+int job_func(int argc, char * argv[]) {
+	return run_action(argc, argv, job_cmds);
 }
 
-int mod_func(int argc, char * argv[]) {
-	return run_command(argc, argv, mod_objects);
+int queue_func(int argc, char * argv[]) {
+	return run_action(argc, argv, queue_cmds);
 }
 
-int delete_func(int argc, char * argv[]) {
-	return run_command(argc, argv, delete_objects);
+int resource_func(int argc, char * argv[]) {
+	return run_action(argc, argv, resource_cmds);
 }
 
-int show_func(int argc, char *argv[]) {
-	return run_command(argc, argv, show_objects);
-}
-
-int signal_func(int argc, char *argv[]) {
-	return run_command(argc, argv, signal_objects);
+int agent_func(int argc, char *argv[]) {
+	return run_action(argc, argv, agent_cmds);
 }
 
 int main (int argc, char * argv[]) {
 	if (argc <= 1) {
-		fprintf(stderr, "No command provided.\n");
+		fprintf(stderr, "No object(job/queue/resource/agent) provided.\n");
 		print_cmd_help();
 		return 1;
 	}
 
 	if (argc <= 2) {
-		fprintf(stderr, "No object provided.\n");
+		fprintf(stderr, "No action provided(add,modify,delete,show,signal).\n");
 		print_obj_help(argv[1]);
 		return 1;
 	}
@@ -774,21 +788,18 @@ int main (int argc, char * argv[]) {
 	int arg_len = strlen(argv[1]);
 
 	for (int n = 3; n <= arg_len; n++) {
-		int i = 0;
 		int matches = 0;
-		struct command * cmd = NULL;
+		struct cmd *obj = NULL;
 
-		while (commands[i].command_name) {
-			if (strncasecmp(commands[i].command_name, argv[1], n) == 0) {
-				cmd = &commands[i];
+		for (int i = 0; objects[i].name; i++) {
+			if (strncasecmp(objects[i].name, argv[1], n) == 0) {
+				obj = &objects[i];
 				matches++;
 			}
-
-			i++;
 		}
 
 		if (matches == 1) {
-			int rc = cmd->func(argc, argv);
+			int rc = obj->func(argc, argv);
 			jersFinish();
 			return rc;
 		}

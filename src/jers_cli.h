@@ -8,13 +8,8 @@
 
 #include <assert.h>
 
-struct command {
-	char *command_name;
-	int (*func)(int argc, char *argv[]);
-};
-
-struct object {
-	char *object_name;
+struct cmd {
+	char *name;
 	int (*func)(int argc, char *argv[]);
 };
 
@@ -24,7 +19,7 @@ struct add_job_args {
     jersJobAdd add;
 };
 
-struct mod_job_args {
+struct modify_job_args {
     int verbose;
 
     jobid_t *jobids;
@@ -70,13 +65,20 @@ struct signal_job_args {
 	jobid_t *jobids;
 };
 
+struct start_job_args {
+    int verbose;
+    
+    int restart;
+    jobid_t *jobids;
+};
+
 struct add_resource_args {
     int verbose;
 
     char **resources;
 };
 
-struct mod_resource_args {
+struct modify_resource_args {
     int verbose;
 
     char **resources;
@@ -94,7 +96,7 @@ struct delete_resource_args {
     char **resources;
 };
 
-struct mod_queue_args {
+struct modify_queue_args {
     int verbose;
 
     jersQueueMod mod;
@@ -107,31 +109,31 @@ struct show_agent_args {
 	char *hostname;
 };
 
-int add_func(int argc, char *argv[]);
-int mod_func(int argc, char *argv[]);
-int delete_func(int argc, char *argv[]);
-int show_func(int argc, char *argv[]);
-int signal_func(int argc, char *argv[]);
+int job_func(int argc, char *argv[]);
+int queue_func(int argc, char *argv[]);
+int resource_func(int argc, char *argv[]);
+int agent_func(int argc, char *argv[]);
 
-#define CMD(cmd) \
-	int cmd(int argc, char *argv[]); \
-	int parse_##cmd(int argc, char *argv[], struct cmd##_args *args);
+#define CMD(__cmd) \
+	int __cmd(int argc, char *argv[]); \
+	int parse_##__cmd(int argc, char *argv[], struct __cmd##_args *args);
 
 CMD(add_job)
 CMD(show_job)
 CMD(delete_job)
-CMD(mod_job)
+CMD(modify_job)
 CMD(signal_job)
+CMD(start_job)
 
 CMD(add_queue)
 CMD(show_queue)
 CMD(delete_queue)
-CMD(mod_queue)
+CMD(modify_queue)
 
 CMD(add_resource)
 CMD(show_resource)
 CMD(delete_resource)
-CMD(mod_resource)
+CMD(modify_resource)
 
 CMD(show_agent)
 

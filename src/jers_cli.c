@@ -203,9 +203,9 @@ static error_t add_job_parse(int key, char *arg, struct argp_state *state)
 }
 
 /* Mod Job */
-static char mod_job_doc[] = "mod job - Modify existing job/s";
-static char mod_job_arg_doc[] = "jobid [...]";
-static struct argp_option mod_job_options[] = {
+static char modify_job_doc[] = "mod job - Modify existing job/s";
+static char modify_job_arg_doc[] = "jobid [...]";
+static struct argp_option modify_job_options[] = {
 	{"verbose", 'v', 0, 0, "Produce verbose output"},
 	{"name", 'n', "job_name", 0, "Name of job"},
 	{"queue", 'q', "queue_name", 0, "Queue to submit job on"},
@@ -220,9 +220,9 @@ static struct argp_option mod_job_options[] = {
 };
 
 
-static error_t mod_job_parse(int key, char *arg, struct argp_state *state)
+static error_t modify_job_parse(int key, char *arg, struct argp_state *state)
 {
-	struct mod_job_args *arguments = state->input;
+	struct modify_job_args *arguments = state->input;
 	int count = 0;
 
 	switch (key)
@@ -302,9 +302,9 @@ static error_t mod_job_parse(int key, char *arg, struct argp_state *state)
 }
 
 /* Mod Queue */
-static char mod_queue_doc[] = "mod queue - Modify existing queue/s";
-static char mod_queue_arg_doc[] = "QUEUENAME [...]";
-static struct argp_option mod_queue_options[] = {
+static char modify_queue_doc[] = "mod queue - Modify existing queue/s";
+static char modify_queue_arg_doc[] = "QUEUENAME [...]";
+static struct argp_option modify_queue_options[] = {
 	{"verbose", 'v', 0, 0, "Produce verbose output"},
 	{"description", 'd', "description", 0, "Queue description"},
 	{"host", 'h', "host", 0, "Host queue runs on"},
@@ -348,9 +348,9 @@ static int getState(char *state) {
 	return s;
 }
 
-static error_t mod_queue_parse(int key, char *arg, struct argp_state *state)
+static error_t modify_queue_parse(int key, char *arg, struct argp_state *state)
 {
-	struct mod_queue_args *arguments = state->input;
+	struct modify_queue_args *arguments = state->input;
 	int count = 0;
 
 	switch (key)
@@ -702,6 +702,53 @@ static error_t signal_job_parse(int key, char *arg, struct argp_state *state)
 	return 0;
 }
 
+static char start_job_doc[] = "start job -- (re)start job/s\nForces a job into a pending state by removing defertimes/hold flags.";
+static char start_job_arg_doc[] = "JOBID...";
+static struct argp_option start_job_options[] = {
+	{"verbose", 'v', 0, 0, "Produce verbose output"},
+	{"restart", 'r', 0, 0, "Restart the specified job/s. Must be specified when a job has already completed."},
+	{0}};
+
+static error_t start_job_parse(int key, char *arg, struct argp_state *state)
+{
+	UNUSED(arg);
+	int count = 0;
+	struct start_job_args *arguments = state->input;
+
+	switch (key)
+	{
+		case 'v':
+			arguments->verbose = 1;
+			break;
+
+		case 'r':
+			arguments->restart = 1;
+			break;
+
+		case ARGP_KEY_INIT:
+			break;
+
+		case ARGP_KEY_ARG:
+			count = state->argc - state->next + 1;
+			arguments->jobids = calloc(count + 1, sizeof(jobid_t));
+			for (int i = 0; i < count; i++)
+				arguments->jobids[i] = atoi(state->argv[state->next - 1 + i]);
+
+			/* Force parsing to stop */
+			state->next = state->argc;
+
+			break;
+
+
+		case ARGP_KEY_END:
+			break;
+
+		default:
+			return ARGP_ERR_UNKNOWN;
+	}
+	return 0;
+}
+
 static char add_resource_doc[] = "add resource -- Add a new resource";
 static char add_resource_arg_doc[] = "resource_name[:count] [...]";
 static struct argp_option add_resource_options[] = {
@@ -745,18 +792,18 @@ static error_t add_resource_parse(int key, char *arg, struct argp_state *state)
 	return 0;
 }
 
-static char mod_resource_doc[] = "mod resource -- Mod a existing resource/s";
-static char mod_resource_arg_doc[] = "resource_name:new_count [...]";
-static struct argp_option mod_resource_options[] = {
+static char modify_resource_doc[] = "mod resource -- Mod a existing resource/s";
+static char modify_resource_arg_doc[] = "resource_name:new_count [...]";
+static struct argp_option modify_resource_options[] = {
 	{"verbose", 'v', 0, 0, "Produce verbose output"},
 	{0}
 };
 
-static error_t mod_resource_parse(int key, char *arg, struct argp_state *state)
+static error_t modify_resource_parse(int key, char *arg, struct argp_state *state)
 {
 	UNUSED(arg);
 	int count = 0;
-	struct mod_resource_args *arguments = state->input;
+	struct modify_resource_args *arguments = state->input;
 
 	switch (key)
 	{
@@ -931,17 +978,18 @@ int parse_##cmd(int argc, char *argv[], struct cmd##_args *args) { \
 CMD_PARSE(add_job)
 CMD_PARSE(show_job)
 CMD_PARSE(delete_job)
-CMD_PARSE(mod_job)
+CMD_PARSE(modify_job)
 CMD_PARSE(signal_job)
+CMD_PARSE(start_job)
 
 CMD_PARSE(add_queue)
 CMD_PARSE(show_queue)
 CMD_PARSE(delete_queue)
-CMD_PARSE(mod_queue)
+CMD_PARSE(modify_queue)
 
 CMD_PARSE(add_resource)
 CMD_PARSE(show_resource)
 CMD_PARSE(delete_resource)
-CMD_PARSE(mod_resource)
+CMD_PARSE(modify_resource)
 
 CMD_PARSE(show_agent)
