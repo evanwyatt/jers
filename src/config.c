@@ -244,7 +244,7 @@ void loadConfig(char * config) {
 		/* No allowed agents specified in the config file,
 		 * only allow an agent connection from localhost */
 		agentList = calloc(1, sizeof(agent));
-		agentList->host = strdup("localhost");
+		agentList->host = strdup(gethost());
 		agentList->connection.socket = -1;
 
 		print_msg(JERS_LOG_WARNING, "No agents in config file. Only allowing an agent from localhost");
