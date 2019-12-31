@@ -167,6 +167,13 @@ int addJob(struct job * j, int state, int dirty) {
 	return 0;
 }
 
+void deleteJob(struct job *j) {
+	j->internal_state |= JERS_FLAG_DELETED;
+	changeJobState(j, 0, NULL, 0);
+	server.stats.total.deleted++;
+	server.deleted++;
+}
+
 void markJobsUnknown(agent *a) {
 	for (struct job *j = server.jobTable; j != NULL; j = j->hh.next) {
 		if (j->queue->agent == a && (j->state & JERS_JOB_RUNNING || j->internal_state & JERS_FLAG_JOB_STARTED)) {

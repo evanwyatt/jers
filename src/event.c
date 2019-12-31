@@ -37,6 +37,8 @@
 #include "acct.h"
 #include "email.h"
 
+#define MINUTE_MS(x) (60000 * x)
+
 struct event {
 	void (*func)(void);
 	int interval;    // Milliseconds between event triggering
@@ -215,6 +217,22 @@ void checkEmails(void) {
 	checkEmailProcesses();
 }
 
+void autoCleanup(void) {
+	if (server.auto_cleanup == 0)
+		return;
+
+	print_msg(JERS_LOG_INFO, "Running auto cleanup.");
+	time_t target_time = time(NULL) - (server.auto_cleanup * 60 * 60);
+
+	for (struct job *j = server.jobTable; j != NULL; j = j->hh.next) {
+		if (j->internal_state &JERS_FLAG_DELETED || j->state != JERS_JOB_COMPLETED)
+			continue;
+
+		if (j->finish_time <= target_time)
+			deleteJob(j);
+	}
+}
+
 void initEvents(void) {
 	registerEvent(checkJobsEvent, server.sched_freq);
 	registerEvent(cleanupEvent, 1000);
@@ -230,6 +248,7 @@ void initEvents(void) {
 	registerEvent(checkAgentEvent, 0);
 	registerEvent(checkClientEvent, 0);
 	registerEvent(checkAcctEvent, 1000);
+	registerEvent(autoCleanup, MINUTE_MS(5));
 }
 
 /* Check for any timed events to expire */

@@ -810,10 +810,7 @@ int command_del_job(client * c, void * args) {
 		return 1;
 	}
 
-	j->internal_state |= JERS_FLAG_DELETED;
-	changeJobState(j, 0, NULL, 0);
-	server.stats.total.deleted++;
-	server.deleted++;
+	deleteJob(j);
 
 	return sendClientReturnCode(c, NULL, "0");
 }

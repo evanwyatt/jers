@@ -226,6 +226,8 @@ void loadConfig(char * config) {
 			
 			if (loadSecret(value, server.secret_hash) != 0)
 				error_die("Unable to load secret specified in configuration file: %s", value);
+		} else if (strcmp(key, "auto_cleanup") == 0) {
+			server.auto_cleanup = atoi(value);
 		} else {
 			print_msg(JERS_LOG_WARNING, "Skipping unknown config key: %s\n", key);
 			continue;

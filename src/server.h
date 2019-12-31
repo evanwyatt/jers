@@ -276,6 +276,8 @@ struct jersServer {
 	int64_t candidate_pool_jobs;
 	struct job ** candidate_pool;
 
+	int auto_cleanup;
+
 	char slow_logging;		// Write slow commands to a slow log
 	int slow_threshold_ms;	// milliseconds before a cmd is considered slow.
 
@@ -332,6 +334,7 @@ void error_die(char *, ...);
 
 jobid_t getNextJobID(void);
 int addJob(struct job * j, int state, int dirty);
+void deleteJob(struct job * j);
 void freeJob(struct job * j);
 struct job * findJob(jobid_t jobid);
 
