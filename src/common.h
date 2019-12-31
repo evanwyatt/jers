@@ -49,6 +49,7 @@ void setproctitle(const char *fmt, ...);
 #define PERM_WRITE  0x02
 #define PERM_SETUID 0x04
 #define PERM_QUEUE  0x08
+#define PERM_SELF   0x10
 
 #define PERM_NOTUSED 0x8000
 

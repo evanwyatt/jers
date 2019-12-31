@@ -328,6 +328,27 @@ void serialize_jersJob(buff_t *b, struct job *j, int fields) {
 	JSONEndObject(b);
 }
 
+/* Check the user has permssions to operate on the specified job */
+static inline int check_perm(client *c, uid_t job_uid, int required_perm) {
+	/* Let root do anything */
+	if (c->uid == 0)
+		return 0;
+
+	/* A user can do whatever they like to their own jobs, unless the 'SELF'
+	 * permission is being used */
+	if (c->uid == job_uid) {
+		if (server.permissions.self.count && (c->user->permissions &PERM_SELF) != PERM_SELF)
+			return 1;
+
+		return 0;
+	}
+
+	if ((c->user->permissions &required_perm) != required_perm)
+		return 1;
+
+	return 0;
+}
+
 int command_add_job(client *c, void *args) {
 	jersJobAdd * s = args;
 	struct job * j = NULL;
@@ -346,6 +367,22 @@ int command_add_job(client *c, void *args) {
 		print_msg(JERS_LOG_INFO, "Recovering jobid:%d\n", server.recovery.jobid);
 		s->jobid = server.recovery.jobid;
 		s->uid = server.recovery.uid;
+	}
+
+	if (s->uid <= 0)
+		s->uid = c->uid;
+
+	if (s->uid == 0) {
+		sendError(c, JERS_ERR_INVARG, "Jobs not allowed to run as root");
+		return -1;
+	}
+
+	if (likely(server.recovery.in_progress == 0)) {
+		/* Validate the user has permission */
+		if (check_perm(c, s->uid, PERM_SETUID)) {
+			sendError(c, JERS_ERR_NOPERM, NULL);
+			return -1;
+		}
 	}
 
 	/* Validate the request first up */
@@ -376,23 +413,6 @@ int command_add_job(client *c, void *args) {
 
 		if (j != NULL) {
 			sendError(c, JERS_ERR_JOBEXISTS, NULL);
-			return -1;
-		}
-	}
-
-	if (s->uid <= 0)
-			s->uid = c->uid;
-
-	if (s->uid == 0) {
-		sendError(c, JERS_ERR_INVARG, "Jobs not allowed to run as root");
-		return -1;
-	}
-
-	/* Validate if the requester is allowed to submit a job
-	 * under another uid */
-	if (server.recovery.in_progress == 0 && c->uid != 0 && c->uid != s->uid) {
-		if ((c->user->permissions &PERM_SETUID) == 0) {
-			sendError(c, JERS_ERR_NOPERM, NULL);
 			return -1;
 		}
 	}
@@ -521,6 +541,8 @@ int command_get_job(client *c, void * args) {
 	jersJobFilter * s = args;
 	struct queue * q = NULL;
 	struct job * j = NULL;
+	int read_all = c->user->permissions &PERM_READ;
+	int self = (server.permissions.self.count == 0 || (c->user->permissions &PERM_SELF) == PERM_SELF);
 
 	int64_t count = 0;
 
@@ -529,6 +551,13 @@ int command_get_job(client *c, void * args) {
 	/* JobId? Just look it up and return the result */
 	if (s->jobid) {
 		j = findJob(s->jobid);
+
+		/* Validate the user has permission
+		 * We use a bogus UID if the job doesn't exist, just to check their permissions */
+		if (check_perm(c, j ? j->uid : 0, PERM_READ)) {
+			sendError(c, JERS_ERR_NOPERM, NULL);
+			return -1;
+		}
 
 		if (j == NULL || (j->internal_state &JERS_FLAG_DELETED)) {
 			sendError(c, JERS_ERR_NOJOB, NULL);
@@ -613,9 +642,12 @@ int command_get_job(client *c, void * args) {
 					continue;
 			}
 
-			/* Made it here, add it to our response */
-			serialize_jersJob(&r, j, s->return_fields);
-			count++;
+			/* Made it here, add it to our response if the user has permission */
+			if (read_all || (self && j->uid == c->uid))
+			{
+				serialize_jersJob(&r, j, s->return_fields);
+				count++;
+			}
 		}
 	}
 
@@ -638,6 +670,15 @@ int command_mod_job(client *c, void *args) {
 	}
 
 	j = findJob(mj->jobid);
+
+	if (likely(server.recovery.in_progress == 0)) {
+		/* Validate the user has permission
+		 * We use a bogus ID if the job doesn't exist, just to check their permissions */
+		if (check_perm(c, j ? j->uid : 0, PERM_WRITE)) {
+			sendError(c, JERS_ERR_NOPERM, NULL);
+			return -1;
+		}
+	}
 
 	if (j == NULL || j->internal_state &JERS_FLAG_DELETED) {
 		sendError(c, JERS_ERR_NOJOB, NULL);
@@ -800,6 +841,15 @@ int command_del_job(client * c, void * args) {
 
 	j = findJob(jd->jobid);
 
+	if (likely(server.recovery.in_progress == 0)) {
+		/* Validate the user has permission
+		 * We use a bogus ID if the job doesn't exist, just to check their permissions */
+		if (check_perm(c, j ? j->uid : 0, PERM_WRITE)) {
+			sendError(c, JERS_ERR_NOPERM, NULL);
+			return -1;
+		}
+	}
+
 	if (!j || j->internal_state &JERS_FLAG_DELETED) {
 		if (unlikely(server.recovery.in_progress)) {
 			print_msg(JERS_LOG_DEBUG, "Skipping deletion of non-existent %d", jd->jobid);
@@ -820,6 +870,13 @@ int command_sig_job(client * c, void * args) {
 	struct job * j = NULL;
 
 	j = findJob(js->jobid);
+
+	/* Validate the user has permission
+	 * We use a bogus ID if the job doesn't exist, just to check their permissions */
+	if (check_perm(c, j ? j->uid : 0, PERM_WRITE)) {
+		sendError(c, JERS_ERR_NOPERM, NULL);
+		return -1;
+	}
 
 	if (!j || j->internal_state &JERS_FLAG_DELETED) {
 		sendError(c, JERS_ERR_NOJOB, NULL);
@@ -865,6 +922,15 @@ int command_set_tag(client * c, void * args) {
 
 	j = findJob(ts->jobid);
 
+	if (likely(server.recovery.in_progress == 0)) {
+		/* Validate the user has permission
+		 * We use a bogus ID if the job doesn't exist, just to check their permissions */
+		if (check_perm(c, j ? j->uid : 0, PERM_WRITE)) {
+			sendError(c, JERS_ERR_NOPERM, NULL);
+			return -1;
+		}
+	}
+
 	if (j == NULL) {
 		sendError(c, JERS_ERR_NOJOB, NULL);
 		return 1;
@@ -905,6 +971,15 @@ int command_del_tag(client * c, void * args) {
 	int i;
 
 	j = findJob(td->jobid);
+
+	if (likely(server.recovery.in_progress == 0)) {
+		/* Validate the user has permission
+		 * We use a bogus ID if the job doesn't exist, just to check their permissions */
+		if (check_perm(c, j ? j->uid : 0, PERM_WRITE)) {
+			sendError(c, JERS_ERR_NOPERM, NULL);
+			return -1;
+		}
+	}
 
 	if (j == NULL) {
 		sendError(c, JERS_ERR_NOJOB, NULL);

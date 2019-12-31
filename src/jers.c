@@ -343,6 +343,7 @@ static void print_job(jersJob *j, int all) {
 		printf("Jobid: %d\n", j->jobid);
 		printf("------------------------\n");
 		printf("JobName: %s\n", j->jobname);
+		printf("Status: %s\n", print_state(j));
 		printf("Queue: %s\n", j->queue);
 		printf("User: %s(%d)\n", getUser(j->uid), j->uid);
 		printf("Submitter: %s(%d)\n", getUser(j->submitter), j->submitter);
@@ -369,6 +370,9 @@ static void print_job(jersJob *j, int all) {
 		}
 
 		printf("\n");
+
+		if (j->pend_reason)
+			printf("Pend Reason: %s\n", jersGetPendStr(j->pend_reason));
 
 		_print_time("Submit time", j->submit_time);
 

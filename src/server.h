@@ -254,6 +254,7 @@ struct jersServer {
 
 	/* Describes the groups required to run commands */
 	struct {
+		struct gid_array self;
 		struct gid_array read;
 		struct gid_array write;
 		struct gid_array setuid;

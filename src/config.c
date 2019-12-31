@@ -206,6 +206,8 @@ void loadConfig(char * config) {
 			getGroups(value, &server.permissions.setuid);
 		} else if (strcmp(key, "queue_group") == 0) {
 			getGroups(value, &server.permissions.queue);
+		} else if (strcmp(key, "self_group") == 0) {
+			getGroups(value, &server.permissions.self);
 		} else if (strcmp(key, "agents") == 0) {
 			loadAllowedAgents(value);
 		} else if (strcmp(key, "logging_mode") == 0) {
