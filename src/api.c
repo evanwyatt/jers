@@ -336,6 +336,7 @@ static int deserialize_jersQueue(msg_item * item, jersQueue *q) {
 			case STATE     : q->state = getNumberField(&item->fields[i]); break;
 			case PRIORITY  : q->priority = getNumberField(&item->fields[i]); break;
 			case DEFAULT   : q->default_queue = getBoolField(&item->fields[i]); break;
+			case NICE      : q->nice = getNumberField(&item->fields[i]); break;
 
 			case STATSRUNNING   : q->stats.running = getNumberField(&item->fields[i]); break;
 			case STATSPENDING   : q->stats.pending = getNumberField(&item->fields[i]); break;
@@ -722,6 +723,7 @@ JERS_EXPORT void jersInitQueueMod(jersQueueMod *q) {
 	q->job_limit = UNSET_32;
 	q->priority = UNSET_32;
 	q->default_queue = UNSET_32;
+	q->nice = UNSET_32;
 }
 
 JERS_EXPORT void jersInitQueueAdd(jersQueueAdd *q) {
@@ -732,6 +734,7 @@ JERS_EXPORT void jersInitQueueAdd(jersQueueAdd *q) {
 	q->job_limit = UNSET_32;
 	q->priority = UNSET_32;
 	q->default_queue = UNSET_32;
+	q->nice = UNSET_32;
 }
 
 /* Note: filter is currently not used for queues */
@@ -815,17 +818,20 @@ JERS_EXPORT int jersAddQueue(const jersQueueAdd *q) {
 	if (q->desc)
 		JSONAddString(&b, DESC, q->desc);
 
-	if (q->job_limit != -1)
+	if (q->job_limit != UNSET_32)
 		JSONAddInt(&b, JOBLIMIT, q->job_limit);
 
-	if (q->priority != -1)
+	if (q->priority != UNSET_32)
 		JSONAddInt(&b, PRIORITY, q->priority);
 
-	if (q->state != -1)
+	if (q->state != UNSET_32)
 		JSONAddInt(&b, STATE, q->state);
 
-	if (q->default_queue != -1)
+	if (q->default_queue != UNSET_32)
 		JSONAddBool(&b, DEFAULT, q->default_queue);
+
+	if (q->nice != UNSET_32)
+		JSONAddInt(&b, NICE, q->nice);
 
 	if (sendRequest(&b))
 		return 1;
@@ -864,17 +870,20 @@ JERS_EXPORT int jersModQueue(const jersQueueMod *q) {
 	if (q->desc)
 		JSONAddString(&b, DESC, q->desc);
 
-	if (q->job_limit != -1)
+	if (q->job_limit != UNSET_32)
 		JSONAddInt(&b, JOBLIMIT, q->job_limit);
 
-	if (q->priority != -1)
+	if (q->priority != UNSET_32)
 		JSONAddInt(&b, PRIORITY, q->priority);
 
-	if (q->state != -1)
+	if (q->state != UNSET_32)
 		JSONAddInt(&b, STATE, q->state);
 
-	if (q->default_queue != -1)
+	if (q->default_queue != UNSET_32)
 		JSONAddBool(&b, DEFAULT, q->default_queue);
+
+	if (q->nice != UNSET_32)
+		JSONAddInt(&b, NICE, q->nice);
 
 	if (sendRequest(&b))
 		return 1;

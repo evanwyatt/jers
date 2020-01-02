@@ -51,6 +51,8 @@ typedef uint32_t jobid_t;
 #define JERS_JOB_MAX_PRIORITY 255
 #define JERS_JOB_MIN_PRIORITY 0
 
+#define JERS_CLEAR_NICE 100
+
 #define JERS_QUEUE_NAME_MAX 16
 #define JERS_QUEUE_DESC_MAX 128
 #define JERS_QUEUE_MIN_PRIORITY 0
@@ -394,6 +396,7 @@ typedef struct {
 	int state;
 	int priority;
 	int default_queue;
+	int nice;
 
 	struct jobStats stats;
 } jersQueue;
@@ -411,8 +414,9 @@ typedef struct {
 	int job_limit;
 	int priority;
 	int default_queue;
+	int nice;
 
-	char filler[24];
+	char filler[20];
 } jersQueueAdd;
 
 typedef struct {
@@ -423,8 +427,9 @@ typedef struct {
 	int job_limit;
 	int priority;
 	int default_queue;
+	int nice;
 
-	char filler[24];
+	char filler[20];
 } jersQueueMod;
 
 typedef struct {

@@ -298,6 +298,7 @@ static char * getQueueState(int state) {
 
 static void print_queue(jersQueue *q, int all) {
 	static int first = 1;
+	char nice[10] = "-";
 
 	if (all) {
 		printf("%s\n", q->name);
@@ -305,12 +306,15 @@ static void print_queue(jersQueue *q, int all) {
 
 	} else {
 		if (first) {
-			printf("Queue         Desc             Node             State          JobLimit\n");
-			printf("=======================================================================\n");
+			printf("Queue         Desc             Node             State          Nice   JobLimit\n");
+			printf("==============================================================================\n");
 			first = 0;
 		}
 
-		printf("%c%-12s %-16.16s %-16.16s %-14.14s %-4d\n", q->default_queue? '*':' ', q->name, q->desc ? q->desc:"", q->node, getQueueState(q->state), q->job_limit);
+		if (q->nice != JERS_CLEAR_NICE)
+			sprintf(nice, "%d", q->nice);
+
+		printf("%c%-12s %-16.16s %-16.16s %-14.14s %-4.4s   %-4d\n", q->default_queue? '*':' ', q->name, q->desc ? q->desc:"", q->node, getQueueState(q->state), nice, q->job_limit);
 	}
 
 	return;

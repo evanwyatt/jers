@@ -240,7 +240,10 @@ static error_t modify_job_parse(int key, char *arg, struct argp_state *state)
 			break;
 
 		case 'N':
-			arguments->mod.nice = atoi(arg);
+			if (strcasecmp(arg, "clear") == 0)
+				arguments->mod.nice = JERS_CLEAR_NICE;
+			else
+				arguments->mod.nice = atoi(arg);
 			break;
 
 		case 'h':
@@ -312,6 +315,7 @@ static struct argp_option modify_queue_options[] = {
 	{"priority", 'p', "priority", 0, "Queue priority"},
 	{"state", 's', "state", 0, "Queue state. <open/closed>:<started/stopped>"},
 	{"default", 'D', 0, 0, "Set this queue to be the default queue"},
+	{"nice", 'n', "nice", 0, "Set the default nice for this queue. Or use 'clear' to remove"},
 	{0}
 };
 
@@ -375,6 +379,14 @@ static error_t modify_queue_parse(int key, char *arg, struct argp_state *state)
 			arguments->mod.job_limit = atoi(arg);
 			break;
 
+		case 'n':
+			if (strcasecmp(arg, "clear") == 0)
+				arguments->mod.nice = JERS_CLEAR_NICE;
+			else
+				arguments->mod.nice = atoi(arg);
+
+			break;
+
 		case 'p':
 			arguments->mod.priority = atoi(arg);
 			break;
@@ -421,6 +433,7 @@ static struct argp_option add_queue_options[] = {
 	{"host", 'h', "host", 0, "Host queue runs on"},
 	{"limit", 'l', "job_limit", 0, "Queue job limit"},
 	{"priority", 'p', "priority", 0, "Queue priority"},
+	{"nice", 'n', "nice", 0, "Default nice setting for jobs in this queue"},
 	{0}
 };
 
@@ -448,6 +461,10 @@ static error_t add_queue_parse(int key, char *arg, struct argp_state *state)
 
 		case 'l':
 			arguments->add.job_limit = atoi(arg);
+			break;
+
+		case 'n':
+			arguments->add.nice = atoi(arg);
 			break;
 
 		case 'p':

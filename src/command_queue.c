@@ -44,6 +44,7 @@ void * deserialize_add_queue(msg_t * msg) {
 	q->state = UNSET_32;
 	q->job_limit = UNSET_32;
 	q->default_queue = UNSET_32;
+	q->nice = UNSET_32;
 
 	for (i = 0; i < item->field_count; i++) {
 		switch(item->fields[i].number) {
@@ -54,6 +55,7 @@ void * deserialize_add_queue(msg_t * msg) {
 			case JOBLIMIT: q->job_limit = getNumberField(&item->fields[i]); break;
 			case STATE: q->state = getNumberField(&item->fields[i]); break;
 			case DEFAULT: q->default_queue = getBoolField(&item->fields[i]); break;
+			case NICE : q->nice = getNumberField(&item->fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",msg->items[0].fields[i].name); break;
 		}
@@ -97,6 +99,7 @@ void * deserialize_mod_queue(msg_t * msg) {
 			case JOBLIMIT: q->job_limit = getNumberField(&item->fields[i]); break;
 			case STATE: q->state = getNumberField(&item->fields[i]); break;
 			case DEFAULT: q->default_queue = getBoolField(&item->fields[i]); break;
+			case NICE : q->nice = getNumberField(&item->fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",msg->items[0].fields[i].name); break;
 		}
@@ -189,6 +192,7 @@ int command_add_queue(client * c, void * args) {
 	q->job_limit = qa->job_limit != UNSET_32 ? qa->job_limit : JERS_QUEUE_DEFAULT_LIMIT;
 	q->priority = qa->priority != UNSET_32 ? qa->priority : JERS_QUEUE_DEFAULT_PRIORITY;
 	q->state = qa->state != UNSET_32 ? qa->state : JERS_QUEUE_DEFAULT_STATE;
+	q->nice = qa->nice != UNSET_32 ? qa->nice : server.default_job_nice;
 	q->agent = a;
 	default_queue = qa->default_queue != UNSET_32 ? qa->default_queue : 0;
 
@@ -210,6 +214,7 @@ void serialize_jersQueue(buff_t *b, struct queue * q) {
 	JSONAddInt(b, STATE, q->state);
 	JSONAddInt(b, PRIORITY, q->priority);
 	JSONAddBool(b, DEFAULT, (server.defaultQueue == q));
+	JSONAddInt(b, NICE, q->nice != UNSET_32 ? q->nice : JERS_CLEAR_NICE);
 
 	JSONAddInt(b, STATSRUNNING, q->stats.running);
 	JSONAddInt(b, STATSPENDING, q->stats.pending);
@@ -336,6 +341,15 @@ int command_mod_queue(client *c, void * args) {
 	if (qm->default_queue != UNSET_32) {
 		/* Clear the existing default queue and set this one */
 		setDefaultQueue(q);
+		dirty = 1;
+	}
+
+	if (qm->nice != UNSET_32) {
+		if (qm->nice == JERS_CLEAR_NICE)
+			q->nice = UNSET_32;
+		else
+			q->nice = qm->nice;
+
 		dirty = 1;
 	}
 

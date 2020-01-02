@@ -590,7 +590,7 @@ int stateSaveJob(struct job * j) {
 	if (j->uid)
 		fprintf(f, "UID %d\n", j->uid);
 
-	if (j->nice)
+	if (j->nice != UNSET_32)
 		fprintf(f, "NICE %d\n", j->nice);
 
 	if (j->state)
@@ -673,6 +673,9 @@ int stateSaveQueue(struct queue * q) {
 	fprintf(f, "PRIORITY %d\n", q->priority);
 	fprintf(f, "HOST %s\n", q->host);
 	fprintf(f, "REVISION %ld\n", q->obj.revision);
+
+	if (q->nice != UNSET_32)
+		fprintf(f, "NICE %d\n", q->nice);
 
 	if (server.defaultQueue == q)
 		fprintf(f, "DEFAULT 1\n");
@@ -1413,6 +1416,7 @@ int stateLoadQueue(char * fileName) {
 	q->priority = JERS_QUEUE_DEFAULT_PRIORITY;
 	q->state = JERS_QUEUE_DEFAULT_STATE;
 	q->obj.type = JERS_OBJECT_QUEUE;
+	q->nice = UNSET_32;
 
 	/* Read the contents and get the details */
 	ssize_t len;
@@ -1438,6 +1442,8 @@ int stateLoadQueue(char * fileName) {
 			q->host = strdup(value);
 		} else if (strcmp(key, "REVISION") == 0) {
 			q->obj.revision = atol(value);
+		} else if (strcmp(key, "NICE") == 0) {
+			q->nice = atoi(value);
 		} else {
 			print_msg(JERS_LOG_WARNING, "stateLoadQueue: skipping unknown config '%s' for queue %s\n", key, name);
 		}

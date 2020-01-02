@@ -148,6 +148,8 @@ void loadConfig(char * config) {
 
 	server.email_freq_ms = DEFAULT_CONFIG_EMAIL_FREQ;
 
+	server.default_job_nice = JERS_JOB_DEFAULT_NICE;
+
 	while ((len = getline(&line, &line_size, f)) != -1) {
 		line[strcspn(line, "\n")] = '\0';
 		char *key, *value;
@@ -230,6 +232,15 @@ void loadConfig(char * config) {
 				error_die("Unable to load secret specified in configuration file: %s", value);
 		} else if (strcmp(key, "auto_cleanup") == 0) {
 			server.auto_cleanup = atoi(value);
+		} else if (strcmp(key, "default_job_nice") == 0) {
+			server.default_job_nice = atoi(value);
+
+			if (server.default_job_nice < -20 || server.default_job_nice > 19)
+				server.default_job_nice = JERS_JOB_DEFAULT_NICE;
+
+			if (server.default_job_nice < 0)
+				print_msg(JERS_LOG_WARNING, "Warning - Setting a default nice value below 0 is not recommended");
+
 		} else {
 			print_msg(JERS_LOG_WARNING, "Skipping unknown config key: %s\n", key);
 			continue;

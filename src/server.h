@@ -97,6 +97,7 @@ struct queue {
 	int job_limit;
 	int state;
 	int priority;
+	int nice;
 
 	char * host;
 	agent * agent;
@@ -276,6 +277,8 @@ struct jersServer {
 	int64_t candidate_pool_size;
 	int64_t candidate_pool_jobs;
 	struct job ** candidate_pool;
+
+	int default_job_nice;
 
 	int auto_cleanup;
 

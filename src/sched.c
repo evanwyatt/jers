@@ -63,7 +63,19 @@ void sendStartCmd(struct job * j) {
 	JSONAddString(&b, JOBNAME, j->jobname);
 	JSONAddString(&b, QUEUENAME, j->queue->name);
 	JSONAddInt(&b, UID, j->uid);
-	JSONAddInt(&b, NICE, j->nice);
+
+	/* Work out what nice setting to use.
+	 * Use the following in order:
+	 * Job setting
+	 * Queue setting
+	 * default */
+
+	if (j->nice != UNSET_32)
+		JSONAddInt(&b, NICE, j->nice);
+	else if (j->queue->nice != UNSET_32)
+		JSONAddInt(&b, NICE, j->queue->nice);
+	else
+		JSONAddInt(&b, NICE, server.default_job_nice);	
 
 	if (j->shell)
 		JSONAddString(&b, SHELL, j->shell);

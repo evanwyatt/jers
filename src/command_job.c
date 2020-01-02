@@ -80,7 +80,7 @@ void * deserialize_add_job(msg_t * t) {
 	jersJobAdd *s = calloc(sizeof(jersJobAdd), 1);
 
 	s->priority = JERS_JOB_DEFAULT_PRIORITY;
-	s->nice = JERS_JOB_DEFAULT_NICE;
+	s->nice = UNSET_32;
 
 	for (int i = 0; i < t->items[0].field_count; i++) {
 		switch(t->items[0].fields[i].number) {
@@ -266,7 +266,7 @@ void serialize_jersJob(buff_t *b, struct job *j, int fields) {
 		JSONAddInt(b, SUBMITTIME, j->submit_time);
 
 	if (fields == 0 || fields & JERS_RET_NICE)
-		JSONAddInt(b, NICE, j->nice);
+		JSONAddInt(b, NICE, j->nice != UNSET_32? j->nice : j->queue->nice != UNSET_32 ? j->queue->nice : server.default_job_nice);
 
 	if (fields == 0 || fields & JERS_RET_ARGS)
 		JSONAddStringArray(b, ARGS, j->argc, j->argv);
@@ -765,7 +765,10 @@ int command_mod_job(client *c, void *args) {
 	}
  
 	if (mj->nice != UNSET_32) {
-		j->nice = mj->nice;
+		if (mj->nice == JERS_CLEAR_NICE)
+			j->nice = UNSET_32;
+		else
+			j->nice = mj->nice;
 
 		dirty = 1;
 	}
