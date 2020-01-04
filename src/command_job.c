@@ -817,6 +817,7 @@ int command_mod_job(client *c, void *args) {
 			j->start_time = 0;
 			j->finish_time = 0;
 			j->fail_reason = 0;
+			completed = 0;
 
 			dirty = 1;
 		}
