@@ -36,6 +36,10 @@
 #include <stdarg.h>
 #include <sys/stat.h>
 
+#ifdef USE_SYSTEMD
+#include "systemd/sd-daemon.h"
+#endif
+
 #include "server.h"
 #include "jers.h"
 #include "logging.h"
@@ -328,11 +332,20 @@ int main (int argc, char * argv[]) {
 
 	print_msg(JERS_LOG_INFO, "* JERSD entering main loop...\n");
 
+#ifdef USE_SYSTEMD
+	/* Signal to systemd we are ready to process requests */
+	sd_notify(0, "READY=1");
+	sd_notify(0, "STATUS=Ready for requests");
+#endif
+
 	/* Away we go. We will sit in this loop until a shutdown is requested */
 	while (1) {
 
 		if (server.shutdown) {
 			print_msg(JERS_LOG_INFO, "Shutdown requested via signal");
+#ifdef USE_SYSTEMD
+			sd_notify(0, "STOPPING=1");
+#endif
 			break;
 		}
 

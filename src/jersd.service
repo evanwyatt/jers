@@ -8,7 +8,7 @@ Wants=network-online.target
 [Service]
 User=jers
 Group=jers
-
+Type=notify
 ExecStart=/usr/bin/jersd --daemon
 ExecReload=/bin/kill -HUP $MAINPID
 

@@ -45,6 +45,10 @@
 #include <glob.h>
 #include <libgen.h>
 
+#ifdef USE_SYSTEMD
+#include <systemd/sd-daemon.h>
+#endif
+
 #define STATE_DIV_FACTOR 10000
 
 int resourceStringToResource(const char * string, struct jobResource * res);
@@ -1351,6 +1355,10 @@ int stateLoadJobs(void) {
 	char pattern[PATH_MAX];
 	glob_t jobFiles;
 
+#ifdef USE_SYSTEMD
+	sd_notify(0, "STATUS=Loading jobs...");
+#endif
+
 	sprintf(pattern, "%s/jobs/*/*.job", server.state_dir);
 
 	print_msg(JERS_LOG_INFO, "Loading jobs from %s\n", pattern);
@@ -1476,6 +1484,10 @@ int stateLoadQueues(void) {
 	char pattern[PATH_MAX];
 	glob_t qFiles;
 
+#ifdef USE_SYSTEMD
+	sd_notify(0, "STATUS=Loading queues...");
+#endif
+
 	sprintf(pattern, "%s/queues/*.queue", server.state_dir);
 
 	print_msg(JERS_LOG_INFO, "Loading queues from %s\n", pattern);
@@ -1581,6 +1593,10 @@ int stateLoadResources(void) {
 	size_t i;
 	char pattern[PATH_MAX];
 	glob_t resFiles;
+
+#ifdef USE_SYSTEMD
+	sd_notify(0, "STATUS=Loading resources...");
+#endif
 
 	sprintf(pattern, "%s/resources/*.resource", server.state_dir);
 

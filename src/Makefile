@@ -1,6 +1,11 @@
 JERS_CFLAGS=$(CFLAGS) -g -fPIC -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -std=c99 -D_GNU_SOURCE -fvisibility=hidden
 JERS_LDFLAGS=$(LD_FLAGS) -rdynamic
 
+ifeq ($(USE_SYSTEMD),)
+	SYSTEMD_LIBS=-lsystemd
+	JERS_CFLAGS+= -DUSE_SYSTEMD
+endif
+
 EXTERNAL_LIBS=-lcrypto -lssl
 
 INC=-I./ -I ../deps/
@@ -28,7 +33,7 @@ LIBJERS_OBJS=api.o fields.o buffer.o common.o error.o json.o
 all: jersd jers_agentd jers_dump_env jers
 
 jersd: $(JERSD_OBJS)
-	$(CC) $(JERS_LDFLAGS) -o $@ $^ $(EXTERNAL_LIBS)
+	$(CC) $(JERS_LDFLAGS) -o $@ $^ $(EXTERNAL_LIBS) $(SYSTEMD_LIBS)
 
 jers_agentd: $(JERSAGENTD_OBJS)
 	$(CC) $(JERS_LDFLAGS) -o $@ $^ $(EXTERNAL_LIBS)
