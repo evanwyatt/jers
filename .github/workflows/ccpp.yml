@@ -9,6 +9,8 @@ jobs:
     
     steps:
     - uses: actions/checkout@v1
+    - name: Install packages
+      run: sudo apt-get install libsystemd-daemon-dev
     - name: make all
       run: make all
 
