@@ -221,7 +221,6 @@ void autoCleanup(void) {
 	if (server.auto_cleanup == 0)
 		return;
 
-	print_msg(JERS_LOG_INFO, "Running auto cleanup.");
 	time_t target_time = time(NULL) - (server.auto_cleanup * 60 * 60);
 
 	for (struct job *j = server.jobTable; j != NULL; j = j->hh.next) {
