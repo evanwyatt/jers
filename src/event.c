@@ -195,17 +195,17 @@ void cleanupEvent(void) {
 	if (server.candidate_pool_jobs || server.candidate_recalc)
 		max_clean = (max_clean + 1) / 2;
 
-	cleaned += cleanupJobs(server.max_cleanup);
+	cleaned += cleanupJobs(max_clean);
 
-	if (cleaned >= server.max_cleanup)
+	if (cleaned >= max_clean)
 		return;
 
-	cleaned += cleanupQueues(server.max_cleanup - cleaned);
+	cleaned += cleanupQueues(max_clean - cleaned);
 
-	if (cleaned >= server.max_cleanup)
+	if (cleaned >= max_clean)
 		return;
 
-	cleanupResources(server.max_cleanup - cleaned);
+	cleanupResources(max_clean - cleaned);
 }
 
 void backgroundSaveEvent(void) {
