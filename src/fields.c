@@ -217,7 +217,7 @@ static int compfield(const void * _a, const void * _b) {
 	const field * a = _a;
 	const field * b = _b;
 
-	return strcasecmp(a->name, b->name);
+	return strcmp(a->name, b->name);
 }
 
 field * sortedFields = NULL;
@@ -251,7 +251,7 @@ int fieldtonum(const char * in) {
 		return found->number;
 	} else {
 		for (i = 0; i < num_fields; i++) {
-			if (strcasecmp(in, fields[i].name) == 0) return i;
+			if (strcmp(in, fields[i].name) == 0) return i;
 		}
 	}
 
@@ -334,8 +334,11 @@ int load_message(char *json, msg_t *m)
 		return 1;
 	}
 
+	/* All commands are expected to the uppercase for ease of processing later */
+	uppercasestring(name);
+
 	/* Handle error messages here */
-	if (strcasecmp(name, "error") == 0) {
+	if (strcmp(name, "ERROR") == 0) {
 		char *err_msg;
 
 		if (JSONGetString(&object, &err_msg)) {
@@ -357,13 +360,13 @@ int load_message(char *json, msg_t *m)
 
 	/* Work out what to do based on the name */
 
-	if (strcasecmp(name, "resp") == 0) {
+	if (strcmp(name, "RESP") == 0) {
 		m->command = name;
-		uppercasestring(m->command);
 
 		/* Responses should contain either a return code, or a version number and an data array of items */
 		while ((name = JSONGetName(&cmd_object)) != NULL) {
-			if (strcasecmp(name, "return_code") == 0) {
+			uppercasestring(name);
+			if (strcmp(name, "RETURN_CODE") == 0) {
 				if (JSONGetString(&cmd_object, &m->command))
 					return 1;
 
@@ -371,10 +374,10 @@ int load_message(char *json, msg_t *m)
 				return 0;
 			}
 
-			if (strcasecmp(name, "version") == 0) {
+			if (strcmp(name, "VERSION") == 0) {
 				if (JSONGetNum(&cmd_object, &m->version))
 					return 1;
-			} else if (strcasecmp(name, "data") == 0) {
+			} else if (strcmp(name, "DATA") == 0) {
 				/* "data" should be an array of items */
 				if (loadItemArray(&cmd_object, m))
 					return 1;
@@ -383,14 +386,15 @@ int load_message(char *json, msg_t *m)
 	} else {
 		/* This should be a command, which has a version number and fields object */
 		m->command = name;
-		uppercasestring(m->command);
 
 		while ((name = JSONGetName(&cmd_object)) != NULL) {
-			if (strcasecmp(name, "version") == 0) {
+			uppercasestring(name);
+
+			if (strcmp(name, "VERSION") == 0) {
 				/* Consume the version */
 				if (JSONGetNum(&cmd_object, &m->version))
 					return 1;
-			} else if (strcasecmp(name, "fields") == 0) {
+			} else if (strcmp(name, "FIELDS") == 0) {
 				char *field_object = JSONGetObject(&cmd_object);
 
 				if (field_object == NULL)
@@ -438,6 +442,8 @@ static int loadFields(char *obj, msg_t *m) {
 
 			item->field_max = new_max;
 		}
+
+		uppercasestring(name);
 
 		field *f = &item->fields[item->field_count++];
 		int field_number = fieldtonum(name);

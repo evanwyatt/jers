@@ -1438,15 +1438,15 @@ int stateLoadQueue(char * fileName) {
 		if (!key || !value)
 			continue;
 
-		if (strcasecmp(key, "DESC") == 0) {
+		if (strcmp(key, "DESC") == 0) {
 			q->desc = strdup(value);
-		} else if (strcasecmp(key, "JOBLIMIT") == 0) {
+		} else if (strcmp(key, "JOBLIMIT") == 0) {
 			q->job_limit = atoi(value);
-		} else if (strcasecmp(key, "PRIORITY") == 0) {
+		} else if (strcmp(key, "PRIORITY") == 0) {
 			q->priority = atoi(value);
-		} else if (strcasecmp(key, "DEFAULT") == 0) {
+		} else if (strcmp(key, "DEFAULT") == 0) {
 			def = atoi(value);
-		} else if (strcasecmp(key, "HOST") == 0) {
+		} else if (strcmp(key, "HOST") == 0) {
 			q->host = strdup(value);
 		} else if (strcmp(key, "REVISION") == 0) {
 			q->obj.revision = atol(value);
@@ -1563,7 +1563,7 @@ int stateLoadRes(char * file_name) {
 		if (!key || !value)
 			continue;
 
-		if (strcasecmp(key, "COUNT") == 0) {
+		if (strcmp(key, "COUNT") == 0) {
 			r->count = atoi(value);
 		} else if (strcmp(key, "REVISION") == 0) {
 			r->obj.revision = atol(value);
