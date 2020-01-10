@@ -218,9 +218,6 @@ void checkEmails(void) {
 }
 
 void autoCleanup(void) {
-	if (server.auto_cleanup == 0)
-		return;
-
 	time_t target_time = time(NULL) - (server.auto_cleanup * 60 * 60);
 
 	for (struct job *j = server.jobTable; j != NULL; j = j->hh.next) {
@@ -247,7 +244,9 @@ void initEvents(void) {
 	registerEvent(checkAgentEvent, 0);
 	registerEvent(checkClientEvent, 0);
 	registerEvent(checkAcctEvent, 1000);
-	registerEvent(autoCleanup, MINUTE_MS(5));
+
+	if (server.auto_cleanup != 0)
+		registerEvent(autoCleanup, MINUTE_MS(5));
 }
 
 /* Check for any timed events to expire */
