@@ -100,7 +100,7 @@ char ** convertResourceToStrings(int res_count, struct jobResource * res) {
 int resourceToJSON(struct resource *r, buff_t *buff)
 {
 	JSONStart(buff);
-	JSONStartObject(buff, "RESOURCE");
+	JSONStartObject(buff, "RESOURCE", 8);
 
 	JSONAddString(buff, RESNAME, r->name);
 	JSONAddInt(buff, RESCOUNT, r->count);

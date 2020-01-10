@@ -188,7 +188,7 @@ void markJobsUnknown(agent *a) {
 int jobToJSON(struct job *j, buff_t *buff)
 {
 	JSONStart(buff);
-	JSONStartObject(buff, "JOB");
+	JSONStartObject(buff, "JOB", 3);
 
 	JSONAddInt(buff, JOBID, j->jobid);
 	JSONAddString(buff, JOBNAME, j->jobname);

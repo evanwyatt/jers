@@ -31,12 +31,12 @@
 #include <fields.h>
 #include <json.h>
 
-static const char *JSONescapeString(const char *string, size_t size);
+static const char *JSONescapeString(const char *string, size_t size, size_t *new_size);
 
 int JSONAddInt(buff_t *buff, int field_no, int64_t value)
 {
-	const char *field_name = getFieldName(field_no);
-	size_t name_len = strlen(field_name);
+	size_t name_len;
+	const char *field_name = getFieldName(field_no, &name_len);
 
 	/* Ensure we have room for '"field_name":value,' We assume we need 32 characters for the value*/
 	size_t required = name_len + 32 + 4;
@@ -60,14 +60,13 @@ int JSONAddInt(buff_t *buff, int field_no, int64_t value)
 
 int JSONAddStringN(buff_t *buff, int field_no, const char *value, size_t value_len)
 {
-	const char *field_name = getFieldName(field_no);
-	size_t name_len = strlen(field_name);
+	size_t name_len;
+	const char *field_name = getFieldName(field_no, &name_len);
 
 	if (value == NULL) {
 		value_len = 4; // 4 = null
 	} else {
-		value = JSONescapeString(value, value_len);
-		value_len = strlen(value);
+		value = JSONescapeString(value, value_len, &value_len);
 	}
 
 	/* Ensure we have room for '"field_name":"value",' */
@@ -110,15 +109,18 @@ int JSONAddString(buff_t *buff, int field_no, const char *value)
 
 int JSONAddStringArray(buff_t *buff, int field_no, int64_t count, char **values)
 {
-	const char *field_name = getFieldName(field_no);
-	size_t name_len = strlen(field_name);
+	size_t name_len;
+	const char *field_name = getFieldName(field_no, &name_len);
 	size_t required = name_len + 6;
+	size_t value_lengths[count];
 
 	if (count == 0)
 		return 0;
 
-	for (int64_t i = 0; i < count; i++)
-		required += (strlen(values[i]) * 2) + 3;
+	for (int64_t i = 0; i < count; i++) {
+		value_lengths[i] = strlen(values[i]);
+		required += (value_lengths[i] * 2) + 3;
+	}
 
 	buffResize(buff, required);
 
@@ -134,14 +136,13 @@ int JSONAddStringArray(buff_t *buff, int field_no, int64_t count, char **values)
 
 	for (int64_t i = 0; i < count; i++)
 	{
-		size_t value_len = strlen(values[i]);
+		size_t value_len = 0;
 
 		if (i != 0)
 			p[len++] = ',';
 
 		p[len++] = '"';
-		const char *escaped = JSONescapeString(values[i], 0);
-		value_len = strlen(escaped);
+		const char *escaped = JSONescapeString(values[i], value_lengths[i], &value_len);
 		memcpy(p + len, escaped, value_len);
 		len += value_len;
 		p[len++] = '"';
@@ -157,8 +158,8 @@ int JSONAddStringArray(buff_t *buff, int field_no, int64_t count, char **values)
 
 int JSONAddBool(buff_t *buff, int field_no, int value)
 {
-	const char *field_name = getFieldName(field_no);
-	size_t name_len = strlen(field_name);
+	size_t name_len;
+	const char *field_name = getFieldName(field_no, &name_len);
 	size_t required = name_len + 8;
 
 	buffResize(buff, required);
@@ -182,15 +183,22 @@ int JSONAddBool(buff_t *buff, int field_no, int value)
 
 int JSONAddMap(buff_t *buff, int field_no, int64_t count, key_val_t *values)
 {
-	const char *field_name = getFieldName(field_no);
+	size_t name_len;
+	const char *field_name = getFieldName(field_no, &name_len);
+
 	size_t required = 0;
 	size_t len = 0;
 
-	JSONStartObject(buff, field_name);
+	size_t lengths[count][2];
+
+	JSONStartObject(buff, field_name, name_len);
 	for (int64_t i = 0; i < count; i++)
 	{
-		required += strlen(values[i].key);
-		required += strlen(values[i].value);
+		lengths[i][0] = strlen(values[i].key);
+		lengths[i][1] = strlen(values[i].value);
+
+		required += lengths[i][0];
+		required += lengths[i][1];
 		required += 6;
 	}
 
@@ -199,8 +207,8 @@ int JSONAddMap(buff_t *buff, int field_no, int64_t count, key_val_t *values)
 
 	for (int64_t i = 0; i < count; i++)
 	{
-		size_t key_len = strlen(values[i].key);
-		size_t value_len = strlen(values[i].value);
+		size_t key_len = lengths[i][0];
+		size_t value_len = lengths[i][1];
 		p[len++] = '"';
 		memcpy(p + len, values[i].key, key_len);
 		len += key_len;
@@ -221,12 +229,16 @@ int JSONAddMap(buff_t *buff, int field_no, int64_t count, key_val_t *values)
 	return 0;
 }
 
-int JSONStartObject(buff_t *buff, const char *name)
+int JSONStartObject(buff_t *buff, const char *name, size_t name_len)
 {
-	int name_len = name ? strlen(name) : 0;
-	size_t required = name_len + 4;
+	size_t required;
 	char *p = buff->data + buff->used;
 	int len = 0;
+
+	if (name && name_len == 0)
+		name_len = strlen(name);
+
+	required = name_len + 4;
 
 	buffResize(buff, required);
 
@@ -259,9 +271,8 @@ int JSONEndObject(buff_t *buff)
 	return 0;
 }
 
-int JSONStartArray(buff_t *buff, const char *name)
+int JSONStartArray(buff_t *buff, const char *name, size_t name_len)
 {
-	int name_len = strlen(name);
 	size_t required = name_len + 4;
 	char *p = buff->data + buff->used;
 	int len = 0;
@@ -317,7 +328,7 @@ int JSONEnd(buff_t *buf)
 	return 0;
 }
 
-static const char *JSONescapeString(const char *string, size_t size)
+static const char *JSONescapeString(const char *string, size_t size, size_t *new_size)
 {
 	static char *escaped = NULL;
 	static size_t escaped_size = 0;
@@ -367,6 +378,10 @@ static const char *JSONescapeString(const char *string, size_t size)
 	}
 
 	*dest = '\0';
+
+	if (new_size)
+		*new_size = dest - escaped;
+
 	return escaped;
 }
 

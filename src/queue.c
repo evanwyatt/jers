@@ -121,7 +121,7 @@ void markQueueStopped(agent *a) {
 int queueToJSON(struct queue *q, buff_t *buff)
 {
 	JSONStart(buff);
-	JSONStartObject(buff, "QUEUE");
+	JSONStartObject(buff, "QUEUE", 5);
 
 	JSONAddString(buff, QUEUENAME, q->name);
 

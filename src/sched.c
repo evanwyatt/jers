@@ -57,7 +57,7 @@ void sendStartCmd(struct job * j) {
 
 	print_msg(JERS_LOG_INFO, "Sending start message for JobID:%-7d Queue:%s QueuePriority:%d Priority:%d", j->jobid, j->queue->name, j->queue->priority, j->priority);
 
-	initRequest(&b, "START_JOB", 1);
+	initRequest(&b, "START_JOB", CONST_STRLEN("START_JOB"), 1);
 
 	JSONAddInt(&b, JOBID, j->jobid);
 	JSONAddString(&b, JOBNAME, j->jobname);
@@ -148,18 +148,18 @@ int64_t generateCandidatePool(void) {
 
 	print_msg(JERS_LOG_DEBUG, "Regenerating job candidate pool");
 
-	if (total_job_count == 0) {
-		server.candidate_pool_jobs = 0;
-		server.candidate_recalc = 0;
-		return server.candidate_pool_jobs;
-	}
-
 	/* Assume we will need to add every non-completed job into this pool at some point.
 	 * We add some additional room so we don't need to realloc constantly */ 
 
 	if (server.candidate_pool_size < total_job_count) {
 		server.candidate_pool_size = total_job_count * 1.5;
 		server.candidate_pool = realloc(server.candidate_pool, sizeof(struct job *) * server.candidate_pool_size);
+	}
+
+	if (server.stats.jobs.pending == 0) {
+		server.candidate_pool_jobs = 0;
+		server.candidate_recalc = 0;
+		return server.candidate_pool_jobs;
 	}
 
 	/* Check each job for it's eligibility */

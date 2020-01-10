@@ -413,7 +413,7 @@ static void acctMain(acctClient *a, int journal_fd, off_t stream_start) {
 				/* Construct an 'update' message */
 				buffClear(&line, line.used);
 				JSONStart(&line);
-				JSONStartObject(&line, "update");
+				JSONStartObject(&line, "update", 6);
 
 				JSONAddInt(&line, DATETIME, hdr.timestamp_s);
 				JSONAddInt(&line, UID, hdr.uid);

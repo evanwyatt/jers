@@ -202,7 +202,7 @@ int command_add_queue(client * c, void * args) {
 }
 
 void serialize_jersQueue(buff_t *b, struct queue * q) {
-	JSONStartObject(b, NULL);
+	JSONStartObject(b, NULL, 0);
 
 	JSONAddString(b, QUEUENAME, q->name);
 

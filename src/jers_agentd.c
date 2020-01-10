@@ -686,7 +686,7 @@ int send_start(struct runningJob * j) {
 	buff_t b;
 	print_msg(JERS_LOG_INFO, "Job started: JOBID:%d PID:%d", j->jobID, j->pid);
 
-	initRequest(&b, AGENT_JOB_STARTED, 1);
+	initRequest(&b, AGENT_JOB_STARTED, CONST_STRLEN(AGENT_JOB_STARTED), 1);
 	JSONAddInt(&b, JOBID, j->jobID);
 	JSONAddInt(&b, JOBPID, j->pid);
 	JSONAddInt(&b, STARTTIME, j->start_time);
@@ -701,7 +701,7 @@ int send_job_initfail(jobid_t jobid, int status) {
 
 	print_msg(JERS_LOG_WARNING, "JOBID %d failed to initialise: %d (%s)", jobid, status, getFailString(status));
 
-	initRequest(&b, AGENT_JOB_COMPLETED, 1);
+	initRequest(&b, AGENT_JOB_COMPLETED, CONST_STRLEN(AGENT_JOB_COMPLETED), 1);
 	JSONAddInt(&b, JOBID, jobid);
 	JSONAddInt(&b, FINISHTIME, time(NULL));
 	JSONAddInt(&b, EXITCODE, status | JERS_EXIT_FAIL);
@@ -725,7 +725,7 @@ int send_completion(struct runningJob * j) {
 		return 0;
 	}
 
-	initRequest(&b, AGENT_JOB_COMPLETED, 1);
+	initRequest(&b, AGENT_JOB_COMPLETED, CONST_STRLEN(AGENT_JOB_COMPLETED), 1);
 
 	print_msg(JERS_LOG_INFO, "Job complete: JOBID:%d PID:%d RC:%08x\n", j->jobID, j->pid, j->job_completion.exitcode);
 
@@ -765,7 +765,7 @@ int send_login(void) {
 
 	print_msg(JERS_LOG_INFO, "Sending login");
 
-	initRequest(&b, AGENT_LOGIN, 1);
+	initRequest(&b, AGENT_LOGIN, CONST_STRLEN(AGENT_LOGIN), 1);
 	sendRequest(&b);
 	return 0;
 }
@@ -1124,7 +1124,7 @@ int recon_command(msg_t * m) {
 	/* The master daemon is requesting a list of all the jobs we have in memory.
 	 * We will remove the jobs in memory only when the master daemon confirms it's processed the recon message */
 
-	initNamedResponse(&b, AGENT_RECON_RESP, 1);
+	initNamedResponse(&b, AGENT_RECON_RESP, CONST_STRLEN(AGENT_RECON_RESP), 1);
 
 	print_msg(JERS_LOG_INFO, "=== Start Recon ===\n");
 
@@ -1132,7 +1132,7 @@ int recon_command(msg_t * m) {
 		print_msg(JERS_LOG_INFO, "JobID: %d PID:%d ExitCode:%d StartTime:%ld FinishTime:%ld\n", j->jobID, j->pid, j->job_completion.exitcode, j->start_time, j->job_completion.finish_time);
 
 		/* Add job to recon message request */
-		JSONStartObject(&b, NULL);
+		JSONStartObject(&b, NULL, 0);
 		JSONAddInt(&b, JOBID, j->jobID);
 		JSONAddInt(&b, STARTTIME, j->start_time);
 
@@ -1283,7 +1283,7 @@ int auth_challenge(msg_t *m) {
 	hmac = generateHMAC(hmac_input, agent.secret_hash, sizeof(agent.secret_hash));
 
 	buff_t auth_resp;
-	initRequest(&auth_resp, AGENT_AUTH_RESP, 1);
+	initRequest(&auth_resp, AGENT_AUTH_RESP, CONST_STRLEN(AGENT_AUTH_RESP), 1);
 
 	JSONAddInt(&auth_resp, DATETIME, time_now);
 	JSONAddString(&auth_resp, NONCE, agent.nonce);
@@ -1533,7 +1533,7 @@ void setupProxySocket(const char *path) {
 
 int send_proxy_connect(proxyClient *c) {
 	buff_t connRequest;
-	initRequest(&connRequest, AGENT_PROXY_CONN, 1);
+	initRequest(&connRequest, AGENT_PROXY_CONN, CONST_STRLEN(AGENT_PROXY_CONN), 1);
 
 	JSONAddInt(&connRequest, PID, c->pid);
 	JSONAddInt(&connRequest, UID, c->uid);
@@ -1545,7 +1545,7 @@ int send_proxy_connect(proxyClient *c) {
 
 int send_proxy_data(proxyClient *c, char *data, size_t size) {
 	buff_t dataRequest;
-	initRequest(&dataRequest, AGENT_PROXY_DATA, 1);
+	initRequest(&dataRequest, AGENT_PROXY_DATA, CONST_STRLEN(AGENT_PROXY_DATA), 1);
 
 	JSONAddInt(&dataRequest, PID, c->pid);
 	JSONAddStringN(&dataRequest, PROXYDATA, data, size);
@@ -1556,7 +1556,7 @@ int send_proxy_data(proxyClient *c, char *data, size_t size) {
 
 int send_proxy_close(proxyClient *c) {
 	buff_t closeRequest;
-	initRequest(&closeRequest, AGENT_PROXY_CLOSE, 1);
+	initRequest(&closeRequest, AGENT_PROXY_CLOSE, CONST_STRLEN(AGENT_PROXY_DATA), 1);
 
 	JSONAddInt(&closeRequest, PID, c->pid);
 

@@ -431,7 +431,7 @@ JERS_EXPORT int jersGetJob(jobid_t jobid, const jersJobFilter * filter, jersJobI
 
 	buff_t b;
 
-	initRequest(&b, CMD_GET_JOB, 1);
+	initRequest(&b, CMD_GET_JOB, CONST_STRLEN(CMD_GET_JOB), 1);
 
 	if (jobid) {
 		JSONAddInt(&b, JOBID, jobid);
@@ -492,7 +492,7 @@ JERS_EXPORT int jersDelJob(jobid_t jobid) {
 
 	buff_t b;
 
-	initRequest(&b, CMD_DEL_JOB, 1);
+	initRequest(&b, CMD_DEL_JOB, CONST_STRLEN(CMD_DEL_JOB), 1);
 
 	JSONAddInt(&b, JOBID, jobid);
 
@@ -536,7 +536,7 @@ JERS_EXPORT jobid_t jersAddJob(const jersJobAdd * j) {
 	}
 
 	buff_t b;
-	initRequest(&b, CMD_ADD_JOB, 1);
+	initRequest(&b, CMD_ADD_JOB, CONST_STRLEN(CMD_ADD_JOB), 1);
 
 	JSONAddStringArray(&b, ARGS, j->argc, j->argv);
 
@@ -628,7 +628,7 @@ JERS_EXPORT int jersModJob(const jersJobMod *j) {
 	}
 
 	buff_t b;
-	initRequest(&b, CMD_MOD_JOB, 1);
+	initRequest(&b, CMD_MOD_JOB, CONST_STRLEN(CMD_MOD_JOB), 1);
 
 	JSONAddInt(&b, JOBID, j->jobid);
 
@@ -695,7 +695,7 @@ JERS_EXPORT int jersSignalJob(jobid_t id, int signum) {
 	/* Serialise the request */
 	buff_t b;
 
-	initRequest(&b, CMD_SIG_JOB, 1);
+	initRequest(&b, CMD_SIG_JOB, CONST_STRLEN(CMD_SIG_JOB), 1);
 
 	JSONAddInt(&b, JOBID, id);
 	JSONAddInt(&b, SIGNAL, signum);
@@ -750,7 +750,7 @@ JERS_EXPORT int jersGetQueue(const char * name, const jersQueueFilter * filter, 
 
 	buff_t b;
 
-	initRequest(&b, CMD_GET_QUEUE, 1);
+	initRequest(&b, CMD_GET_QUEUE, CONST_STRLEN(CMD_GET_QUEUE), 1);
 
 	if (name)
 		JSONAddString(&b, QUEUENAME, name);
@@ -810,7 +810,7 @@ JERS_EXPORT int jersAddQueue(const jersQueueAdd *q) {
 
 	buff_t b;
 
-	initRequest(&b, CMD_ADD_QUEUE, 1);
+	initRequest(&b, CMD_ADD_QUEUE, CONST_STRLEN(CMD_ADD_QUEUE), 1);
 
 	JSONAddString(&b, QUEUENAME, q->name);
 	JSONAddString(&b, NODE, q->node);
@@ -860,7 +860,7 @@ JERS_EXPORT int jersModQueue(const jersQueueMod *q) {
 
 	buff_t b;
 
-	initRequest(&b, CMD_MOD_QUEUE, 1);
+	initRequest(&b, CMD_MOD_QUEUE, CONST_STRLEN(CMD_MOD_QUEUE), 1);
 
 	JSONAddString(&b, QUEUENAME, q->name);
 
@@ -902,7 +902,7 @@ JERS_EXPORT int jersDelQueue(const char *name) {
 
 	buff_t b;
 
-	initRequest(&b, CMD_DEL_QUEUE, 1);
+	initRequest(&b, CMD_DEL_QUEUE, CONST_STRLEN(CMD_DEL_QUEUE), 1);
 
 	JSONAddString(&b, QUEUENAME, name);
 
@@ -928,7 +928,7 @@ JERS_EXPORT int jersAddResource(const char *name, int count) {
 
 	buff_t b;
 	
-	initRequest(&b, CMD_ADD_RESOURCE, 1);
+	initRequest(&b, CMD_ADD_RESOURCE, CONST_STRLEN(CMD_ADD_RESOURCE), 1);
 
 	JSONAddString(&b, RESNAME, name);
 
@@ -956,7 +956,7 @@ JERS_EXPORT int jersGetResource(const char * name, const jersResourceFilter *fil
 
 	buff_t b;
 
-	initRequest(&b, CMD_GET_RESOURCE, 1);
+	initRequest(&b, CMD_GET_RESOURCE, CONST_STRLEN(CMD_GET_RESOURCE), 1);
 
 	if (name)
 		JSONAddString(&b, RESNAME, name);
@@ -990,7 +990,7 @@ JERS_EXPORT int jersModResource(const char *name, int new_count) {
 
 	buff_t b;
 
-	initRequest(&b, CMD_MOD_RESOURCE, 1);
+	initRequest(&b, CMD_MOD_RESOURCE, CONST_STRLEN(CMD_MOD_RESOURCE), 1);
 
 	JSONAddString(&b, RESNAME, name);
 	JSONAddInt(&b, RESCOUNT, new_count);
@@ -1012,7 +1012,7 @@ JERS_EXPORT int jersDelResource(const char *name) {
 
 	buff_t b;
 
-	initRequest(&b, CMD_DEL_RESOURCE, 1);
+	initRequest(&b, CMD_DEL_RESOURCE, CONST_STRLEN(CMD_DEL_RESOURCE), 1);
 
 	JSONAddString(&b, RESNAME, name);
 
@@ -1047,7 +1047,7 @@ JERS_EXPORT int jersGetAgents(const char * name, jersAgentInfo *info) {
 
 	buff_t b;
 
-	initRequest(&b, CMD_GET_AGENT, 1);
+	initRequest(&b, CMD_GET_AGENT, CONST_STRLEN(CMD_GET_AGENT), 1);
 
 	if (name)
 		JSONAddString(&b, NODE, name);
@@ -1083,7 +1083,7 @@ JERS_EXPORT int jersGetStats(jersStats * s) {
 
 	buff_t b;
 
-	initRequest(&b, CMD_STATS, 1);
+	initRequest(&b, CMD_STATS, CONST_STRLEN(CMD_STATS), 1);
 
 	if (sendRequest(&b))
 		return 1;
@@ -1126,7 +1126,7 @@ JERS_EXPORT int jersSetTag(jobid_t id, const char * key, const char * value) {
 
 	buff_t b;
 
-	initRequest(&b, CMD_SET_TAG, 1);
+	initRequest(&b, CMD_SET_TAG, CONST_STRLEN(CMD_SET_TAG), 1);
 
 	JSONAddInt(&b, JOBID, id);
 	JSONAddString(&b, TAG_KEY, key);
@@ -1151,7 +1151,7 @@ JERS_EXPORT int jersDelTag(jobid_t id, const char * key) {
 
 	buff_t b;
 
-	initRequest(&b, CMD_DEL_TAG, 1);
+	initRequest(&b, CMD_DEL_TAG, CONST_STRLEN(CMD_DEL_TAG), 1);
 
 	JSONAddInt(&b, JOBID, id);
 	JSONAddString(&b, TAG_KEY, key);

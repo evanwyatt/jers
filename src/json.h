@@ -35,9 +35,9 @@
 
 int JSONStart(buff_t *buff);
 int JSONEnd(buff_t *buff);
-int JSONStartObject(buff_t *buff, const char *name);
+int JSONStartObject(buff_t *buff, const char *name, size_t name_len);
 int JSONEndObject(buff_t *buff);
-int JSONStartArray(buff_t *buff, const char *name);
+int JSONStartArray(buff_t *buff, const char *name, size_t name_len);
 int JSONEndArray(buff_t *buff);
 
 int JSONAddInt(buff_t *buff, int field_no, int64_t value);

@@ -242,7 +242,7 @@ static int _sendMessage(struct connectionType *connection, buff_t *b, buff_t *me
 		/* Null terminate it so it can be treated as a string */
 		buffAdd(message, "\0", 1);
 
-		if (initRequest(&forward, AGENT_PROXY_DATA, 1) != 0)
+		if (initRequest(&forward, AGENT_PROXY_DATA, CONST_STRLEN(AGENT_PROXY_DATA), 1) != 0)
 			return 0;
 
 		JSONAddInt(&forward, PID, connection->proxy.pid);
@@ -299,7 +299,7 @@ int sendClientReturnCode(client *c, jers_object *obj, const char *ret) {
 	buffNew(&rc, 32);
 
 	JSONStart(&rc);
-	JSONStartObject(&rc, "resp");
+	JSONStartObject(&rc, "resp", 4);
 
 	JSONAddString(&rc, RETURNCODE, ret);
 	JSONEndObject(&rc);
@@ -390,7 +390,7 @@ int command_get_agent(client *c, void *args) {
 
 	for (agent *a = agentList; a; a = a->next) {
 		if (f->host == NULL || matches(f->host, a->host) == 0) {
-			JSONStartObject(&b, NULL);
+			JSONStartObject(&b, NULL, 0);
 			JSONAddString(&b, NODE, a->host);
 			JSONAddBool(&b, CONNECTED, a->logged_in);
 			JSONEndObject(&b);
@@ -429,7 +429,7 @@ int command_stats(client * c, void * args) {
 
 	initResponse(&b, 1);
 
-	JSONStartObject(&b, NULL);
+	JSONStartObject(&b, NULL, 0);
 
 	JSONAddInt(&b, STATSRUNNING, server.stats.jobs.running);
 	JSONAddInt(&b, STATSPENDING, server.stats.jobs.pending);

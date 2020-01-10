@@ -38,6 +38,8 @@
 #define unlikely(x)     __builtin_expect((x),0)
 #define UNUSED(x) (void)(x)
 
+#define CONST_STRLEN(x) (sizeof(x) - sizeof(x[0]))
+
 #ifdef __linux
 #define USE_SETPROCTITLE
 #define INIT_SETPROCTITLE_REPLACEMENT

@@ -55,7 +55,7 @@ int command_agent_login(agent * a, msg_t * msg) {
 		if (nonce == NULL)
 			return 1;
 
-		initRequest(&auth_challenge, AGENT_AUTH_CHALLENGE, 1);
+		initRequest(&auth_challenge, AGENT_AUTH_CHALLENGE, CONST_STRLEN(AGENT_AUTH_CHALLENGE), 1);
 		JSONAddString(&auth_challenge, NONCE, nonce);
 
 		sendAgentMessage(a, &auth_challenge);
@@ -64,7 +64,7 @@ int command_agent_login(agent * a, msg_t * msg) {
 	} else {
 		/* Request a reconciliation from the agent */
 		buff_t recon;
-		initRequest(&recon, "RECON_REQ", 1);
+		initRequest(&recon, "RECON_REQ", CONST_STRLEN("RECON_REQ"), 1);
 		sendAgentMessage(a, &recon);
 		print_msg(JERS_LOG_INFO, "Requested recon from %s\n", a->host);
 
@@ -138,7 +138,7 @@ int command_agent_authresp(agent * a, msg_t * msg) {
 	 * We include a HMAC of the client nonce and the datetime to
 	 * allow the client to validate we know the secret */
 	buff_t recon;
-	initRequest(&recon, "RECON_REQ", 1);
+	initRequest(&recon, "RECON_REQ", CONST_STRLEN("RECON_REQ"), 1);
 
 	sprintf(datetime_str, "%ld", time_now);
 	const char *reconInput[] = {c_nonce, datetime_str, NULL};
@@ -251,7 +251,7 @@ int command_agent_recon(agent * a, msg_t * msg) {
 
 	/* Reply to the agent letting it know we've processed this message */
 	buff_t fin;
-	initRequest(&fin, "RECON_COMPLETE", 1);
+	initRequest(&fin, "RECON_COMPLETE", CONST_STRLEN("RECON_COMPLETE"), 1);
 	sendAgentMessage(a, &fin);
 
 	a->recon = 0;

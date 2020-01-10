@@ -162,7 +162,7 @@ int command_get_resource(client *c, void *args) {
 	if (wildcard) {
 		for (r = server.resTable; r != NULL; r = r->hh.next) {
 			if ((r->internal_state &JERS_FLAG_DELETED) == 0 && matches(rf->filters.name, r->name) == 0) {
-				JSONStartObject(&response, NULL);
+				JSONStartObject(&response, NULL, 0);
 				JSONAddString(&response, RESNAME, r->name);
 				JSONAddInt(&response, RESCOUNT, r->count);
 				JSONAddInt(&response, RESINUSE, r->in_use);
@@ -173,7 +173,7 @@ int command_get_resource(client *c, void *args) {
 		r = findResource(rf->filters.name);
 
 		if (r && (r->internal_state &JERS_FLAG_DELETED) == 0) {
-			JSONStartObject(&response, NULL);
+			JSONStartObject(&response, NULL, 0);
 			JSONAddString(&response, RESNAME, r->name);
 			JSONAddInt(&response, RESCOUNT, r->count);
 			JSONAddInt(&response, RESINUSE, r->in_use);

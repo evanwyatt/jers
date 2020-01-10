@@ -239,7 +239,7 @@ void * deserialize_del_tag(msg_t * t) {
 }
 
 void serialize_jersJob(buff_t *b, struct job *j, int fields) {
-	JSONStartObject(b, NULL);
+	JSONStartObject(b, NULL, 0);
 
 	if (fields == 0 || fields & JERS_RET_JOBID)
 		JSONAddInt(b, JOBID, j->jobid);
@@ -520,7 +520,7 @@ int command_add_job(client *c, void *args) {
 	if (initResponse(&response, 1) != 0)
 		return 0;
 
-	JSONStartObject(&response, NULL);
+	JSONStartObject(&response, NULL, 0);
 	JSONAddInt(&response, JOBID, j->jobid);
 	JSONEndObject(&response);
 
@@ -909,7 +909,7 @@ int command_sig_job(client * c, void * args) {
 
 	/* Send the requested signal to the job (via the agent) */
 	buff_t sig_message;
-	initRequest(&sig_message, CMD_SIG_JOB, 1);
+	initRequest(&sig_message, CMD_SIG_JOB, CONST_STRLEN(CMD_SIG_JOB), 1);
 
 	JSONAddInt(&sig_message, JOBID, js->jobid);
 	JSONAddInt(&sig_message, SIGNAL, js->signum);

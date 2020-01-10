@@ -50,6 +50,7 @@ typedef struct {
 	int number;
 	int type;
 	const char *name;
+	size_t name_len;
 
 	union {
 		/* FIELD_TYPE_STRING */
@@ -202,7 +203,7 @@ typedef struct {
 void sortfields(void);
 void freeSortedFields(void);
 
-const char *getFieldName(int field_no);
+const char *getFieldName(int field_no, size_t *len);
 
 int load_message(char *json, msg_t *m);
 void free_message(msg_t * msg);
@@ -221,9 +222,9 @@ int64_t getStringArrayField(field *f, char *** array);
 int64_t getStringMapField(field * f, key_val_t ** array);
 
 
-int initRequest(buff_t *b, const char *resp_name, int version);
+int initRequest(buff_t *b, const char *resp_name, size_t resp_name_len, int version);
 int initResponse(buff_t *b, int version);
-int initNamedResponse(buff_t *b, const char *name, int version);
+int initNamedResponse(buff_t *b, const char *name, size_t name_len, int version);
 int closeRequest(buff_t *b);
 int closeResponse(buff_t *b);
 
