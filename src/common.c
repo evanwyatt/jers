@@ -279,7 +279,7 @@ int int64tostr(char *dest, int64_t value) {
 		v = -value;
 	else
 		v = value;
-	
+
 	char *p = dest;
 	do {
 		*p++ = '0' + (v%10);
@@ -306,7 +306,6 @@ int int64tostr(char *dest, int64_t value) {
 
 	return len;
 }
-
 
 int matches(const char * pattern, const char * string) {
 	if (strchr(pattern, '*') || strchr(pattern, '?')) {
@@ -686,7 +685,7 @@ int getSignalNumber(const char *name) {
  * If 'output' is NULL, a buffer will be allocated and returned - This should be freed by the caller
  * If 'output' is non-null, it is expected to be big enough to store the result. ie. (input_len *2) + 1 */
 char * hexEncode(const unsigned char *input, int input_len, char *output) {
-	const char *_hex = "0123456780ABCDEF";
+	const char *_hex = "0123456789ABCDEF";
 	char *ret = output ? output : malloc((input_len * 2) + 1);
 
 	if (ret == NULL)
