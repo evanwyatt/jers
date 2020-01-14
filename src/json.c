@@ -332,6 +332,7 @@ static const char *JSONescapeString(const char *string, size_t size, size_t *new
 {
 	static char *escaped = NULL;
 	static size_t escaped_size = 0;
+	size_t bytes = 0;
 	size_t string_length = size == 0 ? strlen(string) : size;
 	const char *temp = string;
 	char *dest;
@@ -339,13 +340,13 @@ static const char *JSONescapeString(const char *string, size_t size, size_t *new
 	/* Assume we have to escape everything */
 	if (escaped_size <= string_length * 2)
 	{
-		escaped_size = string_length * 2;
+		escaped_size = 1 + (string_length * 2);
 		escaped = realloc(escaped, escaped_size);
 	}
 
 	dest = escaped;
 
-	while (*temp != '\0')
+	while (bytes < size && *temp != '\0')
 	{
 		switch (*temp)
 		{
@@ -375,6 +376,7 @@ static const char *JSONescapeString(const char *string, size_t size, size_t *new
 		}
 
 		temp++;
+		bytes++;
 	}
 
 	*dest = '\0';
