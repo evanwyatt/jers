@@ -123,6 +123,21 @@ void test_buffers(void) {
 
 	TEST("buffAdd - Not initalised", check_buffer(&buff, &expected));
 
+	/* Add that forces a resize */
+	data = "Test string.";
+	buffNew(&buff, strlen(data));
+	buffAdd(&buff, data, strlen(data));
+	
+	data = " Hello World.";
+	buffAdd(&buff, data, strlen(data));
+
+	data = "Test string. Hello World.";
+	expected.data = data;
+	expected.used = strlen(data);
+	expected.size = strlen(data);
+
+	TEST("buffadd - Forced resize", check_buffer(&buff, &expected));
+
 	/* Buff clear */
 	data = "string.";
 	buffAdd(&buff, data, strlen(data));
@@ -165,6 +180,7 @@ void test_buffers(void) {
 	buffAdd(&buff2, data, strlen(data));
 
 	buffAddBuff(&buff, &buff2);
+	buffFree(&buff2);
 
 	data = "Hello World.";
 	expected.size = strlen(data);

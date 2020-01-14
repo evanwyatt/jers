@@ -89,6 +89,51 @@ static void test_jobids(void) {
 
 	TEST("JobID allocation - wrap around", status != 0);
 
+	/* Add some jobs through the table that getNextJobID will need to skip over */
+	clear_jobtable();
+	memset(&server, 0, sizeof(struct jersServer));
+
+	server.start_jobid = 0;
+	server.max_jobid = 9999;
+	int used = 0;
+
+	/* Not very random - Doesn't matter. */
+	srand(time(NULL));
+
+	for (int i = 0; i < 1000; i++) {
+		jobid_t id = (random() % server.max_jobid) + 1;
+
+		struct job *search = findJob(id);
+
+		if (search == NULL) {
+			struct job * j = calloc(1, sizeof(struct job));
+			j->jobid = id;
+			HASH_ADD_INT(server.jobTable, jobid, j);
+			used++;
+		}
+	}
+
+	/* Now loop through. We expect to be able to create ~8999 jobs */
+	/* Check we get every jobid, then an error after 9999 */
+	for (int i = 0; i < 10000 - used; i++) {
+		jobid_t newid = getNextJobID();
+
+		if (i == 9999 - used) {
+			/* We expect to have an error here */
+			if (newid != 0) {
+				DEBUG("Expected to get an error when jobid range full - got: %d i: %d used: %d", newid, i, used);
+				status = 1;
+				break;
+			}
+		}
+
+		struct job *j = calloc(1, sizeof(struct job));
+		j->jobid = newid;
+		HASH_ADD_INT(server.jobTable, jobid, j);
+	}
+
+	TEST("JobID allocation - fill in", status != 0);
+
 	/* Should have a fully populated job table. Use findJob to check each id*/
 	for (jobid_t i = 1; i <= 9999; i++) {
 		struct job *j = findJob(i);
@@ -105,6 +150,7 @@ static void test_jobids(void) {
 	}
 
 	TEST("findJob", status != 0);
+	clear_jobtable();
 }
 
 void test_jobs(void) {
