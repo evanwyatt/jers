@@ -15,5 +15,5 @@ addons:
     project:
       name: "evanwyatt/jers"
     notification_email: evan@evanwyatt.com
-    build_command: "make"
+    build_command: "true"
     branch_pattern: unstable
