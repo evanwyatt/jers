@@ -9,8 +9,12 @@ jobs:
     
     steps:
     - uses: actions/checkout@v1
+
     - name: Install packages
       run: sudo apt-get install libsystemd-dev
     - name: make all
       run: make all
+
+    - name: test
+      run: make test
 

@@ -132,6 +132,8 @@ const field fields[] = {
 	{ENDOFFIELDS, FIELD_TYPE_NUM, FIELDNAME("ENDOFFIELDS")}
 };
 
+int field_count = sizeof(fields) / sizeof(field);
+
 static inline void setField(unsigned char * bitmap, int field_no) {
 	bitmap[(field_no / 8)] |= 1 << (field_no % 8);
 }
