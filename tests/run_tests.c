@@ -25,6 +25,7 @@ void test_buffers(void);
 void test_json(void);
 void test_jobs(void);
 void test_state(void);
+void test_sched(void);
 
 struct test_case {
 	const char *name;
@@ -41,6 +42,7 @@ struct test_case test_cases[] = {
 	{"JSON", test_json},
 	{"Jobs", test_jobs},
 	{"State", test_state},
+	{"Sched", test_sched},
 };
 
 int main (int argc, char *argv[]) {
