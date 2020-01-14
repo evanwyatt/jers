@@ -198,7 +198,7 @@ int JSONAddMap(buff_t *buff, int field_no, int64_t count, key_val_t *values)
 		lengths[i][1] = strlen(values[i].value);
 
 		required += lengths[i][0];
-		required += lengths[i][1];
+		required += lengths[i][1] * 2; /* Allow for escaping */
 		required += 6;
 	}
 
@@ -216,7 +216,8 @@ int JSONAddMap(buff_t *buff, int field_no, int64_t count, key_val_t *values)
 		p[len++] = ':';
 
 		p[len++] = '"';
-		memcpy(p + len, values[i].value, value_len);
+		const char *escaped = JSONescapeString(values[i].value, value_len, &value_len);
+		memcpy(p + len, escaped, value_len);
 		len += value_len;
 		p[len++] = '"';
 		p[len++] = ',';
