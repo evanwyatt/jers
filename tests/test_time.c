@@ -4,9 +4,10 @@
 
 #include <jers_tests.h>
 #include <common.h>
-/* Bit dodgy, but we expect the duration to be within 2 milliseconds */
+/* Bit dodgy, but allow the times to be 5 milliseconds either side due to CLOCK_MONOTONIC_COARSE resolution */
 int check_duration (int64_t start, int64_t finish, int64_t expected) {
 	int64_t duration = finish - start;
+	int fudge_factor = 5;
 
 	if (finish <= start) {
 		if (__debug)
@@ -15,14 +16,14 @@ int check_duration (int64_t start, int64_t finish, int64_t expected) {
 	}
 
 	if (duration < expected) {
+		if (expected % duration > fudge_factor) {
+			if (__debug)
+				printf("Duration < expected. Duration: %ldms Expected: %ldms\n", duration, expected);
+			return 1;
+		}
+	} else if (duration % expected > fudge_factor) {
 		if (__debug)
-			printf("Duration %ld < %ld ms\n", duration, expected);
-		return 1;
-	}
-
-	if (duration % expected > 2) {
-		if (__debug)
-			printf("Duration not within 2ms of expected\n");
+			printf("Duration > expected. Duration: %ldms Expected: %ldms\n", duration, expected);
 		return 1;
 	}
 
@@ -68,12 +69,12 @@ void test_time(void) {
 
 	TEST("Duration test - 1 second", check_duration(start, finish, 1000));
 
-	struct timespec s = {.tv_sec = 0, .tv_nsec = 10000000};
+	struct timespec s = {.tv_sec = 0, .tv_nsec = 50000000};
 	start = getTimeMS();
 	nanosleep(&s, NULL);
 	finish = getTimeMS();
 
-	TEST("Duration test - .01 second", check_duration(start, finish, 10));
+	TEST("Duration test - .05 second", check_duration(start, finish, 50));
 
 	/* Test printing of times */
 	//char * print_time(const struct timespec * time, int elapsed);

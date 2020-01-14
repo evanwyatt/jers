@@ -3,6 +3,8 @@
 #include <jers_tests.h>
 #include <server.h>
 
+struct jersServer server = {0};
+
 void clear_jobtable(void) {
 	struct job *j, *tmp;
 
@@ -13,7 +15,7 @@ void clear_jobtable(void) {
 }
 
 static void test_jobids(void) {
-   memset(&server, 0, sizeof(struct jersServer));
+	memset(&server, 0, sizeof(struct jersServer));
 
 	/* Test getNextJobID() */
 	server.max_jobid = 9999;
@@ -30,11 +32,13 @@ static void test_jobids(void) {
 			if (newid != 0) {
 				DEBUG("Expected to get an error when jobid range full - got: %d", newid);
 				status = 1;
+				break;
 			}
 		} else {
 			if (newid != previd + 1) {
 				DEBUG("Newid is not old + 1. old:%d new:%d\n", previd, newid);
 				status = 1;
+				break;
 			}
 		}
 		
@@ -63,6 +67,7 @@ static void test_jobids(void) {
 			if (newid != 0) {
 				DEBUG("Expected to get an error when jobid range full - got: %d instead", newid);
 				status = 1;
+				break;
 			}
 		} else {
 			if (previd == server.max_jobid)
@@ -71,6 +76,7 @@ static void test_jobids(void) {
 			if (newid != previd + 1) {
 				DEBUG("Newid is not old + 1. old:%d new:%d\n", previd, newid);
 				status = 1;
+				break;
 			}
 		}
 

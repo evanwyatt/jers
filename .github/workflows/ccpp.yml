@@ -1,4 +1,4 @@
-name: C/C++ CI
+name: CI
 
 on: [push]
 
@@ -11,12 +11,15 @@ jobs:
     - uses: actions/checkout@v1
 
     - name: Install packages / configure
-      run:
-        sudo apt-get install libsystemd-dev && sudo timedatectl set-timezone 'Australia/Melbourne'
+      run: |
+        sudo apt-get install libsystemd-dev
+        sudo timedatectl set-timezone 'Australia/Melbourne'
 
-    - name: make all
+    - name: make
       run: make all
 
     - name: test
+      env:
+        JERS_TEST_DEBUG: "Y"
       run: make test
 

@@ -15,7 +15,7 @@ extern int __debug;
     if (__test_status) { \
         printf(RED "FAILED\n" RESET); \
         __status = 1; \
-        printf("Condition failed: %s\n", #cond); \
+        printf("\tCondition failed: %s\n", #cond); \
     } else { \
         printf(GREEN "Success\n" RESET); \
     } \

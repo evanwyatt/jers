@@ -10,7 +10,6 @@ int __status = 0;
 int __debug = 0;
 
 /* Couple of fake variable to trick routines into thinking we are jersd */
-struct jersServer server = {0};
 char * server_log = "jersd";
 int server_log_mode = JERS_LOG_CRITICAL;
 
