@@ -98,6 +98,7 @@ struct queue {
 	int state;
 	int priority;
 	int nice;
+	int def;
 
 	char * host;
 	agent * agent;
@@ -139,8 +140,6 @@ struct job {
 
 	char * stdout;
 	char * stderr;
-
-	char * comment;
 
 	/* Command to run */
 	int argc;
@@ -319,6 +318,8 @@ struct jersServer {
 	} journal;
 };
 
+#define STATE_DIV_FACTOR 10000
+
 #define JOURNAL_EXTEND_DEFAULT 524288 // 512kb
 
 /* The internal_state field is a bitmap of flags */
@@ -337,7 +338,7 @@ extern struct jersServer server;
 void error_die(char *, ...);
 
 jobid_t getNextJobID(void);
-int addJob(struct job * j, int state, int dirty);
+int addJob(struct job * j, int dirty);
 void deleteJob(struct job * j);
 void freeJob(struct job * j);
 struct job * findJob(jobid_t jobid);
@@ -346,7 +347,7 @@ int addRes(struct resource * r, int dirty);
 void freeRes(struct resource *r);
 struct resource * findResource(char * name);
 
-int addQueue(struct queue * q, int def, int dirty);
+int addQueue(struct queue * q, int dirty);
 void freeQueue(struct queue * q);
 struct queue * findQueue(char * name);
 void setDefaultQueue(struct queue *q);
@@ -357,8 +358,11 @@ void freeConfig(void);
 int stateSaveCmd(uid_t uid, char * cmd, char * msg, jobid_t jobid, int64_t revision);
 void stateInit(void);
 int stateLoadJobs(void);
+struct job * stateLoadJob(const char *filename);
 int stateLoadQueues(void);
+struct queue * stateLoadQueue(const char *filename);
 int stateLoadResources(void);
+struct resource * stateLoadResource(const char *filename);
 void stateReplayJournal(void);
 void stateSaveToDisk(int block);
 void flush_journal(int force);

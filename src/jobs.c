@@ -148,8 +148,11 @@ int cleanupJobs(uint32_t max_clean) {
 	return cleaned_up;
 }
 
-int addJob(struct job * j, int state, int dirty) {
+int addJob(struct job * j, int dirty) {
 	struct job * check_job = NULL;
+	int state = j->state;
+	/* Save and clear the state, so we don't decrement the state on the addJob */
+	j->state = 0;
 
 	/* Does a job with this ID already exist? */
 	check_job = findJob(j->jobid);

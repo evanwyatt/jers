@@ -41,11 +41,11 @@
  *         1 = validation failure
  *         2 = already exists       */
 
-int addQueue(struct queue * q, int def, int dirty) {
+int addQueue(struct queue * q, int dirty) {
 
 	HASH_ADD_STR(server.queueTable, name, q);
 
-	if (def)
+	if (q->def)
 		setDefaultQueue(q);
 
 	q->obj.type = JERS_OBJECT_QUEUE;

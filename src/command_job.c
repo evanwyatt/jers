@@ -353,7 +353,6 @@ int command_add_job(client *c, void *args) {
 	jersJobAdd * s = args;
 	struct job * j = NULL;
 	struct queue * q = NULL;
-	int state = 0;
 	struct jobResource * resources = NULL;
 	struct user * u = NULL;
 
@@ -496,11 +495,11 @@ int command_add_job(client *c, void *args) {
 	}
 
 	if (j->defer_time)
-		state = JERS_JOB_DEFERRED;
+		j->state = JERS_JOB_DEFERRED;
 	else if (s->hold)
-		state = JERS_JOB_HOLDING;
+		j->state = JERS_JOB_HOLDING;
 	else
-		state = JERS_JOB_PENDING;
+		j->state = JERS_JOB_PENDING;
 
 	if (server.recovery.in_progress)
 		j->submit_time = server.recovery.time;
@@ -508,7 +507,7 @@ int command_add_job(client *c, void *args) {
 		j->submit_time = time(NULL);
 
 	/* Add it to the hashtable */
-	addJob(j, state, 1);
+	addJob(j, 1);
 
 	/* Don't respond if we are replaying a command */
 	if (c == NULL)

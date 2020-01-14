@@ -127,7 +127,6 @@ void * deserialize_del_queue(msg_t * msg) {
 int command_add_queue(client * c, void * args) {
 	jersQueueAdd * qa = args;
 	struct queue * q = NULL;
-	int default_queue = 0;
 	int localhost = 0;
 
 	lowercasestring(qa->name);
@@ -194,9 +193,9 @@ int command_add_queue(client * c, void * args) {
 	q->state = qa->state != UNSET_32 ? qa->state : JERS_QUEUE_DEFAULT_STATE;
 	q->nice = qa->nice != UNSET_32 ? qa->nice : server.default_job_nice;
 	q->agent = a;
-	default_queue = qa->default_queue != UNSET_32 ? qa->default_queue : 0;
+	q->def = qa->default_queue != UNSET_32 ? qa->default_queue : 0;
 
-	addQueue(q, default_queue, 1);
+	addQueue(q, 1);
 
 	return sendClientReturnCode(c, &q->obj, "0");
 }

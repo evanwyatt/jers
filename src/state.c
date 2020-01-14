@@ -49,8 +49,6 @@
 #include <systemd/sd-daemon.h>
 #endif
 
-#define STATE_DIV_FACTOR 10000
-
 int resourceStringToResource(const char * string, struct jobResource * res);
 int flushDir(char *path);
 int flushStateDirs(void);
@@ -1039,7 +1037,6 @@ int loadKeyValue (char * line, char **key, char ** value, int * index) {
 	if (l_value) {
 		*l_value = '\0';
 		l_value++;
-		removeWhitespace(l_value);
 	}
 
 	/* Does the key have an index? ie KEY[1] */
@@ -1188,14 +1185,13 @@ void stateInit(void) {
 /* Read through the current state files converting the commands
  *  to the appropriate job/queue/res files */
 
-int stateLoadJob(char * fileName) {
+struct job * stateLoadJob(const char * fileName) {
 	FILE * f = NULL;
 	char * line = NULL;
 	size_t line_size = 0;
 	ssize_t len;
 	jobid_t jobid = 0;
 	char * temp;
-	int state = 0;
 
 	f = fopen(fileName, "r");
 
@@ -1285,7 +1281,7 @@ int stateLoadJob(char * fileName) {
 		} else if (strcmp(key, "NICE") == 0) {
 			j->nice = atoi(value);
 		} else if (strcmp(key, "STATE") == 0) {
-			state = atoi(value);
+			j->state = atoi(value);
 		} else if (strcmp(key, "PRIORITY") == 0) {
 			j->priority = atoi(value);
 		} else if (strcmp(key, "SUBMITTIME") == 0) {
@@ -1335,10 +1331,8 @@ int stateLoadJob(char * fileName) {
 		error_die("Error loading job %d from file - No queue specified", j->jobid);
 	}
 
-	if (state == 0)
-		state = JERS_JOB_PENDING;
-
-	addJob(j, state, 0);
+	if (j->state == 0)
+		j->state = JERS_JOB_PENDING;
 
 	free(line);
 	fclose(f);
@@ -1346,7 +1340,7 @@ int stateLoadJob(char * fileName) {
 	if (j->jobid > server.start_jobid)
 		server.start_jobid = j->jobid;
 
-	return 0;
+	return j;
 }
 
 int stateLoadJobs(void) {
@@ -1377,8 +1371,10 @@ int stateLoadJobs(void) {
 
 	print_msg(JERS_LOG_INFO, "Loading %ld jobs from disk", jobFiles.gl_pathc);
 
-	for (i = 0; i < jobFiles.gl_pathc; i++)
-		stateLoadJob(jobFiles.gl_pathv[i]);
+	for (i = 0; i < jobFiles.gl_pathc; i++) {
+		struct job * j = stateLoadJob(jobFiles.gl_pathv[i]);
+		addJob(j, 0);
+	}
 
 	print_msg(JERS_LOG_INFO, "Loaded %ld jobs", jobFiles.gl_pathc);
 
@@ -1386,14 +1382,13 @@ int stateLoadJobs(void) {
 	return 0;
 }
 
-int stateLoadQueue(char * fileName) {
+struct queue * stateLoadQueue(const char * fileName) {
 	FILE * f;
 	char * name = NULL;
 	char * ext;
 	struct queue * q;
 	char * line = NULL;
 	size_t lineSize = 0;
-	int def = 0;
 	char * fileNameCpy = strdup(fileName);
 
 	f = fopen(fileName, "r");
@@ -1445,7 +1440,7 @@ int stateLoadQueue(char * fileName) {
 		} else if (strcmp(key, "PRIORITY") == 0) {
 			q->priority = atoi(value);
 		} else if (strcmp(key, "DEFAULT") == 0) {
-			def = atoi(value);
+			q->def = atoi(value);
 		} else if (strcmp(key, "HOST") == 0) {
 			q->host = strdup(value);
 		} else if (strcmp(key, "REVISION") == 0) {
@@ -1467,13 +1462,9 @@ int stateLoadQueue(char * fileName) {
 		error_die("Error loading queue %s from disk. Expected to find HOST key in %s", q->name, fileName);
 	}
 
-	/* All loaded, add it to the queueTable */
-	if (addQueue(q, def, 0))
-		error_die("Failed to add queue '%s'", q->name);
-
 	free(fileNameCpy);
 
-	return 0;
+	return q;
 }
 
 /* Load all the queues from the on disk representation */
@@ -1506,8 +1497,12 @@ int stateLoadQueues(void) {
 
 	print_msg(JERS_LOG_INFO, "Loading %ld queues from disk", qFiles.gl_pathc);
 
-	for (i = 0; i < qFiles.gl_pathc; i++)
-		stateLoadQueue(qFiles.gl_pathv[i]);
+	for (i = 0; i < qFiles.gl_pathc; i++) {
+		struct queue * q = stateLoadQueue(qFiles.gl_pathv[i]);
+
+		if (addQueue(q, 0))
+			error_die("Failed to add queue '%s'", q->name);
+	}
 
 	print_msg(JERS_LOG_INFO, "Loaded %ld queues from disk", qFiles.gl_pathc);
 
@@ -1515,7 +1510,7 @@ int stateLoadQueues(void) {
 	return 0;
 }
 
-int stateLoadRes(char * file_name) {
+struct resource * stateLoadResource(const char * file_name) {
 	FILE * f;
 	char * name = NULL;
 	char * ext;
@@ -1578,14 +1573,9 @@ int stateLoadRes(char * file_name) {
 
 	fclose(f);
 	free(line);
-
-	/* All loaded, add it to the queueTable */
-	if (addRes(r, 0))
-		error_die("Failed to add resource %s", name);
-
 	free(file_name_cpy);
 
-	return 0;
+	return r;
 }
 
 int stateLoadResources(void) {
@@ -1615,8 +1605,12 @@ int stateLoadResources(void) {
 
 	print_msg(JERS_LOG_INFO, "Loading %ld resources from disk", resFiles.gl_pathc);
 
-	for (i = 0; i < resFiles.gl_pathc; i++)
-		stateLoadRes(resFiles.gl_pathv[i]);
+	for (i = 0; i < resFiles.gl_pathc; i++) {
+		struct resource * r = stateLoadResource(resFiles.gl_pathv[i]);
+
+		if (addRes(r, 0))
+			error_die("Failed to add resource %s", r->name);
+	}
 
 	print_msg(JERS_LOG_INFO, "Loaded %ld resources.", resFiles.gl_pathc);
 
