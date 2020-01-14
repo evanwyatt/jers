@@ -272,21 +272,24 @@ void * dup_mem(void * src, size_t len, size_t size) {
  * Caution - No overflow checking is performed */
 
 int int64tostr(char *dest, int64_t value) {
-	int64_t v;
+	uint64_t v;
 	int len;
+	int neg = 0;
 
-	if (value < 0)
-		v = -value;
-	else
+	if (value < 0) {
+		v = value * -1;
+		neg = 1;
+	} else {
 		v = value;
+	}
 
 	char *p = dest;
 	do {
-		*p++ = '0' + (v%10);
+		*p++ = '0' + (v % 10);
 		v /= 10;
 	} while(v);
 
-	if (value < 0)
+	if (neg)
 		*p++ = '-';
 
 	*p = '\0';

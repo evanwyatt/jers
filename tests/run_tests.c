@@ -9,6 +9,9 @@ char sub_test[4096] = "";
 int __status = 0;
 int __debug = 0;
 
+int total_test_count = 0;
+int total_failed_count = 0;
+
 /* Couple of fake variable to trick routines into thinking we are jersd */
 char * server_log = "jersd";
 int server_log_mode = JERS_LOG_CRITICAL;
@@ -65,8 +68,9 @@ int main (int argc, char *argv[]) {
 		test_count++;
 	}
 
-	printf("\n====================================\n"
-			 "%d tests, %d passed, %d failed\n\n", test_count, test_count - failed_count, failed_count);
+	printf("\n====================================\n");
+	printf("%d test groups, %d passed, %d failed\n", test_count, test_count - failed_count, failed_count);
+	printf("(%d total tests, %d passed, %d failed)\n\n", total_test_count, total_test_count - total_failed_count, total_failed_count);
 
 	return failed_count ? 1 : 0;
 }
