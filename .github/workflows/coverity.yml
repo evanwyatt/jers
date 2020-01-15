@@ -1,5 +1,8 @@
 name: coverity
-on: [push]
+on:
+  push:
+    branches:
+      - unstable
 
 jobs:
   latest:
