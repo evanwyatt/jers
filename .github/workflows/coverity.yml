@@ -5,8 +5,7 @@ jobs:
   latest:
     runs-on: ubuntu-latest
     steps:
-      - name: git clone
-        run: git clone https://github.com/evanwyatt/jers .
+      - uses: actions/checkout@v1
 
       - name: download coverity
         run: |
@@ -28,6 +27,7 @@ jobs:
             --form token=$TOKEN \
             --form email=evan@evanwyatt.com \
             --form file=@jers.tgz \
+            --form version="${GITHUB_REF##*/}" \
            https://scan.coverity.com/builds?project=evanwyatt%2Fjers
         env:
           TOKEN: ${{ secrets.COVERITY_TOKEN }}
