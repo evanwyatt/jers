@@ -285,7 +285,7 @@ static char * getUser(uid_t uid) {
 	if (u == NULL)
 		sprintf(username, "%d", uid);
 	else
-		strcpy(username, u->username);
+		snprintf(username, sizeof(username), "%s", u->username);
 
 	return username;
 }

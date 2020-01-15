@@ -150,24 +150,24 @@ int loadSecret(const char * secret_filename, unsigned char *hash) {
 
 	if (fd < 0) {
 		print_msg(JERS_LOG_WARNING, "Failed to open secret %s: %s", secret_filename, strerror(errno));
-		return 1;
+		goto failed;
 	}
 
 	if (fstat(fd, &buff) != 0) {
 		print_msg(JERS_LOG_WARNING, "Failed to stat() secret file %s: %s", secret_filename, strerror(errno));
-		return 1;
+		goto failed;
 	}
 
 	/* The secret file should only be readable by the user running the JERS Daemon */
 	if (getuid() != 0 && (getuid() != buff.st_uid || getgid() != buff.st_gid)) {
 		print_msg(JERS_LOG_WARNING, "Ownership of secret file is not uid:%d", getuid());
-		return 1;
+		goto failed;
 	}
 
 	/* Check the permissions */
 	if (getuid() != 0 && (buff.st_mode &(S_IRWXO|S_IRWXG)) != 0) {
 		print_msg(JERS_LOG_WARNING, "Permissions on the secret file allows group/others access! - Only owner should have access ie. 400");
-		return 1;
+		goto failed;
 	}
 
 	if (buff.st_size <= 0) {
@@ -178,7 +178,7 @@ int loadSecret(const char * secret_filename, unsigned char *hash) {
 
 	if (secret == NULL) {
 		print_msg(JERS_LOG_WARNING, "Failed to allocate memory for secret: %s", strerror(errno));
-		return 1;
+		goto failed;
 	}
 
 	while (bytes < buff.st_size) {
@@ -186,8 +186,7 @@ int loadSecret(const char * secret_filename, unsigned char *hash) {
 
 		if (l <= 0) {
 			print_msg(JERS_LOG_WARNING, "Failed to read secret file %s: %s", secret_filename, strerror(errno));
-			free(secret);
-			return 1;
+			goto failed;
 		}
 
 		bytes += l;
@@ -196,11 +195,18 @@ int loadSecret(const char * secret_filename, unsigned char *hash) {
 	/* Hash the secret */
 	if (SHA256(secret, buff.st_size, hash) == NULL) {
 		print_msg(JERS_LOG_WARNING, "Failed to generate SHA256 hash of secret: %s", strerror(errno));
-		free(secret);
-		return 1;
+		goto failed;
 	}
 
+	close(fd);
 	free(secret);
 
 	return 0;
+
+failed:
+	if (fd >= 0)
+		close(fd);
+	free(secret);
+
+	return 1;;
 }

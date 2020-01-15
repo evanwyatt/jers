@@ -1117,8 +1117,11 @@ int recon_command(msg_t * m) {
 
 		if (strcasecmp(verify_hmac, hmac) != 0) {
 			print_msg(JERS_LOG_CRITICAL, "HMAC does not match - Disconnecting from daemon");
+			free(verify_hmac);
 			return 1;
 		}
+
+		free(verify_hmac);
 	}
 
 	/* The master daemon is requesting a list of all the jobs we have in memory.
@@ -1232,7 +1235,7 @@ int proxy_response(msg_t *m) {
 		return 0;
 	}
 
-	buffAdd(&c->response, data, strlen(data));
+	buffAdd(&c->response, data, data ? strlen(data):0);
 	pollSetWritable(&c->connection);
 
 	free(data);
@@ -1269,6 +1272,7 @@ int auth_challenge(msg_t *m) {
 		//HACK:
 		if (loadSecret("/etc/jers/secret.key", agent.secret_hash)) {
 			print_msg(JERS_LOG_WARNING, "Unable to connect to main daemon during auth_challenge - No secret has been loaded");
+			free(nonce);
 			return 1;
 		}
 
@@ -1292,6 +1296,7 @@ int auth_challenge(msg_t *m) {
 	sendRequest(&auth_resp);
 
 	free(hmac);
+	free(nonce);
 
 	return 0;
 
@@ -1300,6 +1305,13 @@ int auth_challenge(msg_t *m) {
 /* Process a command */
 int process_message(msg_t * m) {
 	int status = 0;
+
+	if (m->command == NULL) {
+		print_msg(JERS_LOG_WARNING, "Got a command message");
+		free_message(m);
+		return 1;
+	}
+
 	print_msg(JERS_LOG_DEBUG, "Got command '%s'", m->command);
 
 	if (strcmp(m->command, AGENT_START_JOB) == 0) {
@@ -1449,7 +1461,9 @@ int connectjers(void) {
 	return 0;
 
 connect_fail:
-	close(fd);
+	if (fd >= 0)
+		close(fd);
+
 	sleep(5);
 	return 1;
 }

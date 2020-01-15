@@ -82,6 +82,9 @@ int _accept(int sockfd) {
 		break;
 	}
 
+	if (fd < 0)
+		return -1;
+
 	/* Make it non-blocking */
 	int flags = fcntl(fd, F_GETFL, 0);
 	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) != 0) {

@@ -727,6 +727,9 @@ int splitConfigLine(char *line, char **key, char **value) {
 	*key = line;
 	*value = strchr(line, ' ');
 
+	if (*value == NULL)
+		return 1;
+
 	**value = '\0';
 	(*value)++;
 

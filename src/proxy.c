@@ -60,7 +60,7 @@ void removeProxyClient(proxyClient * c) {
 
 int handleClientProxyConnection(struct connectionType * connection) {
 	int client_fd = _accept(connection->socket);
-print_msg(JERS_LOG_DEBUG, "Proxy client started\n");
+
 	if (client_fd < 0) {
 		print_msg(JERS_LOG_INFO, "accept() failed during proxy client connect: %s", strerror(errno));
 		return 1;
@@ -101,7 +101,7 @@ print_msg(JERS_LOG_DEBUG, "Proxy client started\n");
 		handleClientProxyDisconnect(c);
 		return 1;
 	}
-print_msg(JERS_LOG_DEBUG, "Proxy client connected\n");
+
 	return 0;
 }
 
@@ -127,7 +127,6 @@ int handleClientProxyRead(proxyClient *c) {
 	/* Got some data from the client.
 	 * Send this to the main daemon process */
 	c->request.used += len;
-print_msg(JERS_LOG_DEBUG, "Proxy client read[%d]: %.*s\n", len, c->request.used, c->request.data);
 	return 0;
 }
 int handleClientProxyWrite(proxyClient *c) {
