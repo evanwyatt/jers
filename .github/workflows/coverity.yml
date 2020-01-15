@@ -15,6 +15,11 @@ jobs:
         env:
           TOKEN: ${{ secrets.COVERITY_TOKEN }}
 
+      - name: Install packages / configure
+        run: |
+          sudo apt-get install libsystemd-dev
+          sudo timedatectl set-timezone 'Australia/Melbourne'
+
       - name: scan
         run: |
           export PATH=`pwd`/cov-analysis-linux64/bin:$PATH
