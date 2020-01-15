@@ -1,0 +1,33 @@
+name: coverity
+on: [push]
+
+jobs:
+  latest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: git clone
+        run: git clone https://github.com/evanwyatt/jers .
+
+      - name: download coverity
+        run: |
+          wget -q https://scan.coverity.com/download/cxx/linux64 --post-data "token=$TOKEN&project=evanwyatt%2Fjers" -O coverity_tool.tgz
+          mkdir cov-analysis-linux64
+          tar xzf coverity_tool.tgz --strip 1 -C cov-analysis-linux64
+        env:
+          TOKEN: ${{ secrets.COVERITY_TOKEN }}
+
+      - name: scan
+        run: |
+          export PATH=`pwd`/cov-analysis-linux64/bin:$PATH
+          cov-build --dir cov-int make all
+
+      - name: upload results
+        run: |
+          tar czvf jers.tgz cov-int
+          curl \
+            --form token=$TOKEN \
+            --form email=evan@evanwyatt.com \
+            --form file=@jers.tgz \
+           https://scan.coverity.com/builds?project=evanwyatt%2Fjers
+        env:
+          TOKEN: ${{ secrets.COVERITY_TOKEN }}
