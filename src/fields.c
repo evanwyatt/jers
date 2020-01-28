@@ -308,6 +308,7 @@ void free_message(msg_t * msg) {
 
 	free(msg->msg_cpy);
 	free(msg->items);
+	free(msg->error);
 
 	msg->items = NULL;
 	msg->item_count = 0;
@@ -547,7 +548,7 @@ int initRequest(buff_t *b, const char *resp_name, size_t resp_name_len, int vers
 	JSONStart(b);
 	JSONStartObject(b, resp_name, resp_name_len);
 	JSONAddInt(b, VERSION, version);
-	JSONStartObject(b, "fields", 6);
+	JSONStartObject(b, "FIELDS", 6);
 
 	return 0;
 }
@@ -565,9 +566,9 @@ int initNamedResponse(buff_t *b, const char *name, size_t name_len, int version)
 		return 1;
 
 	JSONStart(b);
-	JSONStartObject(b, name ? name : "resp", name? name_len : 4);
+	JSONStartObject(b, name ? name : "RESP", name? name_len : 4);
 	JSONAddInt(b, VERSION, version);
-	JSONStartArray(b, "data", 4);
+	JSONStartArray(b, "DATA", 4);
 
 	return 0;
 }
