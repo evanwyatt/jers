@@ -31,7 +31,53 @@
 #include <fields.h>
 #include <json.h>
 
-static const char *JSONescapeString(const char *string, size_t size, size_t *new_size);
+#define MAX_ESC_LEN(x) ((x * 2) + 1)
+
+/* Escape the string directly into the destination buffer.
+ * It's assumed there is enough space, by using the MAX_ESC_LEN macro */
+
+static inline size_t JSONescapeString(char *buffer, const char *value, size_t size) {
+	size_t bytes = 0;
+	char *dest = buffer;
+	const char *src = value;
+
+	while (bytes < size && *src != '\0') {
+		switch (*src)
+		{
+		case '\\':
+			*dest++ = '\\';
+			*dest++ = '\\';
+			break;
+
+		case '\t':
+			*dest++ = '\\';
+			*dest++ = 't';
+			break;
+
+		case '\n':
+			*dest++ = '\\';
+			*dest++ = 'n';
+			break;
+
+		case '"':
+			*dest++ = '\\';
+			*dest++ = '"';
+			break;
+
+		default:
+			*dest++ = *src;
+			break;
+		}
+
+		src++;
+		bytes++;
+	}
+
+	/* NULL isn't included in the length */
+	*dest = '\0';
+
+	return dest - buffer;
+}
 
 int JSONAddInt(buff_t *buff, int field_no, int64_t value)
 {
@@ -65,12 +111,10 @@ int JSONAddStringN(buff_t *buff, int field_no, const char *value, size_t value_l
 
 	if (value == NULL) {
 		value_len = 4; // 4 = null
-	} else {
-		value = JSONescapeString(value, value_len, &value_len);
 	}
 
 	/* Ensure we have room for '"field_name":"value",' */
-	size_t required = name_len + value_len + 6;
+	size_t required = name_len + MAX_ESC_LEN(value_len) + 6;
 	buffResize(buff, required);
 
 	int len = 0;
@@ -85,8 +129,7 @@ int JSONAddStringN(buff_t *buff, int field_no, const char *value, size_t value_l
 	if (value)
 	{
 		p[len++] = '"';
-		memcpy(p + len, value, value_len);
-		len += value_len;
+		len += JSONescapeString(p + len, value, value_len);
 		p[len++] = '"';
 	}
 	else
@@ -119,7 +162,7 @@ int JSONAddStringArray(buff_t *buff, int field_no, int64_t count, char **values)
 
 	for (int64_t i = 0; i < count; i++) {
 		value_lengths[i] = strlen(values[i]);
-		required += (value_lengths[i] * 2) + 3;
+		required += MAX_ESC_LEN(value_lengths[i]) + 3;
 	}
 
 	buffResize(buff, required);
@@ -136,15 +179,11 @@ int JSONAddStringArray(buff_t *buff, int field_no, int64_t count, char **values)
 
 	for (int64_t i = 0; i < count; i++)
 	{
-		size_t value_len = 0;
-
 		if (i != 0)
 			p[len++] = ',';
 
 		p[len++] = '"';
-		const char *escaped = JSONescapeString(values[i], value_lengths[i], &value_len);
-		memcpy(p + len, escaped, value_len);
-		len += value_len;
+		len += JSONescapeString(p + len, values[i], value_lengths[i]);
 		p[len++] = '"';
 	}
 
@@ -198,7 +237,7 @@ int JSONAddMap(buff_t *buff, int field_no, int64_t count, key_val_t *values)
 		lengths[i][1] = strlen(values[i].value);
 
 		required += lengths[i][0];
-		required += lengths[i][1] * 2; /* Allow for escaping */
+		required += MAX_ESC_LEN(lengths[i][1]); /* Allow for escaping */
 		required += 6;
 	}
 
@@ -216,9 +255,7 @@ int JSONAddMap(buff_t *buff, int field_no, int64_t count, key_val_t *values)
 		p[len++] = ':';
 
 		p[len++] = '"';
-		const char *escaped = JSONescapeString(values[i].value, value_len, &value_len);
-		memcpy(p + len, escaped, value_len);
-		len += value_len;
+		len += JSONescapeString(p + len, values[i].value, value_len);
 		p[len++] = '"';
 		p[len++] = ',';
 	}
@@ -327,65 +364,6 @@ int JSONEnd(buff_t *buf)
 	}
 
 	return 0;
-}
-
-static const char *JSONescapeString(const char *string, size_t size, size_t *new_size)
-{
-	static char *escaped = NULL;
-	static size_t escaped_size = 0;
-	size_t bytes = 0;
-	size_t string_length = size == 0 ? strlen(string) : size;
-	const char *temp = string;
-	char *dest;
-
-	/* Assume we have to escape everything */
-	if (escaped_size <= string_length * 2)
-	{
-		escaped_size = 1 + (string_length * 2);
-		escaped = realloc(escaped, escaped_size);
-	}
-
-	dest = escaped;
-
-	while (bytes < size && *temp != '\0')
-	{
-		switch (*temp)
-		{
-		case '\\':
-			*dest++ = '\\';
-			*dest++ = '\\';
-			break;
-
-		case '\t':
-			*dest++ = '\\';
-			*dest++ = 't';
-			break;
-
-		case '\n':
-			*dest++ = '\\';
-			*dest++ = 'n';
-			break;
-
-		case '"':
-			*dest++ = '\\';
-			*dest++ = '"';
-			break;
-
-		default:
-			*dest++ = *temp;
-			break;
-		}
-
-		temp++;
-		bytes++;
-	}
-
-	*dest = '\0';
-
-	if (new_size)
-		*new_size = dest - escaped;
-
-	return escaped;
 }
 
 /* Return a pointer to after the opening of an object,
@@ -497,11 +475,11 @@ int JSONGetString(char **json, char **value) {
 				case '"': *dst++ = '"'; break;
 				case '\\': *dst++ = '\\'; break;
 				case 't': *dst++ = '\t'; break;
-				case 'n': *dst++ = '\t'; break;
+				case 'n': *dst++ = '\n'; break;
 			}
 
 			modifying = 1;
-			pos++; /* Skip the next character */
+			pos++; /* Consume the escaped character */
 			continue;
 		}
 
@@ -520,7 +498,7 @@ int JSONGetString(char **json, char **value) {
 
 	/* NULL terminate and update the position in the provided string */
 	*dst = '\0';
-	*json = ++pos;
+	*json = pos + 1;
 	*value = string;
 
 	return 0;
@@ -556,8 +534,20 @@ int JSONGetNum(char **json, int64_t *value) {
 
 	pos = skipWhitespace(pos);
 	pos += strtoint64(pos, value);
-	*json = pos;
 
+	/* Check the character we stopped is ok */
+	switch (*pos) {
+		case '\0': // Null is valid, as we might have nulled out part of the object
+		case ',':
+		case ']':
+		case '}':
+			break;
+
+		default:
+			return 1;
+	}
+
+	*json = pos;
 	return 0;
 }
 
@@ -587,7 +577,7 @@ int64_t JSONGetStringArray(char **json, char ***strings) {
 	char *pos = *json;
 	char *str;
 
-	/* Find the start and sanity check there is an end */
+	/* Find the start */
 	pos = skipWhitespace(pos);
 
 	if (*pos != '[')
@@ -620,6 +610,9 @@ int64_t JSONGetStringArray(char **json, char ***strings) {
 		if (*pos == ',')
 			pos++;
 	}
+
+	if (*pos != ']')
+		return -1;
 
 	pos++; /* Consume the ']' */
 	*json = pos;
