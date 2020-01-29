@@ -216,6 +216,7 @@ static int processRequest(acctClient *a, const char *cmd) {
 
 			/* Load this ID from our state files to determine what to send next */
 			//TODO:
+			
 
 		} else {
 			if (a->initalised == 0) {
@@ -229,6 +230,8 @@ static int processRequest(acctClient *a, const char *cmd) {
 
 	} else if (strcasecmp(cmd, "STOP") == 0) {
 		a->state = ACCT_STOPPED;
+	} else if (strncasecmp(cmd, "ACK", 3)) {
+
 	} else {
 		print_msg(JERS_LOG_WARNING, "Unknown command sent from accounting stream client: %s", cmd);
 		return 1;
@@ -273,6 +276,8 @@ static void acctMain(acctClient *a, int journal_fd, off_t stream_start) {
 	buff_t j, line, temp;
 	off_t journal_offset = stream_start;
 	char read_buffer[4096];
+	int ack = 0;
+	int64_t current_id = 0;
 
 	/* Termination handler */
 	struct sigaction sigact;
@@ -413,15 +418,18 @@ static void acctMain(acctClient *a, int journal_fd, off_t stream_start) {
 				/* Construct an 'update' message */
 				buffClear(&line, line.used);
 				JSONStart(&line);
-				JSONStartObject(&line, "update", 6);
+				JSONStartObject(&line, "UPDATE", 6);
 
 				JSONAddInt(&line, DATETIME, hdr.timestamp_s);
 				JSONAddInt(&line, UID, hdr.uid);
-				
+
+				if (ack)
+					JSONAddInt(&line, ACCT_ID, ++current_id);
+
 				if (hdr.jobid)
 					JSONAddInt(&line, JOBID, hdr.jobid);
 
-				buffAdd(&line, "update:", 7);
+				buffAdd(&line, "\"COMMAND\":", 10);
 				buffAdd(&line, temp.data + msg_offset, strlen(temp.data + msg_offset));
 
 				JSONEndObject(&line);
