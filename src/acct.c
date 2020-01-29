@@ -430,7 +430,7 @@ static void acctMain(acctClient *a, int journal_fd, off_t stream_start) {
 					JSONAddInt(&line, JOBID, hdr.jobid);
 
 				buffAdd(&line, "\"COMMAND\":", 10);
-				buffAdd(&line, temp.data + msg_offset, strlen(temp.data + msg_offset));
+				buffAdd(&line, temp.data + msg_offset, line_len);
 
 				JSONEndObject(&line);
 				JSONEnd(&line);
