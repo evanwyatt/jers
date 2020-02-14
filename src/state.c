@@ -52,6 +52,7 @@
 int resourceStringToResource(const char * string, struct jobResource * res);
 int flushDir(char *path);
 int flushStateDirs(void);
+void createDir(const char *path);
 
 /* Functions to save/recover the state to/from disk
  *   The state journals (journal.yymmdd) are written to when commands are received
@@ -536,8 +537,19 @@ int stateSaveJob(struct job * j) {
 	f = fopen(new_filename, "w");
 
 	if (f == NULL) {
-		fprintf(stderr, "Failed to open job file %s : %s\n", filename, strerror(errno));
-		return 1;
+		if (errno == ENOENT) {
+			/* Try again after attempting to create the sub directory */
+			char create_dir[PATH_MAX];
+			sprintf(create_dir, "%s/jobs/%d", server.state_dir, directory);
+			createDir(create_dir);
+
+			f = fopen(new_filename, "w");
+		}
+
+		if (f == NULL) {
+			fprintf(stderr, "Failed to open job file %s : %s\n", filename, strerror(errno));
+			return 1;
+		}
 	}
 
 	fprintf(f, "# SAVETIME %ld\n", time(NULL));
@@ -1059,7 +1071,7 @@ int loadKeyValue (char * line, char **key, char ** value, int * index) {
 }
 
 /* Create a directory if it doesn't exist */
-void createDir(char * path) {
+void createDir(const char *path) {
 	struct stat buf;
 
 	if (mkdir(path, S_IRWXU|S_IRGRP|S_IXGRP) != 0) {

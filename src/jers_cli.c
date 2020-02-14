@@ -26,6 +26,7 @@ static struct argp_option add_job_options[] = {
 	{"tag", 't', "key=value", 0, "Tag to add to job. Example 'type=type1' - Can be specified multiple times"},
 	{"resource", 'r', "resource:count", 0, "Resource needed for job. Example 'software_licence:1' - Can be specified multiple times"},
 	{"user", 'u', "username", 0, "User to submit job under"},
+	{"jobid", 'i', "jobid", 0, "JobID to submit job as"},
 	{0}};
 
 static int getUID(const char *username, uid_t *uid) {
@@ -142,6 +143,10 @@ static error_t add_job_parse(int key, char *arg, struct argp_state *state)
 
 		case 'N':
 			arguments->add.nice = atoi(arg);
+			break;
+
+		case 'i':
+			arguments->add.jobid = atoi(arg);
 			break;
 
 		case 'h':
