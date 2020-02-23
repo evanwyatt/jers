@@ -63,7 +63,7 @@
 
 #define DEFAULT_CONFIG_STATEDIR "/var/spool/jers/state"
 #define DEFAULT_CONFIG_BACKGROUNDSAVEMS 30000
-#define DEFAULT_CONFIG_LOGGINGMODE JERS_LOG_INFO
+#define DEFAULT_CONFIG_LOGGINGMODE JERS_LOG_DEBUG
 #define DEFAULT_CONFIG_EVENTFREQ 10
 #define DEFAULT_CONFIG_SCHEDFREQ 25
 #define DEFAULT_CONFIG_SCHEDMAX 250
@@ -315,6 +315,8 @@ struct jersServer {
 		off_t size;
 		off_t extend_block_size;
 		off_t last_commit;
+		off_t record;
+		char datetime[10]; // YYYYMMDD
 	} journal;
 };
 

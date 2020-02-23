@@ -55,15 +55,25 @@ int flushStateDirs(void);
 void createDir(const char *path);
 
 /* Functions to save/recover the state to/from disk
- *   The state journals (journal.yymmdd) are written to when commands are received
+ *   The state journals (journal.yyyymmdd) are written to when commands are received
  *   These commands are then applied to the job/queue/res files as needed */
 
 static off_t findJournalEnd(int fd) {
-	char data[1024];
+	char data[8192 + 1];
 	int len;
 	off_t offset = 0;
 
-	while ((len = read(fd, data,sizeof(data))) > 0) {
+	while ((len = read(fd, data, sizeof(data) - 1)) > 0) {
+		/* NULL the buffer to make it easier to find records */
+		data[sizeof(data) - 1] = '\0';
+
+		/* Count all the records */
+		char *p = data;
+		while ((p = strchr(p, '\n')) != NULL) {
+			server.journal.record++;
+			p++;
+		}
+
 		if (data[len - 1] == 0) {
 			/* This chunk should contain the last record */
 			int i;
@@ -80,6 +90,8 @@ static off_t findJournalEnd(int fd) {
 	}
 
 	print_msg(JERS_LOG_DEBUG, "Found EOJ at offset %ld", offset);
+	print_msg(JERS_LOG_DEBUG, "Last journal record is: %ld", server.journal.record);
+
 	return offset;
 }
 
@@ -160,7 +172,9 @@ int openStateFile(time_t now) {
 	if (!server.state_dir)
 		error_die("No state directory specified");
 
-	asprintf(&state_file, "%s/journal.%d%02d%02d", server.state_dir, 1900 + tm->tm_year, tm->tm_mon + 1, tm->tm_mday);
+	server.journal.record = 0;
+	snprintf(server.journal.datetime, sizeof(server.journal.datetime), "%d%02d%02d", 1900 + tm->tm_year, tm->tm_mon + 1, tm->tm_mday);
+	asprintf(&state_file, "%s/journal.%s", server.state_dir, server.journal.datetime);
 
 	if (state_file == NULL)
 		error_die("Failed to open new state file: %s", strerror(errno));
@@ -168,9 +182,10 @@ int openStateFile(time_t now) {
 	if ((fd = open(state_file, flags | O_EXCL, mode)) < 0) {
 		if (errno != EEXIST)
 			error_die("Failed to open state file %s: %s", state_file, strerror(errno));
-		
+
 		/* The journal already existed.
-		 * We need to find the end of the last written record. */
+		 * We need to find the end of the last written record, as
+		 * well as count all the records in the file */
 		if ((fd = open(state_file, flags, mode)) < 0)
 			error_die("Failed to open state file %s: %s", state_file, strerror(errno));
 
