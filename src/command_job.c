@@ -540,8 +540,8 @@ int command_get_job(client *c, void * args) {
 	jersJobFilter * s = args;
 	struct queue * q = NULL;
 	struct job * j = NULL;
-	int read_all = c->user->permissions &PERM_READ;
-	int self = (server.permissions.self.count == 0 || (c->user->permissions &PERM_SELF) == PERM_SELF);
+	int read_all = (c->uid == 0 || c->user->permissions &PERM_READ);
+	int self = (server.permissions.self.count == 0 || c->uid == 0 || (c->user->permissions &PERM_SELF) == PERM_SELF);
 
 	int64_t count = 0;
 
