@@ -77,6 +77,11 @@
 #define DEFAULT_CONFIG_FLUSHDEFERMS 5000
 #define DEFAULT_CONFIG_EMAIL_FREQ 5000
 
+enum readonly_modes {
+	READONLY_ENOSPACE = 1,
+	READONLY_BGSAVE
+};
+
 enum jers_object_type {
 	JERS_OBJECT_JOB = 1,
 	JERS_OBJECT_QUEUE,

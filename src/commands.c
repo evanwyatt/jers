@@ -164,7 +164,14 @@ int runCommand(client *c) {
 	/* Don't allow update commands when in readonly mode. - Just return an error to the caller */
 	if (unlikely(server.readonly)) {
 		if (command_to_run->flags &CMDFLG_REPLAY) {
-			sendError(c, JERS_ERR_READONLY, NULL);
+			char * errmsg = NULL;
+
+			switch (server.readonly) {
+				case READONLY_ENOSPACE: errmsg = "JERS is in READONLY mode. - Check disk space"; break;
+				case READONLY_BGSAVE: errmsg = "JERS is in READONLY mode. - Check jersd logfile - Save failed"; break;
+			}
+
+			sendError(c, JERS_ERR_READONLY, errmsg);
 			print_msg(JERS_LOG_INFO, "Not running update command %s from user %d - Readonly mode.", c->msg.command, c->uid);
 			return 1;
 		}

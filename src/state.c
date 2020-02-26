@@ -131,7 +131,7 @@ static int extendJournal(void) {
 					print_msg(JERS_LOG_CRITICAL, "* Failed to extend journal - Device is full *");
 					print_msg(JERS_LOG_CRITICAL, "*        Switching to READONLY mode!        *");
 					print_msg(JERS_LOG_CRITICAL, "*********************************************");
-					server.readonly = 1;
+					server.readonly = READONLY_ENOSPACE;
 				}
 
 				return 1;
@@ -145,7 +145,7 @@ static int extendJournal(void) {
 		offset += written;
 	}
 
-	if (server.readonly) {
+	if (server.readonly == READONLY_ENOSPACE) {
 		print_msg(JERS_LOG_INFO, "Turning off readonly mode - journal extended.");
 		server.readonly = 0;
 	}
@@ -844,8 +844,24 @@ void stateSaveToDisk(int block) {
 
 			if (WIFEXITED(rc)) {
 				status = WEXITSTATUS(rc);
-				if (status)
+				if (status) {
 					print_msg(JERS_LOG_CRITICAL, "Background save failed. ExitCode:%d", status);
+
+					if (server.readonly == 0) {
+						print_msg(JERS_LOG_CRITICAL, "*********************************************");
+						print_msg(JERS_LOG_CRITICAL, "*          Background save failed           *");
+						print_msg(JERS_LOG_CRITICAL, "*        Switching to READONLY mode!        *");
+						print_msg(JERS_LOG_CRITICAL, "*********************************************");
+						server.readonly = READONLY_BGSAVE;
+					}
+				} else {
+					/* Sucessful save. Clear read only mode if we previously
+					 * entered it due to and issue with a save */
+					if (server.readonly == READONLY_BGSAVE) {
+						server.readonly = 0;
+						print_msg(JERS_LOG_INFO, "Turning off readonly mode - Background save successful.");
+					}
+				}
 			}
 			else if (WIFSIGNALED(rc)) {
 				signo = WTERMSIG(rc);
@@ -928,7 +944,7 @@ void stateSaveToDisk(int block) {
 	if (server.dirty_jobs == 0 && server.dirty_queues == 0 && server.dirty_resources == 0)
 		return;
 
-	if (server.readonly) {
+	if (server.readonly == READONLY_ENOSPACE) {
 		/* Try extending the journal to see if we can get out of readonly mode */
 		if (extendJournal()) {
 			print_msg(JERS_LOG_WARNING, "Skipping background save - READONLY mode");
@@ -1031,7 +1047,6 @@ void stateSaveToDisk(int block) {
 	}
 
 	/* Parent process - All done for now. We'll check on the child later if we aren't told to block */
-
 	if (block) {
 		print_msg(JERS_LOG_INFO, "Waiting for background save to complete (blocking)");
 		stateSaveToDisk(1);

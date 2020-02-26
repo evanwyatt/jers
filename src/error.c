@@ -61,7 +61,7 @@ const struct jers_err jers_errors[] = {
 	{"JERS_ERR_ESEND",       "Error sending data"},
 	{"JERS_ERR_DISCONNECT",  "Disconnected from daemon"},
 	{"JERS_ERR_RESINUSE",    "Resource is in use"},
-	{"JERS_ERR_READONLY",    "JERS is in readonly mode (Check disk space)"},
+	{"JERS_ERR_READONLY",    "JERS is in readonly mode"},
 	{"JERS_ERR_NOTCONN",     "Not connected"},
 
 	{"JERS_ERR_UNKNOWN",     "Unknown error occurred"}
