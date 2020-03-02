@@ -129,6 +129,8 @@ const field fields[] = {
 	{RETURNCODE, FIELD_TYPE_STRING, FIELDNAME("RETURN_CODE")},
 	{VERSION,    FIELD_TYPE_NUM,    FIELDNAME("VERSION")},
 
+	{ALERT, FIELD_TYPE_STRING, FIELDNAME("ALERT")},
+
 	{ENDOFFIELDS, FIELD_TYPE_NUM, FIELDNAME("ENDOFFIELDS")}
 };
 
@@ -389,6 +391,12 @@ int load_message(char *json, msg_t *m)
 				/* "data" should be an array of items */
 				if (loadItemArray(&cmd_object, m))
 					return 1;
+			} else if (strcmp(name, "ALERT") == 0) {
+				char *alert;
+				if (JSONGetString(&cmd_object, &alert))
+					return 1;
+
+				setenv(JERS_ALERT, alert, 1);
 			}
 		}
 	} else {
@@ -561,21 +569,31 @@ int closeRequest(buff_t *b) {
 	return 0;
 }
 
-int initNamedResponse(buff_t *b, const char *name, size_t name_len, int version) {
+int initNamedResponse(buff_t *b, const char *name, size_t name_len, int version, const char *alert) {
 	if (buffNew(b, 1024) != 0)
 		return 1;
 
 	JSONStart(b);
 	JSONStartObject(b, name ? name : "RESP", name? name_len : 4);
 	JSONAddInt(b, VERSION, version);
+
+	if (alert) {
+		JSONAddString(b, ALERT, alert);
+	}
+
 	JSONStartArray(b, "DATA", 4);
 
 	return 0;
 }
 
 /* Initalise a new reponse */
+int initResponseAlert(buff_t *b, int version, const char *alert) {
+	return initNamedResponse(b, NULL, 0, version, alert);
+}
+
+/* Initalise a new reponse */
 int initResponse(buff_t *b, int version) {
-	return initNamedResponse(b, NULL, 0, version);
+	return initNamedResponse(b, NULL, 0, version, NULL);
 }
 
 int closeResponse(buff_t *b) {

@@ -1127,7 +1127,7 @@ int recon_command(msg_t * m) {
 	/* The master daemon is requesting a list of all the jobs we have in memory.
 	 * We will remove the jobs in memory only when the master daemon confirms it's processed the recon message */
 
-	initNamedResponse(&b, AGENT_RECON_RESP, CONST_STRLEN(AGENT_RECON_RESP), 1);
+	initNamedResponse(&b, AGENT_RECON_RESP, CONST_STRLEN(AGENT_RECON_RESP), 1, NULL);
 
 	print_msg(JERS_LOG_INFO, "=== Start Recon ===\n");
 

@@ -516,7 +516,7 @@ int command_add_job(client *c, void *args) {
 	/* Return the jobid */
 	buff_t response;
 
-	if (initResponse(&response, 1) != 0)
+	if (initClientResponse(&response, 1) != 0)
 		return 0;
 
 	JSONStartObject(&response, NULL, 0);
@@ -563,7 +563,7 @@ int command_get_job(client *c, void * args) {
 			return 1;
 		}
 
-		initResponse(&r, 1);
+		initClientResponse(&r, 1);
 		serialize_jersJob(&r, j, 0);
 		count = 1;
 	} else {
@@ -581,7 +581,7 @@ int command_get_job(client *c, void * args) {
 			}
 		}
 
-		initResponse(&r, 1);
+		initClientResponse(&r, 1);
 		/* Loop through all non-deleted jobs and match against the criteria provided
 		 * Add the jobs to the response as we go */
 

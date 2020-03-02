@@ -241,12 +241,12 @@ int command_get_queue(client *c, void *args) {
 			return 1;
 		}
 
-		initResponse(&b, 1);
+		initClientResponse(&b, 1);
 		serialize_jersQueue(&b, q);
 		return sendClientMessage(c, NULL, &b);
 	}
 
-	initResponse(&b, 1);
+	initClientResponse(&b, 1);
 
 	if (qf->filters.name == NULL || strcmp(qf->filters.name, "*") == 0)
 		all = 1;

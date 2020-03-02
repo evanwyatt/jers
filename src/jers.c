@@ -792,6 +792,8 @@ int main (int argc, char * argv[]) {
 		return 1;
 	}
 
+	unsetenv(JERS_ALERT);
+
 	/* Allow matching at least 3 characters for the command, ie del */
 	int arg_len = strlen(argv[1]);
 
@@ -808,6 +810,11 @@ int main (int argc, char * argv[]) {
 
 		if (matches == 1) {
 			int rc = obj->func(argc, argv);
+			const char *alert = getenv(JERS_ALERT);
+
+			if (alert)
+				fprintf(stderr, "*** ALERT: %s\n", alert);
+
 			jersFinish();
 			return rc;
 		}

@@ -35,6 +35,8 @@ int sendClientMessage(client *c, jers_object *obj, buff_t *b);
 void sendAgentMessage(agent * a, buff_t *b);
 void sendError(client * c, int error, const char * msg);
 
+int initClientResponse(buff_t *b, int version);
+
 void replayCommand(msg_t * msg);
 
 typedef struct command {

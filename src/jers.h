@@ -125,6 +125,10 @@ typedef uint32_t jobid_t;
 
 #define JERS_EMAIL_ALL      0x7FFFFFFF
 
+/* An environment variable that contains an alert for the consumer
+ * It's up to the consumer to clear this variable. Ie the API will only ever set this. */
+#define JERS_ALERT "JERS_ALERT"
+
 extern int jers_errno;
 
 enum jers_error_codes {

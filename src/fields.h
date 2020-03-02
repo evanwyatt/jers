@@ -173,7 +173,7 @@ enum field_type {
 	ERROR,
 	RETURNCODE,
 	VERSION,
-	JOBS,
+	ALERT,
 
 	ENDOFFIELDS
 };
@@ -224,17 +224,9 @@ int64_t getStringMapField(field * f, key_val_t ** array);
 
 int initRequest(buff_t *b, const char *resp_name, size_t resp_name_len, int version);
 int initResponse(buff_t *b, int version);
-int initNamedResponse(buff_t *b, const char *name, size_t name_len, int version);
+int initResponseAlert(buff_t *b, int version, const char *alert);
+int initNamedResponse(buff_t *b, const char *name, size_t name_len, int version, const char *alert);
 int closeRequest(buff_t *b);
 int closeResponse(buff_t *b);
-
-/*
-void addIntField(resp_t * r, int field_no, int64_t value);
-void addStringField(resp_t * r, int field_no, const char * value);
-void addBoolField(resp_t * r, int field_no, char value);
-void addStringArrayField(resp_t * r, int field_no, int count, char ** strings);
-void addStringMapField(resp_t * r, int field_no, int count, const key_val_t * keys);
-void addBlobStringField(resp_t * r, int field_no, const char * value, size_t length);
-*/
 
 #endif

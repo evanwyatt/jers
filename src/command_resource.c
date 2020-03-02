@@ -155,7 +155,7 @@ int command_get_resource(client *c, void *args) {
 		return 1;
 	}
 
-	initResponse(&response, 1);
+	initClientResponse(&response, 1);
 
 	wildcard = ((strchr(rf->filters.name, '*')) || (strchr(rf->filters.name, '?')));
 

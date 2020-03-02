@@ -61,6 +61,7 @@ int initalised = 0;
 const char * getPendString(int);
 const char * getFailString(int);
 const char * getErrMsg(int jers_error);
+
 int getJersErrno(char *, char **);
 
 static int jersConnect(void);

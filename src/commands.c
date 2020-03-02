@@ -266,6 +266,13 @@ static int _sendMessage(struct connectionType *connection, buff_t *b, buff_t *me
 	return 0;
 }
 
+int initClientResponse(buff_t *b, int version) {
+	if (unlikely(server.readonly))
+		return initResponseAlert(b, version, "ReadOnly mode is active");
+
+	return initResponse(b, version);
+}
+
 void sendError(client *c, int error, const char *err_msg) {
 	buff_t response;
 	char str[1024];
@@ -393,7 +400,7 @@ int command_get_agent(client *c, void *args) {
 	jersAgentFilter * f = args;
 	buff_t b;
 
-	initResponse(&b, 1);
+	initClientResponse(&b, 1);
 
 	for (agent *a = agentList; a; a = a->next) {
 		if (f->host == NULL || matches(f->host, a->host) == 0) {
@@ -434,7 +441,7 @@ int command_stats(client * c, void * args) {
 	UNUSED(args);
 	buff_t b;
 
-	initResponse(&b, 1);
+	initClientResponse(&b, 1);
 
 	JSONStartObject(&b, NULL, 0);
 
