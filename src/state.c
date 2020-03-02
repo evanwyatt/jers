@@ -789,12 +789,70 @@ int stateDelResource(struct resource * r) {
 	return 0;
 }
 
+
+/* Save the current high allocated jobid to disk.
+ * This is loaded on startup as a hint to where
+ * jobid allocation should start from */
+int stateSaveJobID(jobid_t jobid) {
+	char filename[PATH_MAX];
+	sprintf(filename, "%s/jobid", server.state_dir);
+
+	FILE *f = fopen(filename, "w");
+
+	if (f == NULL) {
+		print_msg(JERS_LOG_WARNING, "Failed to open jobid state file for writing '%s' : %s\n", filename, strerror(errno));
+		return 1;
+	}
+
+	fprintf(f, "%u", jobid);
+	fclose(f);
+
+	return 0;
+}
+
+jobid_t stateLoadJobID(void) {
+	jobid_t jobid = 0;
+	char filename[PATH_MAX];
+	char *line = NULL;
+	size_t size = 0;
+
+	sprintf(filename, "%s/jobid", server.state_dir);
+
+	FILE *f = fopen(filename, "r");
+
+	if (f == NULL) {
+		if (errno != ENOENT)
+			print_msg(JERS_LOG_WARNING, "Failed to open jobid file '%s': %s", filename, strerror(errno));
+
+		return 0;
+	}
+
+	/* Only expect to have one line */
+	ssize_t len = getline(&line, &size, f);
+
+	if (len <= 0) {
+		print_msg(JERS_LOG_WARNING, "Failed to read jobid file '%s': %s", filename, strerror(errno));
+		fclose(f);
+		return 0;
+	}
+
+	jobid = atoi(line);
+
+	free(line);
+	fclose(f);
+
+	return jobid;
+}
+
 int stateSaveToDiskChild(struct job ** jobs, struct queue ** queues, struct resource ** resources) {
 	int64_t i;
 
 	setproctitle("jersd_state_save");
 
 	print_msg(JERS_LOG_DEBUG, "Background save jobs:%p queues:%p resources:%p", jobs, queues, resources);
+
+	/* Save the start jobid as a hint when the server starts */
+	stateSaveJobID(server.start_jobid);
 
 	/* Save the queues and resources first, to avoid having to handle
 	 * situations where we might have to recover jobs that reference
@@ -1222,6 +1280,9 @@ void stateInit(void) {
 	createDir(tmp);
 
 	flushStateDirs();
+
+	/* Load the 'high' jobid hint */
+	server.start_jobid = stateLoadJobID();
 }
 
 /* Read through the current state files converting the commands
@@ -1378,9 +1439,6 @@ struct job * stateLoadJob(const char * fileName) {
 
 	free(line);
 	fclose(f);
-
-	if (j->jobid > server.start_jobid)
-		server.start_jobid = j->jobid;
 
 	return j;
 }
