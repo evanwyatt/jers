@@ -136,5 +136,7 @@ int buffRemove(buff_t * b, size_t data_size, int shrink) {
 
 void buffClear(buff_t * b, size_t size) {
 	b->used = 0;
-	buffShrink(b, size);
+
+	if (size)
+		buffShrink(b, size);
 }
