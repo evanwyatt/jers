@@ -394,6 +394,7 @@ void freeEvents(void);
 
 void initEvents(void);
 
+int cleanupJob(struct job *j);
 int cleanupJobs(uint32_t max_clean);
 int cleanupQueues(uint32_t max_clean);
 int cleanupResources(uint32_t max_clean);

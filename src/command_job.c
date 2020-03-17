@@ -411,8 +411,13 @@ int command_add_job(client *c, void *args) {
 		j = findJob(s->jobid);
 
 		if (j != NULL) {
-			sendError(c, JERS_ERR_JOBEXISTS, NULL);
-			return -1;
+			/* If the job id requested exists, but is deleted, clean it up to reuse it */
+			if (j->internal_state &JERS_FLAG_DELETED && cleanupJob(j)) {
+				sendError(c, JERS_ERR_JOBEXISTS, NULL);
+				return -1;
+			}
+
+			j = NULL;
 		}
 	}
 

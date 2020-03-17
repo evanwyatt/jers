@@ -105,6 +105,31 @@ struct job * findJob(jobid_t jobid) {
 	return j;
 }
 
+int cleanupJob(struct job *j) {
+	/* Cleanup a single job if possible */
+
+	/* Don't clean up jobs flagged dirty or as being flushed */
+	if (j->obj.dirty || j->internal_state &JERS_FLAG_FLUSHING)
+		return 1;
+
+	stateDelJob(j);
+	HASH_DEL(server.jobTable, j);
+
+	/* If the job was a candidate for execution, clear it out of the pool */
+	for (int i = 0; i < server.candidate_pool_jobs; i++) {
+		if (server.candidate_pool[i] == j) {
+			server.candidate_pool[i] = NULL;
+			break;
+		}
+	}
+
+	freeJob(j);
+
+	server.deleted--;
+
+	return 0;
+}
+
 /* Cleanup jobs that are marked as deleted, returning the number of jobs cleaned up
  * - Only cleanup jobs until the max_clean threshold is reached. */
 
@@ -122,24 +147,8 @@ int cleanupJobs(uint32_t max_clean) {
 		if (!(j->internal_state &JERS_FLAG_DELETED))
 			continue;
 
-		/* Don't clean up jobs flagged dirty or as being flushed */
-		if (j->obj.dirty || j->internal_state &JERS_FLAG_FLUSHING)
-			continue;
-
 		/* Got a job to remove */
-		stateDelJob(j);
-		HASH_DEL(server.jobTable, j);
-
-		/* If the job was a candidate for execution, clear it out of the pool */
-		for (int i = 0; i < server.candidate_pool_jobs; i++) {
-			if (server.candidate_pool[i] == j) {
-				server.candidate_pool[i] = NULL;
-				break;
-			}
-		}
-
-		freeJob(j);
-		server.deleted--;
+		cleanupJob(j);
 
 		if (++cleaned_up >= max_clean)
 			break;
