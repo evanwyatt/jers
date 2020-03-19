@@ -94,10 +94,15 @@ void test_time(void) {
 
 	TEST("Elapsed format 2", check_timestring(&input, 1, "10m 0.950s"));
 
-	input.tv_sec = 5 * 60 * 60;
+	input.tv_sec = (5 * 60 * 60) + (15 * 60);
 	input.tv_nsec = 50000000;
 
-	TEST("Elapsed format 3", check_timestring(&input, 1, "300m 0.050s"));
+	TEST("Elapsed format 3", check_timestring(&input, 1, "5h 15m 0.050s"));
+
+	input.tv_sec = (1 * 60 * 60) + (59 * 60) + 59;
+	input.tv_nsec = 999999999;
+
+	TEST("Elapsed format 4", check_timestring(&input, 1, "1h 59m 59.999s"));
 
 	/* Time stamps are in localtime, so need to figure out a way to make this reliable */
 	input.tv_sec = 1570000000;

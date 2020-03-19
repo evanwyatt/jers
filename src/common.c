@@ -143,20 +143,24 @@ int64_t getTimeMS(void) {
 
 /* Return a formated timespec as a static string
  *  - If elapsed is zero, print as year-month-day hour:minute:second.milliseconds
- *	Otherwise print an elapsed time as minutes seconds milliseconds
+ *	Otherwise print an elapsed time as hours minutes seconds milliseconds
  *	ie 1969-07-21 02:56:15.000
- *	or 151m 40.000s */
+ *	or 2h 31m 40.000s */
 
 char * print_time(const struct timespec * time, int elapsed) {
 	static char formatted[64];
 
 	if (elapsed) {
-		int minutes, seconds;
+		int len = 0, hours, minutes, seconds;
 
-		minutes = time->tv_sec / 60;
+		hours = time->tv_sec / 3600;
+		minutes = (time->tv_sec % 3600) / 60;
 		seconds = time->tv_sec % 60;
 
-		snprintf(formatted, sizeof(formatted), "%dm %d.%03lds", minutes, seconds, time->tv_nsec / 1000000);
+		if (hours)
+			len = snprintf(formatted, sizeof(formatted), "%dh ", hours);
+
+		snprintf(formatted + len, sizeof(formatted) - len, "%dm %d.%03lds", minutes, seconds, time->tv_nsec / 1000000);
 
 	} else {
 		struct tm * tm = localtime(&time->tv_sec);
