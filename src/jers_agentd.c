@@ -743,7 +743,6 @@ int send_completion(struct runningJob * j) {
 	JSONAddInt(&b, USAGE_MAJFLT,     j->job_completion.rusage.ru_majflt);
 	JSONAddInt(&b, USAGE_INBLOCK,    j->job_completion.rusage.ru_inblock);
 	JSONAddInt(&b, USAGE_OUBLOCK,    j->job_completion.rusage.ru_oublock);
-	JSONAddInt(&b, USAGE_INBLOCK,    j->job_completion.rusage.ru_inblock);
 	JSONAddInt(&b, USAGE_NVCSW,      j->job_completion.rusage.ru_nvcsw);
 	JSONAddInt(&b, USAGE_NIVCSW,     j->job_completion.rusage.ru_nivcsw);
 
@@ -1155,7 +1154,6 @@ int recon_command(msg_t * m) {
 				JSONAddInt(&b, USAGE_MAJFLT,     j->job_completion.rusage.ru_majflt);
 				JSONAddInt(&b, USAGE_INBLOCK,    j->job_completion.rusage.ru_inblock);
 				JSONAddInt(&b, USAGE_OUBLOCK,    j->job_completion.rusage.ru_oublock);
-				JSONAddInt(&b, USAGE_INBLOCK,    j->job_completion.rusage.ru_inblock);
 				JSONAddInt(&b, USAGE_NVCSW,      j->job_completion.rusage.ru_nvcsw);
 				JSONAddInt(&b, USAGE_NIVCSW,     j->job_completion.rusage.ru_nivcsw);
 				break;
