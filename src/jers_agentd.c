@@ -593,7 +593,8 @@ spawn_exit:
 
 	job_completion.finish_time = end.tv_sec;	
 
-	/* Write a summary to the log file and flush it to disk */
+	/* Write a summary to the log file and flush it to disk
+	 * This output should be kept to 10 lines so tail works nicely */
 	lseek(stdout_fd, 0, SEEK_END);
 	dprintf(stdout_fd, "\n========= Job Summary =========\n");
 	dprintf(stdout_fd, " Elapsed Time : %s\n", print_time(&elapsed, 1));
@@ -604,10 +605,12 @@ spawn_exit:
 	dprintf(stdout_fd, " Max RSS      : %ldKB\n", job_completion.rusage.ru_maxrss);
 	dprintf(stdout_fd, " UID          : %d (%s)\n", j->u->uid, j->u->username);
 	dprintf(stdout_fd, " Job ID       : %d\n", j->jobid);
-	dprintf(stdout_fd, " Exit Code    : %d\n", exit_code);
+	dprintf(stdout_fd, " Exit Code    : %d", exit_code);
 
 	if (sig)
-		dprintf(stdout_fd, " Signal       : %d\n", sig);
+		dprintf(stdout_fd, " (Signal %d)\n", sig);
+	else
+		write(stdout_fd, "\n", 1);
 
 	fdatasync(stdout_fd);
 	close(stdout_fd);
