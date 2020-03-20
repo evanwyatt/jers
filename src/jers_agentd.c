@@ -357,6 +357,11 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 	int i;
 	int launch_status = 0;
 
+	/* Close some sockets we inherited from our parent */
+	close(agent.daemon_fd);
+	close(agent.client_proxy.socket);
+	close(agent.event_fd);
+
 	/* Generate the temporary script we are going to execute, if no wrapper was specified. */
 	if (j->wrapper == NULL) {
 		if (createTempScript(j) != 0) {
@@ -516,6 +521,12 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 		dup2(stdout_fd, STDOUT_FILENO);
 		dup2(stderr_fd, STDERR_FILENO);
 
+		close(stdin_fd);
+		close(stdout_fd);
+
+		if (stdout_fd != stderr_fd)
+			close(stderr_fd);
+
 		argv[k++] = j->shell;
 
 		if (j->wrapper) {
@@ -538,6 +549,8 @@ spawn_exit:
 		_exit(JERS_FAIL_START);
 
 	}
+
+	close(stdin_fd);
 
 	struct jobCompletion job_completion = {0};
 	int rc = 0, exit_code = 0, sig = 0, status;
@@ -1715,6 +1728,7 @@ int main (int argc, char * argv[]) {
 		error_die("JERS_AGENTD is required to be run as root");
 
 	agent.daemon_fd = -1;
+	agent.client_proxy.socket = -1;
 
 	/* Setup epoll on the socket */
 	agent.event_fd = epoll_create1(EPOLL_CLOEXEC);
