@@ -82,6 +82,9 @@ void disconnectFromDaemon(void);
 char * server_log = "jers_agentd";
 int server_log_mode = JERS_LOG_DEBUG;
 
+int job_stderr = STDERR_FILENO;
+pid_t job_pid = -1;
+
 volatile sig_atomic_t shutdown_requested = 0;
 
 struct jobCompletion {
@@ -168,6 +171,49 @@ struct jersJobSpawn {
 };
 
 struct agent agent;
+
+static int _strcpy_len(char *dst, const char *src) {
+	int len = 0;
+
+	for (len = 0; src[len]; len++)
+		dst[len] = src[len];
+
+	dst[len] = '\0';
+
+	return len;
+}
+
+void job_sighandler(int signum, siginfo_t *info, void *ucontext) {
+	/* This function needs to be signal safe, so functions like printf can not be used */
+	char buff[4096];
+	int len = 0;
+
+	UNUSED(ucontext);
+
+	len += _strcpy_len(buff + len, "*** JERS - Signal received: ");
+	len += _strcpy_len(buff + len, getSignalName(signum));
+	len += _strcpy_len(buff + len, " From PID:");
+	len += int64tostr(buff + len, info->si_pid);
+	len += _strcpy_len(buff + len, " UID:");
+	len += int64tostr(buff + len, info->si_uid);
+
+	buff[len++] = '\n';
+
+	write(job_stderr, buff, len);
+
+	/* Forward this signal to the entire process group */
+	if (job_pid != -1)
+		kill(-job_pid, signum);
+}
+
+void setup_job_sighandler(void) {
+	struct sigaction sigact;
+
+	sigemptyset(&sigact.sa_mask);
+	sigact.sa_flags = SA_NODEFER | SA_RESETHAND | SA_SIGINFO;
+	sigact.sa_sigaction = job_sighandler;
+	sigaction(SIGTERM, &sigact, NULL);
+}
 
 void loadConfig(char * config) {
 	FILE * f = NULL;
@@ -552,6 +598,11 @@ spawn_exit:
 
 	close(stdin_fd);
 
+	/* SIGTERM handler so we can write to the jobs logfile if we get a sigterm */
+	job_stderr = stderr_fd;
+	job_pid = jobPid;
+	setup_job_sighandler();
+
 	struct jobCompletion job_completion = {0};
 	int rc = 0, exit_code = 0, sig = 0, status;
 
@@ -562,7 +613,6 @@ spawn_exit:
 		if (status != sizeof(jobPid))
 			fprintf(stderr, "Failed to send PID of job %d to agent: (status=%d) %s\n", j->jobid, status, strerror(errno));
 	} while (status == -1 && errno == EINTR);
-
 
 	/* Wait for the job to complete */
 	while (wait4(jobPid, &rc, 0, &job_completion.rusage) < 0) {
@@ -591,7 +641,7 @@ spawn_exit:
 	sys_cpu.tv_sec = job_completion.rusage.ru_stime.tv_sec;
 	sys_cpu.tv_nsec = job_completion.rusage.ru_stime.tv_usec * 1000;
 
-	job_completion.finish_time = end.tv_sec;	
+	job_completion.finish_time = end.tv_sec;
 
 	/* Write a summary to the log file and flush it to disk
 	 * This output should be kept to 10 lines so tail works nicely */
@@ -608,7 +658,7 @@ spawn_exit:
 	dprintf(stdout_fd, " Exit Code    : %d", exit_code);
 
 	if (sig)
-		dprintf(stdout_fd, " (Signal %d)\n", sig);
+		dprintf(stdout_fd, " (Signal %d - %s)\n", sig, getSignalName(sig));
 	else
 		write(stdout_fd, "\n", 1);
 
