@@ -535,11 +535,20 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 		if (to_add >= j->u->env_size - j->u->env_count)
 			j->u->users_env = realloc(j->u->users_env, sizeof(char *) * (j->u->env_count + to_add + 1));
 
-		/* Add the users variables first */
+		/* Add in TMPDIR first, so that we don't overwrite a user variable */
+		if (j->u->env_count > 0)
+			j->u->users_env[j->u->env_count] = j->u->users_env[0];
+
+		if (asprintf(&j->u->users_env[0],"TMPDIR=/tmp") <= 0)
+			goto spawn_exit;
+
+		j->u->env_count++;
+
+		/* Add the users variables */
 		for (i = 0; i < j->env_count; i++)
 			j->u->users_env[j->u->env_count++] = j->envs[i];
 
-		/* Now our generic job ones */
+		/* Now our generic job ones. So they can not be overwritten by the user */
 		if (asprintf(&j->u->users_env[j->u->env_count++],"JERS_JOBID=%d", j->jobid) <= 0) goto spawn_exit;
 		if (asprintf(&j->u->users_env[j->u->env_count++],"JERS_QUEUE=%s", j->queue) <= 0) goto spawn_exit;
 		if (asprintf(&j->u->users_env[j->u->env_count++],"JERS_JOBNAME=%s", j->name) <= 0) goto spawn_exit;
@@ -554,9 +563,6 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 
 		for (i = 0; i < j->res_count; i++)
 			if (asprintf(&j->u->users_env[j->u->env_count++],"JERS_RES%d=%s", i, j->resources[i]) <= 0) goto spawn_exit;
-
-		/* A lot of things rely on having TMPDIR set */
-		if (asprintf(&j->u->users_env[j->u->env_count++],"TMPDIR=/tmp") <= 0) goto spawn_exit;
 
 		j->u->users_env[j->u->env_count] = NULL;
 
