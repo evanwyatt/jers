@@ -212,11 +212,10 @@ char *skipChars(char *str, const char *skip) {
 	return str;
 }
 
-
 char *skipWhitespace(char *str) {
-	return skipChars(str, " \t");
+	while (*str != '\0' && (*str == ' ' || *str == '\t')) str++;
+	return str;
 }
-
 
 char * gethost(void) {
 	static char host[1024] = "";
