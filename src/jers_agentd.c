@@ -72,6 +72,7 @@
 #define DEFAULT_AGENT_SOCKET "/run/jers/agent.sock"
 #define DEFAULT_PROXY_SOCKET "/run/jers/proxy.sock"
 #define DEFAULT_DAEMON_PORT 7000
+#define DEFAULT_TMPDIR "/tmp"
 #define RECONNECT_WAIT 20 // Seconds
 
 void error_die(char *, ...);
@@ -131,6 +132,8 @@ struct agent {
 
 	int daemon_fd;
 	int event_fd;
+
+	char *tmpdir;
 
 	struct connectionType client_proxy;
 
@@ -223,6 +226,7 @@ void loadConfig(char * config) {
 
 	/* Populate the defaults before we start parsing the config file */
 	agent.daemon_socket_path = strdup(DEFAULT_AGENT_SOCKET);
+	agent.tmpdir = strdup(DEFAULT_TMPDIR);
 
 	if (config == NULL)
 		config = DEFAULT_CONFIG_FILE;
@@ -251,6 +255,7 @@ void loadConfig(char * config) {
 		}
 	
 		if (strcmp(key, "daemon_socket") == 0) {
+			free(agent.daemon_socket_path);
 			agent.daemon_socket_path = strdup(value);
 		} else if (strcmp(key, "daemon_port") == 0) {
 			agent.daemon_port = atoi(value);
@@ -258,6 +263,14 @@ void loadConfig(char * config) {
 			agent.daemon_host = strdup(value);
 			if (agent.daemon_port == 0)
 				agent.daemon_port = DEFAULT_DAEMON_PORT;
+		} else if (strcmp(key, "default_tmpdir") == 0) { 
+			if (access(value, F_OK) != 0) {
+				print_msg(JERS_LOG_WARNING, "TMPDIR specified in configuration file does not exist: %s", value);
+				print_msg(JERS_LOG_WARNING, "Using default TMPDIR: %s", agent.tmpdir);
+			} else {
+				free(agent.tmpdir);
+				agent.tmpdir = strdup(value);
+			}
 		} else {
 			print_msg(JERS_LOG_WARNING, "Skipping unknown config key: %s\n", key);
 			continue;
@@ -539,7 +552,7 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 		if (j->u->env_count > 0)
 			j->u->users_env[j->u->env_count] = j->u->users_env[0];
 
-		if (asprintf(&j->u->users_env[0],"TMPDIR=/tmp") <= 0)
+		if (asprintf(&j->u->users_env[0],"TMPDIR=%s", agent.tmpdir) <= 0)
 			goto spawn_exit;
 
 		j->u->env_count++;
@@ -1764,6 +1777,9 @@ int main (int argc, char * argv[]) {
 	memset(&agent, 0, sizeof(struct agent));
 	parseOpts(argc, argv);
 
+	if (agent.daemon)
+		setLogfileName(server_log);
+
 	loadConfig(NULL);
 
 	setup_handlers(shutdownHandler);
@@ -1771,9 +1787,6 @@ int main (int argc, char * argv[]) {
 #ifdef INIT_SETPROCTITLE_REPLACEMENT
 	spt_init(argc, argv);
 #endif
-
-	if (agent.daemon)
-		setLogfileName(server_log);
 
 	print_msg(JERS_LOG_INFO, "\n"
 			"     _  ___  ___  ___                   \n"
