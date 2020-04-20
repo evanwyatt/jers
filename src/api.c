@@ -124,6 +124,8 @@ JERS_EXPORT int jersInitAPI(const char * custom_config) {
 		return 1;
 	}
 
+	sortfields();
+
 	buffNew(&response, 0);
 	initalised = 1;
 
@@ -216,6 +218,9 @@ static int sendRequest(buff_t *b) {
 
 /* Block until we read a full response */
 static int readResponse(void) {
+	size_t checked = 0;
+	char *nl = NULL;
+
 	while (1) {
 		/* Allocate more memory if we might need it */
 		if (buffResize(&response, 0) != 0) {
@@ -238,30 +243,31 @@ static int readResponse(void) {
 			fprintf(stderr, "Disconnected from jers daemon\n");
 			return 1;
 		}
+
 		response.used += bytes_read;
 
 		/* Got a full message yet? */
-		char *nl = memchr(response.data, '\n', response.used);
+		nl = memchr(response.data + checked, '\n', bytes_read);
 
-		if (nl == NULL)
-			continue;
+		if (nl != NULL)
+			break;
 
-		/* Try and process the request */
-		*nl = '\0';
-		nl++;
-
-		if (load_message(response.data, &msg)) {
-			setJersErrno(JERS_ERR_INVRESP, NULL);
-			fprintf(stderr, "Failed to parse response from jers daemon\n");
-			free_message(&msg);
-			return 1;
-		}
-
-		/* Remove the request from the buffer */
-		buffRemove(&response, nl - response.data, 0);
-
-		break;
+		checked = response.used;
 	}
+
+	/* Try and process the request */
+	*nl = '\0';
+	nl++;
+
+	if (load_message(response.data, &msg)) {
+		setJersErrno(JERS_ERR_INVRESP, NULL);
+		fprintf(stderr, "Failed to parse response from jers daemon\n");
+		free_message(&msg);
+		return 1;
+	}
+
+	/* Remove the request from the buffer */
+	buffRemove(&response, nl - response.data, 0);
 
 	/* Check for an error in the response */
 	if (msg.error) {
