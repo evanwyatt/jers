@@ -189,6 +189,7 @@ void test_strings(void) {
 	TEST("removeWhitespace - Leading spaces with embedded tabs", check_whitespace("	   Testing\tstring", "Testing\tstring"));
 	TEST("removeWhitespace - Leading and trailing spaces", check_whitespace("  Testing string	", "Testing string"));
 	TEST("removeWhitespace - Leading and trailing tabs", check_whitespace("\t\tTesting\tstring\t\t", "Testing\tstring"));
+	TEST("removeWhitespace - No removal required", check_whitespace("Hello \tWorld", "Hello \tWorld"));
 
 	/* skipChars - Return a pointer inside your string to the first non-matching char */
 	TEST("skipChars - no skip", check_skipChars("Hello World", "", "Hello World"));
