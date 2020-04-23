@@ -75,7 +75,6 @@
 #define DEFAULT_TMPDIR "/tmp"
 #define RECONNECT_WAIT 20 // Seconds
 
-void error_die(char *, ...);
 const char * getFailString(int);
 const char * getErrType(int jers_error);
 void disconnectFromDaemon(void);
@@ -737,7 +736,7 @@ static void _sendMsg(buff_t *b) {
 
 	if (agent.responses_sent <= agent.responses.used)
 		add_epoll = 1;
-print_msg(JERS_LOG_DEBUG, "Sending message:%.*s", b->used, b->data);
+
 	buffAddBuff(&agent.responses, b);
 	buffFree(b);
 

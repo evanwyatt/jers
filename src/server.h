@@ -342,8 +342,6 @@ struct jersServer {
 
 extern struct jersServer server;
 
-void error_die(char *, ...);
-
 jobid_t getNextJobID(void);
 int addJob(struct job * j, int dirty);
 void deleteJob(struct job * j);

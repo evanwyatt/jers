@@ -456,7 +456,7 @@ int command_agent_proxydata(agent *a, msg_t *msg) {
 	}
 
 	if (c == NULL) {
-		print_msg(JERS_LOG_WARNING, "Failed to locate proxy client from agent %s pid:%d", a, pid);
+		print_msg(JERS_LOG_WARNING, "Failed to locate proxy client from agent %s pid:%d", a->host, pid);
 		free(data);
 		return 1;
 	}

@@ -849,7 +849,8 @@ int stateSaveToDiskChild(struct job ** jobs, struct queue ** queues, struct reso
 
 	setproctitle("jersd_state_save");
 
-	print_msg(JERS_LOG_DEBUG, "Background save jobs:%p queues:%p resources:%p", jobs, queues, resources);
+	print_msg(JERS_LOG_DEBUG, "Starting background save. %ld Jobs %ld Queues %ld Resources",
+		server.flush_jobs, server.flush_queues, server.flush_resources);
 
 	/* Save the start jobid as a hint when the server starts */
 	stateSaveJobID(server.start_jobid);
@@ -1299,7 +1300,7 @@ struct job * stateLoadJob(const char * fileName) {
 	f = fopen(fileName, "r");
 
 	if (!f) {
-		error_die("Failed to open job file %s: %s\n", strerror(errno));
+		error_die("Failed to open job file %s: %s\n", fileName, strerror(errno));
 	}
 
 	temp = strrchr(fileName, '/');
