@@ -125,6 +125,14 @@ void * deserialize_get_job(msg_t * t) {
 			case UID      : s->filters.uid = getNumberField(&item->fields[i]); s->filter_fields |= JERS_FILTER_UID ; break;
 			case NODE     : s->filters.node = getStringField(&item->fields[i]); s->filter_fields |= JERS_FILTER_NODE ; break;
 
+			case BEFORE_ADDED: s->filters.before.added = getNumberField(&item->fields[i]); s->filter_fields |= JERS_FILTER_BEFORE ; break;
+			case BEFORE_STARTED: s->filters.before.started = getNumberField(&item->fields[i]); s->filter_fields |= JERS_FILTER_BEFORE ; break;
+			case BEFORE_FINISHED: s->filters.before.finished = getNumberField(&item->fields[i]); s->filter_fields |= JERS_FILTER_BEFORE ; break;
+
+			case AFTER_ADDED: s->filters.after.added = getNumberField(&item->fields[i]); s->filter_fields |= JERS_FILTER_AFTER ; break;
+			case AFTER_STARTED: s->filters.after.started = getNumberField(&item->fields[i]); s->filter_fields |= JERS_FILTER_AFTER ; break;
+			case AFTER_FINISHED: s->filters.after.finished = getNumberField(&item->fields[i]); s->filter_fields |= JERS_FILTER_AFTER ; break;
+
 			case RETFIELDS: s->return_fields = getNumberField(&item->fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",t->items[0].fields[i].name); break;
@@ -645,6 +653,30 @@ int command_get_job(client *c, void * args) {
 				if (!match)
 					continue;
 			}
+
+			/* Check before/after filtering */
+			if (s->filter_fields & JERS_FILTER_BEFORE) {
+				if (s->filters.before.added && j->submit_time > s->filters.before.added)
+					continue;
+
+				if (s->filters.before.started && (j->start_time == 0 || j->start_time > s->filters.before.started))
+					continue;
+
+				if (s->filters.before.finished && (j->finish_time == 0 || j->finish_time > s->filters.before.finished))
+					continue;
+			}
+
+			if (s->filter_fields & JERS_FILTER_AFTER) {
+				if (s->filters.after.added && j->submit_time < s->filters.after.added)
+					continue;
+
+				if (s->filters.after.started && (j->start_time == 0 || j->start_time < s->filters.after.started))
+					continue;
+
+				if (s->filters.after.finished && (j->finish_time == 0 || j->finish_time < s->filters.after.finished))
+					continue;
+			}
+
 
 			/* Made it here, add it to our response if the user has permission */
 			if (read_all || (self && j->uid == c->uid))

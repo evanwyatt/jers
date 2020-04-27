@@ -465,6 +465,28 @@ JERS_EXPORT int jersGetJob(jobid_t jobid, const jersJobFilter * filter, jersJobI
 
 			if (filter->filter_fields & JERS_FILTER_SUBMITTER)
 				JSONAddInt(&b, SUBMITTER, filter->filters.submitter);
+
+			if (filter->filter_fields & JERS_FILTER_BEFORE) {
+				if (filter->filters.before.added)
+					JSONAddInt(&b, BEFORE_ADDED, filter->filters.before.added);
+
+				if (filter->filters.before.started)
+					JSONAddInt(&b, BEFORE_STARTED, filter->filters.before.started);
+
+				if (filter->filters.before.finished)
+					JSONAddInt(&b, BEFORE_FINISHED, filter->filters.before.finished);
+			}
+
+			if (filter->filter_fields & JERS_FILTER_AFTER) {
+				if (filter->filters.before.added)
+					JSONAddInt(&b, AFTER_ADDED, filter->filters.after.added);
+
+				if (filter->filters.before.started)
+					JSONAddInt(&b, AFTER_STARTED, filter->filters.after.started);
+
+				if (filter->filters.before.finished)
+					JSONAddInt(&b, AFTER_FINISHED, filter->filters.after.finished);
+			}
 		}
 
 		if (filter->return_fields)

@@ -87,6 +87,8 @@ typedef uint32_t jobid_t;
 #define JERS_FILTER_RESNAME   0x40
 #define JERS_FILTER_NODE      0x80
 #define JERS_FILTER_SUBMITTER 0x0100
+#define JERS_FILTER_BEFORE    0x0200
+#define JERS_FILTER_AFTER     0x0400
 
 #define JERS_RET_JOBID      0x01
 #define JERS_RET_QUEUE      0x02
@@ -326,6 +328,19 @@ typedef struct {
 		char ** resources;
 		uid_t uid;
 		uid_t submitter;
+
+		struct {
+			time_t added;
+			time_t started;
+			time_t finished;
+		} before;
+
+		struct {
+			time_t added;
+			time_t started;
+			time_t finished;
+		} after;
+
 	} filters;
 } jersJobFilter;
 
