@@ -292,10 +292,8 @@ int command_agent_jobstart(agent * a, msg_t * msg) {
 	j->pid = pid;
 	j->start_time = start_time;
 
-	if (server.recovery.in_progress && j->res_count) {
-		for (i = 0; i < j->res_count; i++)
-			j->req_resources[i].res->in_use += j->req_resources[i].needed;
-	}
+	if (server.recovery.in_progress && j->res_count)
+		allocateRes(j);
 
 	server.stats.total.started++;
 	print_msg(JERS_LOG_DEBUG, "JobID: %d started PID:%d", jobid, pid);
@@ -348,10 +346,8 @@ int command_agent_jobcompleted(agent * a, msg_t * msg) {
 		print_msg(JERS_LOG_WARNING, "Got completion for job without start: %d", jobid);
 	}
 
-	if (j->res_count) {
-		for (i = 0; i < j->res_count; i++)
-			j->req_resources[i].res->in_use -= j->req_resources[i].needed;
-	}
+	if (j->res_count)
+		deallocateRes(j);
 
 	j->exitcode = exitcode &JERS_EXIT_STATUS_MASK;
 

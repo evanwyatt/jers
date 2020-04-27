@@ -351,6 +351,9 @@ struct job * findJob(jobid_t jobid);
 int addRes(struct resource * r, int dirty);
 void freeRes(struct resource *r);
 struct resource * findResource(char * name);
+int checkRes(struct job *j);
+void allocateRes(struct job *j);
+void deallocateRes(struct job *j);
 
 int addQueue(struct queue * q, int dirty);
 void freeQueue(struct queue * q);

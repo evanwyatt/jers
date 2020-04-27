@@ -255,17 +255,11 @@ void checkJobs(void) {
 
 		/* Resources available? */
 		if (j->res_count) {
-			int res_idx;
-			for (res_idx = 0; res_idx < j->res_count; res_idx++) {
-				if (j->req_resources[res_idx].needed > j->req_resources[res_idx].res->count - j->req_resources[res_idx].res->in_use) {
-					j->pend_reason = JERS_PEND_NORES;
-					break;
-				}
-			}
-
-			/* Not enough of the required resources are available */
-			if (j->pend_reason)
+			if (checkRes(j)) {
+				/* Not enough of the required resources are available */
+				j->pend_reason = JERS_PEND_NORES;
 				continue;
+			}
 		}
 
 		/* Queue stopped? */
@@ -288,12 +282,8 @@ void checkJobs(void) {
 		/* We can start this job! */
 
 		/* Increase all the needed resources */
-		if (j->res_count) {
-			int res_idx;
-			for (res_idx = 0; res_idx < j->res_count; res_idx++) {
-				j->req_resources[res_idx].res->in_use += j->req_resources[res_idx].needed;
-			}
-		}
+		if (j->res_count)
+			allocateRes(j);
 
 		sendStartCmd(j);
 		j->internal_state |= JERS_FLAG_JOB_STARTED;

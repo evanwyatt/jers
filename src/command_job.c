@@ -744,6 +744,10 @@ int command_mod_job(client *c, void *args) {
 		}
 	}
 
+	/* If we are restarting an unknown job, we need to deallocate the used resoures */
+	if (mj->restart && j->state == JERS_JOB_UNKNOWN)
+		deallocateRes(j);
+
 	if (mj->name) {
 		free(j->jobname);
 		j->jobname = mj->name;
@@ -832,7 +836,7 @@ int command_mod_job(client *c, void *args) {
 		state = JERS_JOB_DEFERRED;
 	else if (hold)
 		state = JERS_JOB_HOLDING;
-	else if (!completed)
+	else if (!completed && j->state != JERS_JOB_UNKNOWN)
 		state = JERS_JOB_PENDING;
 
 	if (q || state != j->state)
@@ -892,13 +896,16 @@ int command_sig_job(client * c, void * args) {
 	}
 
 	if (j->state != JERS_JOB_RUNNING) {
-		/* If the job state is unknown, we will set this job state to the signal provided */
+		/* If the job state is unknown, we will set this job state to the signal provided
+		 * We also need to deallocate the resources assigned to this job */
 		if (j->state == JERS_JOB_UNKNOWN) {
 			j->state = JERS_JOB_EXITED;
 			j->pid = -1;
 			j->finish_time = time(NULL);
 			j->signal = js->signum;
 			j->exitcode = 128 + j->signal;
+
+			deallocateRes(j);
 
 			return sendClientReturnCode(c, NULL, "0");
 		}

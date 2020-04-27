@@ -51,6 +51,29 @@ struct resource * findResource(char * name) {
 	return r;
 }
 
+
+/* Check if all the resources assigned to the job can be allocated */
+int checkRes(struct job *j) {
+	for (int i = 0; i < j->res_count; i++) {
+		if (j->req_resources[i].needed > j->req_resources[i].res->count - j->req_resources[i].res->in_use)
+			return 1;
+	}
+
+	return 0;
+}
+
+/* Allocate all the resources assigned to the job */
+void allocateRes(struct job *j) {
+	for (int i = 0; i < j->res_count; i++)
+		j->req_resources[i].res->in_use += j->req_resources[i].needed;
+}
+
+/* Deallocate all the resources assigned to the job */
+void deallocateRes(struct job *j) {
+	for (int i = 0; i < j->res_count; i++)
+		j->req_resources[i].res->in_use -= j->req_resources[i].needed;
+}
+
 /* Cleanup resources that are marked as deleted, returning the number of resources cleaned up
  * - Only cleanup resources until the max_clean threshold is reached. */
 
