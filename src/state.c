@@ -152,6 +152,7 @@ static int extendJournal(void) {
 
 	server.journal.size = new_size;
 	server.journal.limit = server.journal.size - server.journal.extend_block_size;
+	fsync(server.journal.fd);
 
 	return 0;
 }
@@ -1196,7 +1197,7 @@ int flushDir(char *path) {
 	}
 
 	/* If this is not a directory, strip off the filename */
-	if ((buf.st_mode &S_IFMT) != S_IFDIR) {
+	if (!S_ISDIR(buf.st_mode)) {
 		temp = strdup(path);
 		path = dirname(temp);
 
@@ -1211,7 +1212,7 @@ int flushDir(char *path) {
 		}
 	}
 
-	if (fdatasync(fd)) {
+	if (fsync(fd)) {
 		close(fd);
 		free(temp);
 		return 1;
