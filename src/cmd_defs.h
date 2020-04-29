@@ -3,6 +3,7 @@
 #define CMD_MOD_JOB "JOB_MOD"
 #define CMD_DEL_JOB "JOB_DEL"
 #define CMD_SIG_JOB "JOB_SIG"
+#define CMD_WAIT_JOB "JOB_WAIT"
 #define CMD_ADD_QUEUE "QUEUE_ADD"
 #define CMD_GET_QUEUE "QUEUE_GET"
 #define CMD_MOD_QUEUE "QUEUE_MOD"

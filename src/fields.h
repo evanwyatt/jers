@@ -182,6 +182,9 @@ enum field_type {
 	AFTER_STARTED,
 	AFTER_FINISHED,
 
+	REVISION,
+	TIMEOUT,
+
 	ENDOFFIELDS
 };
 

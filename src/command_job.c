@@ -211,6 +211,23 @@ void * deserialize_sig_job(msg_t * t) {
 	return js;
 }
 
+void * deserialize_wait_job(msg_t *t) {
+	jersJobWait *jw = calloc(sizeof(jersJobWait), 1);
+	msg_item *item = &t->items[0];
+
+	for (int i = 0; i < item->field_count; i++) {
+		switch(item->fields[i].number) {
+			case JOBID:		jw->jobid = getNumberField(&item->fields[i]); break;
+			case REVISION:	jw->revision = getNumberField(&item->fields[i]); break;
+			case TIMEOUT:	jw->timeout = getNumberField(&item->fields[i]); break;
+
+			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",t->items[0].fields[i].name); break;
+		}
+	}
+
+	return jw;
+}
+
 void * deserialize_set_tag(msg_t * t) {
 	jersTagSet * ts = calloc(sizeof(jersTagSet), 1);
 	msg_item * item = &t->items[0];
@@ -281,6 +298,9 @@ void serialize_jersJob(buff_t *b, struct job *j, int fields) {
 
 	if (fields == 0 || fields & JERS_RET_NODE)
 		JSONAddString(b, NODE, j->queue->host);
+
+	if (fields == 0 || fields & JERS_RET_REVISON)
+		JSONAddInt(b, REVISION, j->obj.revision);
 
 	if (j->stdout && (fields == 0 || fields & JERS_RET_STDOUT))
 		JSONAddString(b, STDOUT, j->stdout);
@@ -962,6 +982,70 @@ int command_sig_job(client * c, void * args) {
 	return sendClientReturnCode(c, NULL, "0");
 }
 
+/* wait job is a blocking command for the client.
+ * If we can't respond straight away, we define our callback
+ * function which will get run in the event loop to check for changes */ 
+
+int command_wait_job_callback(client *c, void *args) {
+	jersJobWait *jw = args;
+
+	struct job *j = findJob(jw->jobid);
+
+	if (j == NULL || jw->revision != j->obj.revision)
+		return sendClientReturnCode(c, NULL, "0");
+
+	return 0;
+}
+
+int command_wait_job_timeout(client *c, void *args) {
+	UNUSED(args);
+	sendError(c, JERS_ERR_TIMEOUT, NULL);
+	return 0;
+}
+
+int command_wait_job(client *c, void *args) {
+	jersJobWait *jw = args;
+	struct job *j = NULL;
+
+	j = findJob(jw->jobid);
+
+	/* Validate the user has permission
+	 * We use a bogus ID if the job doesn't exist, just to check their permissions */
+	if (check_perm(c, j ? j->uid : 0, PERM_WRITE)) {
+		sendError(c, JERS_ERR_NOPERM, NULL);
+		return -1;
+	}
+
+	if (!j || j->internal_state &JERS_FLAG_DELETED) {
+		sendError(c, JERS_ERR_NOJOB, NULL);
+		return 1;
+	}
+
+	/* We might be able to reply straight way if they have provided a revision */
+	if (jw->revision && jw->revision != j->obj.revision)
+		return sendClientReturnCode(c, NULL, "0");
+
+	/* No change and no timeout provided */
+	if (jw->timeout == 0) {
+		sendError(c, JERS_ERR_NOCHANGE, "Job not changed");
+		return 1;
+	}
+
+	/* Can't reply now, so we'll need to block the client */
+	c->blocking.callback = command_wait_job_callback;
+	c->blocking.timeout_callback = command_wait_job_timeout;
+
+	if (jw->revision == 0)
+		jw->revision = j->obj.revision;
+
+	c->blocking.data = dup_mem(jw, sizeof(jersJobWait), sizeof(jersJobWait));
+
+	if (jw->timeout > 0)
+		c->blocking.timeout = getTimeMS() + (jw->timeout * 1000);
+
+	return 0;
+}
+
 int command_set_tag(client * c, void * args) {
 	jersTagSet * ts = args;
 	struct job * j = NULL;
@@ -1114,6 +1198,12 @@ void free_sig_job(void * args, int status) {
 	jersJobSig * js = args;
 	UNUSED(status);
 	free(js);
+}
+
+void free_wait_job(void *args, int status) {
+	jersJobWait *jw = args;
+	UNUSED(status);
+	free(jw);
 }
 
 void free_set_tag(void * args, int status) {

@@ -52,10 +52,13 @@ typedef struct _client {
 	uid_t uid;
 	struct user * user;
 
-//	struct {
-//		int pid;
-//		void *agent;
-//	} proxy;
+	struct {
+		int (*callback)(struct _client *, void *);
+		int (*timeout_callback)(struct _client *, void *);
+		void (*free_callback)(void *);
+		void *data;
+		int64_t timeout;
+	} blocking;
 
 	struct _client * next;
 	struct _client * prev;

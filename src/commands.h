@@ -70,8 +70,7 @@ int command_get_job(client *, void *);
 int command_mod_job(client *, void *);
 int command_del_job(client *, void *);
 int command_sig_job(client *, void *);
-
-
+int command_wait_job(client *, void*);
 int command_add_queue(client *, void *);
 int command_get_queue(client *, void *);
 int command_mod_queue(client *, void *);
@@ -92,6 +91,8 @@ void* deserialize_get_job(msg_t *);
 void* deserialize_mod_job(msg_t *);
 void* deserialize_del_job(msg_t *);
 void* deserialize_sig_job(msg_t *);
+void* deserialize_wait_job(msg_t *);
+
 void* deserialize_add_queue(msg_t *);
 void* deserialize_get_queue(msg_t *);
 void* deserialize_mod_queue(msg_t *);
@@ -109,6 +110,7 @@ void free_get_job(void *, int);
 void free_mod_job(void *, int);
 void free_del_job(void *, int);
 void free_sig_job(void *, int);
+void free_wait_job(void *, int);
 
 void free_add_queue(void *, int);
 void free_get_queue(void *, int);
@@ -152,6 +154,12 @@ typedef struct {
 typedef struct {
 	jobid_t jobid;
 } jersJobDel;
+
+typedef struct {
+	jobid_t jobid;
+	int64_t revision;
+	int64_t timeout;
+} jersJobWait;
 
 typedef struct {
 	jobid_t jobid;

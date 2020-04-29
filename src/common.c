@@ -313,8 +313,8 @@ int int64tostr(char *dest, int64_t value) {
 	return len;
 }
 
-int matches(const char * pattern, const char * string) {
-	if (strchr(pattern, '*') || strchr(pattern, '?')) {
+int matches_wildcard(const char *pattern, const char *string, int wildcard) {
+	if (wildcard) {
 		if (fnmatch(pattern, string, 0) == 0)
 			return 0;
 		else
@@ -322,6 +322,10 @@ int matches(const char * pattern, const char * string) {
 	}
 
 	return strcmp(string, pattern);
+}
+
+int matches(const char *pattern, const char *string) {
+	return matches_wildcard(pattern, string, (strchr(pattern, '*') || strchr(pattern, '?')));
 }
 
 /* Check whether a name (resource, queue) is valid

@@ -35,8 +35,8 @@
 #include "server.h"
 
 struct jers_err {
-	char * name;
-	char * msg;
+	const char *name;
+	const char *msg;
 };
 
 const struct jers_err jers_errors[] = {
@@ -63,6 +63,7 @@ const struct jers_err jers_errors[] = {
 	{"JERS_ERR_RESINUSE",    "Resource is in use"},
 	{"JERS_ERR_READONLY",    "JERS is in readonly mode"},
 	{"JERS_ERR_NOTCONN",     "Not connected"},
+	{"JERS_ERR_TIMEOUT",     "Timed out"},
 
 	{"JERS_ERR_UNKNOWN",     "Unknown error occurred"}
 };

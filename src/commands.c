@@ -50,11 +50,12 @@ void runComplexCommand(client * c);
  *       as a user can manipulate their own jobs by default */
 
 command_t commands[] = {
-	{CMD_ADD_JOB,      0,                     CMDFLG_REPLAY, command_add_job,      deserialize_add_job, free_add_job},
-	{CMD_GET_JOB,      0,                     0,             command_get_job,      deserialize_get_job, free_get_job},
-	{CMD_MOD_JOB,      0,                     CMDFLG_REPLAY, command_mod_job,      deserialize_mod_job, free_mod_job},
-	{CMD_DEL_JOB,      0,                     CMDFLG_REPLAY, command_del_job,      deserialize_del_job, free_del_job},
-	{CMD_SIG_JOB,      0,                     0,             command_sig_job,      deserialize_sig_job, free_sig_job},
+	{CMD_ADD_JOB,      0,                     CMDFLG_REPLAY, command_add_job,      deserialize_add_job,   free_add_job},
+	{CMD_GET_JOB,      0,                     0,             command_get_job,      deserialize_get_job,   free_get_job},
+	{CMD_MOD_JOB,      0,                     CMDFLG_REPLAY, command_mod_job,      deserialize_mod_job,   free_mod_job},
+	{CMD_DEL_JOB,      0,                     CMDFLG_REPLAY, command_del_job,      deserialize_del_job,   free_del_job},
+	{CMD_SIG_JOB,      0,                     0,             command_sig_job,      deserialize_sig_job,   free_sig_job},
+	{CMD_WAIT_JOB,     0,                     0,             command_wait_job,     deserialize_wait_job,  free_wait_job},
 	{CMD_ADD_QUEUE,    PERM_WRITE|PERM_QUEUE, CMDFLG_REPLAY, command_add_queue,    deserialize_add_queue, free_add_queue},
 	{CMD_GET_QUEUE,    PERM_READ,             0,             command_get_queue,    deserialize_get_queue, free_get_queue},
 	{CMD_MOD_QUEUE,    PERM_WRITE|PERM_QUEUE, CMDFLG_REPLAY, command_mod_queue,    deserialize_mod_queue, free_mod_queue},

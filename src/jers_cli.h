@@ -65,6 +65,13 @@ struct signal_job_args {
 	jobid_t *jobids;
 };
 
+struct watch_job_args {
+	int verbose;
+	int timeout;
+
+	jobid_t *jobids;
+};
+
 struct start_job_args {
     int verbose;
     
@@ -124,6 +131,7 @@ CMD(delete_job)
 CMD(modify_job)
 CMD(signal_job)
 CMD(start_job)
+CMD(watch_job)
 
 CMD(add_queue)
 CMD(show_queue)

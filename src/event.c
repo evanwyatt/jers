@@ -70,6 +70,28 @@ void freeEvents(void) {
 	}
 }
 
+void checkBlockingClientEvent(void) {
+	client *c = clientList;
+
+	while (c) {
+		client *next = c->next;
+
+		if (c->blocking.callback) {
+			if (c->blocking.timeout > 0 && getTimeMS() > c->blocking.timeout) {
+				if (c->blocking.timeout_callback == NULL || 
+						(c->blocking.timeout_callback)(c, c->blocking.data) != 0) {
+					handleClientDisconnect(c);
+				}
+			} else {
+				if ((c->blocking.callback)(c, c->blocking.data) != 0)
+					handleClientDisconnect(c);
+			}
+		}
+
+		c = next;
+	}
+}
+
 void checkClientEvent(void) {
 	client * c = clientList;
 
@@ -142,7 +164,9 @@ void checkAgentEvent(void) {
 			p += request_len;
 		}
 
-		buffRemove(&a->requests, consumed, 0);
+		if (consumed)
+			buffRemove(&a->requests, consumed, 0);
+
 		a = a_next;
 	}
 }
@@ -243,6 +267,7 @@ void initEvents(void) {
 
 	registerEvent(checkAgentEvent, 0);
 	registerEvent(checkClientEvent, 0);
+	registerEvent(checkBlockingClientEvent, 500);
 	registerEvent(checkAcctEvent, 1000);
 
 	if (server.auto_cleanup != 0)

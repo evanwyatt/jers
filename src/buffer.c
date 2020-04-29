@@ -124,14 +124,16 @@ int buffAddBuff(buff_t *b, buff_t *new_data) {
 /* Remove the data at start of the buffer of length 'data_size' if
  * its over a threshold */
 int buffRemove(buff_t * b, size_t data_size, int shrink) {
+	if (data_size == 0)
+		return 0;
+
 	memmove(b->data, b->data + data_size, b->used - data_size);
 	b->used -= data_size;
 
-	if (shrink) {
+	if (shrink)
 		buffShrink(b, 0);
-	}
 
-	return 1;
+	return 0;
 }
 
 void buffClear(buff_t * b, size_t size) {

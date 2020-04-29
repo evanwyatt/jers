@@ -46,10 +46,11 @@
 
 #define JERS_EXPORT __attribute__((visibility("default")))
 
+JERS_EXPORT int jers_errno = JERS_ERR_OK;
+
 #define DEFAULT_CLIENT_TIMEOUT 60 // seconds
 #define DEFAULT_REQUEST_SIZE 1024
 
-JERS_EXPORT int jers_errno = JERS_ERR_OK;
 char * jers_err_string = NULL;
 
 char * socket_path[3] = {NULL, NULL, NULL};
@@ -421,6 +422,7 @@ static int deserialize_jersJob(msg_item * item, jersJob *j) {
 			case PENDREASON: j->pend_reason = getNumberField(&item->fields[i]); break;
 			case FAILREASON: j->fail_reason = getNumberField(&item->fields[i]); break;
 			case JOBPID    : j->pid = getNumberField(&item->fields[i]); break;
+			case REVISION  : j->revision = getNumberField(&item->fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",item->fields[i].name); break;
 		}
@@ -1190,6 +1192,48 @@ JERS_EXPORT int jersDelTag(jobid_t id, const char * key) {
 	}
 
 	if (readResponse())
+		return 1;
+
+	free_message(&msg);
+
+	return 0;
+}
+
+JERS_EXPORT int jersWaitJob(jobid_t id, int64_t revision, int timeout) {
+	int recv_status = 0;
+
+	if (jersInitAPI(NULL))
+		return 1;
+
+	buff_t b;
+
+	initRequest(&b, CMD_WAIT_JOB, CONST_STRLEN(CMD_WAIT_JOB), 1);
+
+	JSONAddInt(&b, JOBID, id);
+	JSONAddInt(&b, REVISION, revision);
+	JSONAddInt(&b, TIMEOUT, timeout);
+
+	if (sendRequest(&b))
+		return 1;
+
+	/* This request is blocking, so we need to disable the current timeout on
+	 * the recv socket. The timeout logic is done on the server side */
+
+	struct timeval tv = {0, 0};
+
+	if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) == -1)
+		fprintf(stderr, "Warning: Failed to set recv timeout on socket\n");
+
+	recv_status = readResponse();
+
+	/* Reinstate the recv timeout */
+	tv.tv_sec = DEFAULT_CLIENT_TIMEOUT;
+	tv.tv_usec = 0;
+
+	if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) == -1)
+		fprintf(stderr, "Warning: Failed to set recv timeout on socket\n");
+
+	if (recv_status)
 		return 1;
 
 	free_message(&msg);

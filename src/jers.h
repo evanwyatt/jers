@@ -113,6 +113,7 @@ typedef uint32_t jobid_t;
 #define JERS_RET_NODE       0x100000
 #define JERS_RET_SUBMITTER  0x200000
 #define JERS_RET_PID        0x400000
+#define JERS_RET_REVISON    0x800000
 
 #define JERS_RET_ALL        0x7FFFFFFFFFFFFFFF
 
@@ -157,6 +158,7 @@ enum jers_error_codes {
 	JERS_ERR_RESINUSE,
 	JERS_ERR_READONLY,
 	JERS_ERR_NOTCONN,
+	JERS_ERR_TIMEOUT,
 
 	JERS_ERR_UNKNOWN
 };
@@ -300,7 +302,9 @@ typedef struct {
 	int res_count;
 	char ** resources;
 
-	char filler[76];
+	int64_t revision;
+
+	char filler[68];
 } jersJob;
 
 typedef struct {
@@ -492,6 +496,8 @@ int jersGetJob(jobid_t id, const jersJobFilter *filter, jersJobInfo *info);
 int jersDelJob(jobid_t id);
 int jersSignalJob(jobid_t id, int signo);
 void jersFreeJobInfo (jersJobInfo *info);
+
+int jersWaitJob(jobid_t id, int64_t revision, int timeout);
 
 int jersSetTag(jobid_t id, const char * key, const char * value);
 int jersDelTag(jobid_t id, const char * key);

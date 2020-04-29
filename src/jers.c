@@ -56,6 +56,7 @@ struct cmd job_cmds[] = {
 	{"signal", signal_job},
 	{"show",   show_job},
 	{"start",  start_job},
+	{"watch",  watch_job},
 	{NULL, NULL}
 };
 
@@ -511,6 +512,48 @@ int signal_job(int argc, char *argv[]) {
 
 		printf("Job %d sent %s.\n", args.jobids[i], getSignalName(args.signal));
 	}
+
+	return rc;
+}
+
+int watch_job(int argc, char *argv[]) {
+	struct watch_job_args args;
+	jersJobInfo job_info;
+	int rc = 0;
+
+	if (parse_watch_job(argc, argv, &args)) {
+		rc = 1;
+		goto watch_job_cleanup;
+	}
+
+	if (args.jobids == NULL) {
+		fprintf(stderr, "No jobid specified\n");
+		return 1;
+	}
+
+	while (1) {
+		/* Get the job info */
+		if (jersGetJob(args.jobids[0], NULL, &job_info) != 0) {
+			fprintf(stderr, "Failed to get job info for job %d: %s\n", args.jobids[0], jersGetErrStr(jers_errno));
+			rc = 1;
+			goto watch_job_cleanup;
+		}
+
+		/* Display it */
+		print_job(&job_info.jobs[0], 1);
+
+
+		/* Wait for a change in the job */
+		if (jersWaitJob(args.jobids[0], job_info.jobs[0].revision, args.timeout) != 0) {
+			fprintf(stderr, "Failed to wait for job: %s\n", jersGetErrStr(jers_errno));
+			goto watch_job_cleanup;
+		}
+
+		jersFreeJobInfo(&job_info);
+	}
+
+watch_job_cleanup:
+	free(args.jobids);
 
 	return rc;
 }

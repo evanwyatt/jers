@@ -724,6 +724,54 @@ static error_t signal_job_parse(int key, char *arg, struct argp_state *state)
 	return 0;
 }
 
+
+static char watch_job_doc[] = "watch job -- Watch a job";
+static char watch_job_arg_doc[] = "JOBID";
+static struct argp_option watch_job_options[] = {
+	{"verbose", 'v', 0, 0, "Produce verbose output"},
+	{"timeout", 't', "seconds", 0, "Time to wait for job change"},
+	{0}};
+
+static error_t watch_job_parse(int key, char *arg, struct argp_state *state)
+{
+	int count = 0;
+	struct watch_job_args *arguments = state->input;
+
+	switch (key)
+	{
+		case 'v':
+			arguments->verbose = 1;
+			break;
+
+		case 't':
+			arguments->timeout = atoi(arg);
+			break;
+
+		case ARGP_KEY_INIT:
+			arguments->timeout = -1;
+			break;
+
+		case ARGP_KEY_ARG:
+			count = state->argc - state->next + 1;
+			arguments->jobids = calloc(count + 1, sizeof(jobid_t));
+			for (int i = 0; i < count; i++)
+				arguments->jobids[i] = atoi(state->argv[state->next - 1 + i]);
+
+			/* Force parsing to stop */
+			state->next = state->argc;
+
+			break;
+
+
+		case ARGP_KEY_END:
+			break;
+
+		default:
+			return ARGP_ERR_UNKNOWN;
+	}
+	return 0;
+}
+
 static char start_job_doc[] = "start job -- (re)start job/s\nForces a job into a pending state by removing defertimes/hold flags.";
 static char start_job_arg_doc[] = "JOBID...";
 static struct argp_option start_job_options[] = {
@@ -1003,6 +1051,7 @@ CMD_PARSE(delete_job)
 CMD_PARSE(modify_job)
 CMD_PARSE(signal_job)
 CMD_PARSE(start_job)
+CMD_PARSE(watch_job)
 
 CMD_PARSE(add_queue)
 CMD_PARSE(show_queue)
