@@ -104,7 +104,8 @@ void * dup_mem(void * src, size_t len, size_t size);
 int int64tostr(char * dest, int64_t num);
 char * gethost(void);
 
-int matches(const char * pattern, const char * string);
+int matches(const char *pattern, const char *string);
+int matches_wildcard(const char *pattern, const char *string, int wildcard);
 
 char * print_time(const struct timespec * time, int elapsed);
 void timespec_diff(const struct timespec *start, const struct timespec *end, struct timespec *diff);

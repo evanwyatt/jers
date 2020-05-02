@@ -163,6 +163,24 @@ int check_matches(const char *pattern, const char *string, int expect_match) {
 	return 0;
 }
 
+int check_matches_flag(const char *pattern, const char *string, int flag, int expect_match) {
+	/* matches() returns 0 - if the pattern matches, < 0 or 0 > if it doesn't match */
+	int match = 0;
+
+	if (matches_wildcard(pattern, string, flag) == 0)
+		match = 1;
+
+	if (match != expect_match) {
+		if (__debug) {
+			printf("Unexpected result for wildcard match. Pattern:'%s' String:'%s' Flag:%s\n", pattern, string, flag? "True":"False");
+			printf("Match:%d Expected:%d\n", match, expect_match);
+		}
+		return 1;
+	}
+
+	return 0;
+}
+
 int check_checkname(char *str, int valid) {
 	int match = 0;
 
@@ -227,6 +245,31 @@ void test_strings(void) {
 	TEST("matches - Single character wildcard", check_matches("Hello?World", "Hello World", 1));
 	TEST("matches - Non matching wildcard", check_matches("World*", "Hello World", 0));
 	TEST("matches - Multiple wildcard charaters", check_matches("?ello W*", "Hello World", 1));
+	TEST("matches - Non matching string", check_matches("Hello", "Hello World", 0));
+	TEST("matches - Non matching string, wildcard", check_matches("Hello*", "World", 0));
+
+	/* matches - wildcard flag */
+
+	TEST("matches (flag = n) - empty strings", check_matches_flag("", "", 0, 1));
+	TEST("matches (flag = y) - empty strings", check_matches_flag("", "", 1, 1));
+
+	TEST("matches - empty string (flag = n), wilcard", check_matches_flag("*", "", 0, 0));
+	TEST("matches - empty string (flag = y), wilcard", check_matches_flag("*", "", 1, 1));
+
+	TEST("matches - literal '*' (flag = n), wilcard", check_matches_flag("*", "Hello World", 0, 0));
+	TEST("matches - literal '*' (flag = y), wilcard", check_matches_flag("*", "Hello World", 1, 1));
+
+	TEST("matches - '*' string (flag = n), wilcard", check_matches_flag("*", "*", 0, 1));
+	TEST("matches - '*' string (flag = y), wilcard", check_matches_flag("*", "*", 1, 1));
+
+	TEST("matches - Wilcard (flag = n)", check_matches_flag("Hello*", "Hello World", 0, 0));
+	TEST("matches - Wilcard (flag = y)", check_matches_flag("Hello*", "Hello World", 1, 1));
+
+	TEST("matches - Non matching string (flag = n)", check_matches_flag("Hello", "Hello World", 0, 0));
+	TEST("matches - Non matching string, wildcard (flag = n)", check_matches_flag("Hello*", "World", 0, 0));
+
+	TEST("matches - Non matching string (flag = y)", check_matches_flag("Hello", "Hello World", 1, 0));
+	TEST("matches - Non matching string, wildcard (flag = y)", check_matches_flag("Hello*", "World", 1, 0));
 
 	/* check_name - check a string is a valid posix portable filename */
 	TEST("checkname - Empty string", check_checkname("", 1));
