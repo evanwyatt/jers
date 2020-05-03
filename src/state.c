@@ -522,6 +522,9 @@ void stateReplayJournal(void) {
 			j->internal_state &= ~JERS_FLAG_JOB_STARTED;
 			changeJobState(j, JERS_JOB_UNKNOWN, NULL, 1);
 			print_msg(JERS_LOG_WARNING, "Job %d is now unknown", j->jobid);
+
+			/* We want to allocate the resources for this job here, as it might be in use */
+			allocateRes(j);
 		}
 	}
 

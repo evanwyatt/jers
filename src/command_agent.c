@@ -170,7 +170,7 @@ auth_fail:
 }
 
 int command_agent_recon(agent * a, msg_t * msg) {
-	print_msg(JERS_LOG_INFO, "Got recon message from agent on host: %s", a->host);
+	print_msg(JERS_LOG_INFO, "Got recon message from agent on host: %s - %ld jobs", a->host, msg->item_count);
 
 	for (int i = 0; i < msg->item_count; i++) {
 		jobid_t jobid = 0;
@@ -232,13 +232,6 @@ int command_agent_recon(agent * a, msg_t * msg) {
 
 		if (pid) {
 			j->pid = pid;
-
-			/* Need to update the resources consumed by this job */
-			if (j->res_count) {
-				for (int res_idx = 0; res_idx < j->res_count; res_idx++)
-					j->req_resources[res_idx].res->in_use += j->req_resources[res_idx].needed;
-			}
-
 			changeJobState(j, JERS_JOB_RUNNING, NULL, 0);
 		}
 

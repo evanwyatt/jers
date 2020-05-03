@@ -420,6 +420,10 @@ int load_message(char *json, msg_t *m)
 				/* Consume the version */
 				if (JSONGetNum(&cmd_object, &m->version))
 					return 1;
+			} else if (strcmp(name, "DATA") == 0) {
+				/* "data" should be an array of items */
+				if (loadItemArray(&cmd_object, m))
+					return 1;
 			} else if (strcmp(name, "FIELDS") == 0) {
 				char *field_object = JSONGetObject(&cmd_object);
 

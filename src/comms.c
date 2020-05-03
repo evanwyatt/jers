@@ -59,7 +59,7 @@ ssize_t _send(int fd, const void * buf, size_t count) {
 	ssize_t len;
 
 	while (1) {
-		len = send(fd, buf, count, 0);
+		len = send(fd, buf, count, MSG_NOSIGNAL);
 
 		if (len == -1 && errno == EINTR)
 				continue;

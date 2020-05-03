@@ -9,3 +9,8 @@ void print_msg(int level, const char * format, ...) __attribute__((format(printf
 void _logMessage(const char * whom, int level, const char * message);
 void openDaemonLog(char * logfile);
 void setLogfileName(char * name);
+
+#define print_msg_debug(...)    print_msg(JERS_LOG_DEBUG, __VA_ARGS__)
+#define print_msg_info(...)     print_msg(JERS_LOG_INFO, __VA_ARGS__)
+#define print_msg_warning(...)  print_msg(JERS_LOG_WARNING, __VA_ARGS__)
+#define print_msg_critical(...) print_msg(JERS_LOG_CRITICAL, __VA_ARGS__)

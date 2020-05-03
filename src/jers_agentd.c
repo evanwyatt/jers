@@ -53,6 +53,7 @@
 #include <netdb.h>
 #include <grp.h>
 #include <sys/prctl.h>
+#include <glob.h>
 
 #include "jers.h"
 #include "logging.h"
@@ -71,13 +72,23 @@
 #define DEFAULT_CONFIG_FILE "/etc/jers/jers_agentd.conf"
 #define DEFAULT_AGENT_SOCKET "/run/jers/agent.sock"
 #define DEFAULT_PROXY_SOCKET "/run/jers/proxy.sock"
+#define DEFAULT_JOB_SOCKET "/run/jers/job.sock"
 #define DEFAULT_DAEMON_PORT 7000
 #define DEFAULT_TMPDIR "/tmp"
+#define JERS_RUNDIR "/run/jers"
 #define RECONNECT_WAIT 20 // Seconds
+#define ADOPT_SLEEP 2
+
+struct runningJob;
 
 const char * getFailString(int);
 const char * getErrType(int jers_error);
 void disconnectFromDaemon(void);
+
+int handleJobAdoptConnection(struct connectionType * connection);
+int handleJobAdoptRead(struct runningJob *j);
+
+void jersRunJob() __attribute__((noreturn));
 
 char * server_log = "jers_agentd";
 int server_log_mode = JERS_LOG_DEBUG;
@@ -106,8 +117,20 @@ struct runningJob {
 	int socket;
 	struct jobCompletion job_completion;
 
-	struct runningJob * next;
-	struct runningJob * prev;
+	int adopted;
+	int completion_read;
+	struct connectionType connection;
+
+	struct runningJob *next;
+	struct runningJob *prev;
+};
+
+struct adoptJob {
+	jobid_t jobid;
+	pid_t pid;
+	pid_t job_pid;
+
+	time_t start_time;
 };
 
 struct agent {
@@ -135,10 +158,11 @@ struct agent {
 	char *tmpdir;
 
 	struct connectionType client_proxy;
+	struct connectionType job_adopt;
 
 	time_t next_connect;
 
-	struct runningJob * jobs;
+	struct runningJob *jobs;
 	int64_t running_jobs;
 };
 
@@ -401,6 +425,68 @@ int createTempScript(struct jersJobSpawn * j) {
 	return 0;
 }
 
+/* The adopt file is used by a restarting jers_agentd process to adopt running jobs */
+
+const char *adoptFilename(jobid_t jobid) {
+	static char adopt_file[PATH_MAX];
+
+	sprintf(adopt_file, "%s/adopt/.%d.adopt", JERS_RUNDIR, jobid);
+	return adopt_file;
+}
+
+int createAdoptFile(jobid_t jobid, pid_t jobPid, time_t start_time) {
+	const char *filename = adoptFilename(jobid);
+
+	FILE *f = fopen(filename, "w");
+
+	if (f == NULL) {
+		fprintf(stderr, "Failed to create adopt file '%s': %s\n", filename, strerror(errno));
+		return 1;
+	}
+
+	fprintf(f, "%d %d %ld\n", getpid(), jobPid, start_time);
+	fclose(f);
+
+	return 0;
+}
+
+int loadAdoptFile(jobid_t jobid, pid_t *pid, pid_t *jobPid, time_t *start_time) {
+	const char *filename = adoptFilename(jobid);
+	char line[64];
+
+	*pid = *jobPid = *start_time = 0;
+	FILE *f = fopen(filename, "r");
+
+	if (f == NULL)
+		return 1;
+
+	size_t len = fread(line, 1, sizeof(line), f);
+
+	if (len <= 0) {
+		print_msg_warning("Failed to read job adopt file '%s': %s\n", filename, strerror(errno));
+		fclose(f);
+		return 1;
+	}
+
+	fclose(f);
+
+	/* Doesn't have a newline, so the file might not be complete */
+	if (line[len - 1] != '\n')
+		return 1;
+
+	if (sscanf(line, "%d %d %ld\n", pid, jobPid, start_time) != 3)
+		return 1;
+
+	return 0;
+}
+
+void deleteAdoptFile(jobid_t jobid) {
+	const char *filename = adoptFilename(jobid);
+	unlink(filename);
+
+	return;
+}
+
 /* jersRunJob() is essentially a wrapper around a users job to setup the environment,
  * capture rusage information, handle signals, etc.
  *
@@ -408,16 +494,19 @@ int createTempScript(struct jersJobSpawn * j) {
  *
  * Note: This function does not return */
 
-void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
+void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int _socket) {
 	pid_t jobPid;
 	int stdout_fd, stderr_fd;
 	struct timespec end, elapsed;
 	int i;
 	int launch_status = 0;
 
+	setproctitle("jers_agentd[%d]", j->jobid);
+
 	/* Close some sockets we inherited from our parent */
 	close(agent.daemon_fd);
 	close(agent.client_proxy.socket);
+	close(agent.job_adopt.socket);
 	close(agent.event_fd);
 
 	/* Generate the temporary script we are going to execute, if no wrapper was specified. */
@@ -516,8 +605,6 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int socket) {
 		}
 	}
 
-	setproctitle("jers_agentd[%d]", j->jobid);
-
 	/* Fork & exec the job */
 	jobPid = fork();
 
@@ -614,19 +701,23 @@ spawn_exit:
 
 	}
 
-	close(stdin_fd);
+	/* Create the adopt file, so in case of the jers_agentd being restarted/crashing
+	 * while the job is running, the next instance of jers_agentd can adopt this job */
+	createAdoptFile(j->jobid, jobPid, start->tv_sec);
 
 	/* SIGTERM handler so we can write to the jobs logfile if we get a sigterm */
 	job_stderr = stderr_fd;
 	job_pid = jobPid;
 	setup_job_sighandler();
 
+	close(stdin_fd);
+
 	struct jobCompletion job_completion = {0};
 	int rc = 0, exit_code = 0, sig = 0, status;
 
 	/* Send the PID of the job */
 	do {
-		status = _send(socket, &jobPid, sizeof(jobPid));
+		status = _send(_socket, &jobPid, sizeof(jobPid));
 
 		if (status != sizeof(jobPid))
 			fprintf(stderr, "Failed to send PID of job %d to agent: (status=%d) %s\n", j->jobid, status, strerror(errno));
@@ -681,23 +772,80 @@ spawn_exit:
 		write(stdout_fd, "\n", 1);
 
 	fdatasync(stdout_fd);
-	close(stdout_fd);
-
-	if (stderr_fd != stdout_fd)
-		close(stderr_fd);
 
 	do {
-		status = _send(socket, &job_completion, sizeof(struct jobCompletion));
+		status = _send(_socket, &job_completion, sizeof(struct jobCompletion));
 
 		if (status != sizeof(struct jobCompletion))
 			fprintf(stderr, "Failed to send completion to agent: (status=%d) %s\n", status, strerror(errno));
 	} while (status == -1 && errno == EINTR);
 
+	if (status == -1 && getppid() == 1) {
+		struct sockaddr_un addr;
+		int status = -1;
+		int fd;
+		int connect_attempts = 0;
+
+		dprintf(stdout_fd, "*** JERS - Job has been orphaned, attempting to reconnect to jers_agentd to finish sending completion.\n",);
+
+		fd = socket(AF_UNIX, SOCK_STREAM, 0);
+
+		if (fd < 0) {
+			fprintf(stderr, "Failed to create socket to reconnect to agentd: %s\n", strerror(errno));
+			goto launch_cleanup;
+		}
+
+		memset(&addr, 0, sizeof(addr));
+		addr.sun_family = AF_UNIX;
+
+		strncpy(addr.sun_path, DEFAULT_JOB_SOCKET, sizeof(addr.sun_path));
+		addr.sun_path[sizeof(addr.sun_path) - 1] = '\0';
+
+		while (1) {
+			if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+
+				if (connect_attempts == 0) {
+					dprintf(stdout_fd, "*** JERS - Failed to connect to agentd job adoption socket: '%s' Will attempt retry at %d second intervals.\n",
+						strerror(errno), ADOPT_SLEEP);
+				}
+
+				connect_attempts++;
+				sleep(ADOPT_SLEEP);
+				continue;
+			}
+
+			break;
+		}
+
+		if (connect_attempts != 0)
+			dprintf(stdout_fd, "*** JERS - Connected to new jers_agentd process. Sending completion.\n");
+
+		do {
+			status = _send(fd, &job_completion, sizeof(struct jobCompletion));
+
+			if (status != sizeof(struct jobCompletion))
+				fprintf(stderr, "Failed to send completion to agent: (status=%d) %s\n", status, strerror(errno));
+		} while (status == -1 && errno == EINTR);
+
+		if (status != -1)
+			dprintf(stdout_fd, "*** JERS - Completion details sent.\n");
+
+		close(fd);
+	}
+
+	fdatasync(stdout_fd);
+	close(stdout_fd);
+
+	if (stderr_fd != stdout_fd)
+		close(stderr_fd);
+
 	print_msg(JERS_LOG_DEBUG, "Job: %d finished: %08x\n", j->jobid, job_completion.exitcode);
 
 launch_cleanup:
 
-	close(socket);
+	close(_socket);
+	deleteAdoptFile(j->jobid);
+
 	_exit(launch_status);
 }
 
@@ -728,6 +876,20 @@ void addJob (struct runningJob * j) {
 
 	agent.jobs = j;
 	agent.running_jobs++;
+}
+
+void addOrphanJob(jobid_t jobid, pid_t pid, pid_t job_pid, time_t start_time) {
+	struct runningJob *j = calloc(1, sizeof(struct runningJob));
+
+	j->jobID = jobid;
+	j->pid = pid;
+	j->job_pid = job_pid;
+	j->start_time = start_time;
+	j->socket = -1;
+
+	j->adopted = 1;
+
+	addJob(j);
 }
 
 static void _sendMsg(buff_t *b) {
@@ -811,7 +973,7 @@ int send_completion(struct runningJob * j) {
 
 	initRequest(&b, AGENT_JOB_COMPLETED, CONST_STRLEN(AGENT_JOB_COMPLETED), 1);
 
-	print_msg(JERS_LOG_INFO, "Job complete: JOBID:%d PID:%d RC:%08x\n", j->jobID, j->pid, j->job_completion.exitcode);
+	print_msg(JERS_LOG_INFO, "Job complete: JOBID:%d PID:%d RC:%08x Adopted:%d\n", j->jobID, j->pid, j->job_completion.exitcode, j->adopted);
 
 	JSONAddInt(&b, JOBID, j->jobID);
 	JSONAddInt(&b, EXITCODE, j->job_completion.exitcode);
@@ -893,7 +1055,9 @@ void check_children(void) {
 	j = agent.jobs;
 
 	while (j != NULL) {
-		if (j->job_pid == 0) {	
+		struct runningJob * next = j->next;
+
+		if (j->job_pid == 0) {
 			do {
 				status = read(j->socket, &j->job_pid, sizeof(pid_t));
 			} while (status == -1 && errno == EINTR);
@@ -916,17 +1080,16 @@ void check_children(void) {
 
 		/* Check for any children we have cleaned up, but didn't get the completion information from */
 		if (j->pid == 0) {
-			struct runningJob * next = j->next;
-
-			if (get_job_completion(j) == 0) {
+			if (get_job_completion(j) == 0)
 				send_completion(j);
-				j = next;
-			} else {
-				j = j->next;
-			}
-		} else {
-			j = j->next;
 		}
+
+		/* Check for adopted child completion */
+		if (j->adopted && j->completion_read == sizeof(struct jobCompletion)) {
+			send_completion(j);
+		}
+
+		j = next;
 	}
 
 	/* Check to see if we any jobs have completed */
@@ -1215,7 +1378,7 @@ int recon_command(msg_t * m) {
 	print_msg(JERS_LOG_INFO, "=== Start Recon ===\n");
 
 	while (j) {
-		print_msg(JERS_LOG_INFO, "JobID: %d PID:%d ExitCode:%d StartTime:%ld FinishTime:%ld\n", j->jobID, j->pid, j->job_completion.exitcode, j->start_time, j->job_completion.finish_time);
+		print_msg(JERS_LOG_INFO, "JobID: %d PID:%d Adopted:%d ExitCode:%d StartTime:%ld FinishTime:%ld\n", j->jobID, j->pid, j->adopted, j->job_completion.exitcode, j->start_time, j->job_completion.finish_time);
 
 		/* Add job to recon message request */
 		JSONStartObject(&b, NULL, 0);
@@ -1261,7 +1424,7 @@ int recon_command(msg_t * m) {
 
 	agent.in_recon = 1;
 
-	print_msg(JERS_LOG_INFO, "=== End Recon %d jobs ===\n", count);
+	print_msg(JERS_LOG_INFO, "=== End Recon %d job/s ===\n", count);
 	return 0;
 }
 
@@ -1581,6 +1744,50 @@ void shutdownHandler(int signum) {
 	shutdown_requested = 1;
 }
 
+void setupAdoptionSocket(void) {
+	int fd = -1;
+	struct sockaddr_un addr;
+	char *socket_path = DEFAULT_JOB_SOCKET;
+
+	print_msg(JERS_LOG_DEBUG, "Setting up job adoption socket: %s", socket_path);
+
+	fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+
+	if (fd < 0)
+		error_die("Failed to create socket for job adoption: %s\n", strerror(errno));
+
+	memset(&addr, 0, sizeof(addr));
+	addr.sun_family = AF_UNIX;
+	strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path)-1);
+
+	unlink(socket_path);
+
+	if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1)
+		error_die("Failed to bind socket for job adoption socket: %s\n", strerror(errno));
+
+	if (listen(fd, 1024) == -1) 
+		error_die("Failed to listen on socket for job adoption socket: %s\n", strerror(errno));
+
+	if (chmod(socket_path, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH) != 0)
+		error_die("chmod failed on job adoption socket %s", strerror(errno));
+
+	/* Add it to our event fd and set it to readable */
+	struct epoll_event ee;
+	ee.events = EPOLLIN;
+	ee.data.ptr = &agent.job_adopt;
+
+	agent.job_adopt.socket = fd;
+	agent.job_adopt.ptr = NULL;
+	agent.job_adopt.events = 0;
+	agent.job_adopt.type = JOB_ADOPT_CONN;
+	agent.job_adopt.event_fd = agent.event_fd;
+
+	if (epoll_ctl(agent.event_fd, EPOLL_CTL_ADD, fd, &ee))
+		error_die("Failed to set epoll event on job adopt socket: %s", strerror(errno));
+
+	return;
+}
+
 void setupProxySocket(const char *path) {
 	int fd = -1;
 	struct sockaddr_un addr;
@@ -1744,6 +1951,8 @@ void handleReadable(struct epoll_event *e) {
 	switch (connection->type) {
 		case CLIENT_PROXY_CONN: status = handleClientProxyConnection(connection); break;
 		case CLIENT_PROXY:      status = handleClientProxyRead(connection->ptr); break;
+		case JOB_ADOPT_CONN:    status = handleJobAdoptConnection(connection); break;
+		case JOB_ADOPT:         status = handleJobAdoptRead(connection->ptr); break;
 		default:                print_msg(JERS_LOG_WARNING, "Unexpected read event - Ignoring"); break;
 	}
 
@@ -1768,6 +1977,168 @@ void handleWritable(struct epoll_event *e) {
 	}
 
 	return;
+}
+
+/* Scan /proc for orphaned jobs to adopt */
+
+void adoptionScan(void) {
+	glob_t globbuff;
+	int rc;
+	char *line = NULL;
+	size_t line_size = 0;
+
+	print_msg_info("Starting adoption scan...");
+
+	if ( (rc = glob("/proc/*/cmdline", 0, NULL, &globbuff)) != 0) {
+		if (rc == GLOB_NOMATCH)
+			return;
+
+		error_die("Failed to glob /proc/*/cmdline: %s\n",
+			rc == GLOB_ABORTED ? "Glob aborted" : rc == GLOB_NOSPACE ? "Glob nospace" : "Unknown glob error");
+	}
+
+	for (size_t i = 0; i < globbuff.gl_pathc; i++) {
+		FILE *f = fopen(globbuff.gl_pathv[i], "r");
+
+		if (f == NULL) {
+			if (errno == ENOENT)
+				continue;
+
+			error_die("Failed to open '%s': %s", globbuff.gl_pathv[i], strerror(errno));
+		}
+
+		ssize_t len = getline(&line, &line_size, f);
+
+		if (len <= 0) {
+			if (errno == ENOENT) {
+				fclose(f);
+				continue;
+			}
+
+			error_die("Failed to read '%s': %s", globbuff.gl_pathv[i], strerror(errno));
+		}
+
+		fclose(f);
+
+		if (strncmp(line, "jers_agentd[", 12) != 0)
+			continue;
+
+		pid_t pid ,jobpid;
+		time_t start_time = 0;
+		jobid_t jobid = atoi(line + 12);
+		int attempts = 0;
+		int done = 0;
+
+		/* Extract the pid */
+		char *p = strchr(globbuff.gl_pathv[i] + 1, '/');
+
+		if (p == NULL)
+			error_die("Didn't find the second '/' in '%s'", globbuff.gl_pathv[i]);
+
+		pid = atoi(p + 1);
+
+		/* Open the associated adopt file for the orphaned job */
+		do {
+			int rc = loadAdoptFile(jobid, &pid, &jobpid, &start_time);
+
+			if (rc == 0) {
+				done = 1;
+				break;
+			}
+
+			attempts++;
+			print_msg_info("Failed to adopt jobid %d (Attempt %d/5). Sleeping %d seconds", jobid, attempts, ADOPT_SLEEP);
+			sleep(ADOPT_SLEEP);
+		} while (attempts < 5);
+
+		if (done == 0)
+			error_die("Failed to adopt job. jobid:%u pid:%u - Failed to obtain details from adopt file", jobid, pid);
+
+		print_msg_info("Adopted orphaned job: jobid:%u pid:%d jobpid:%d starttime:%ld", jobid, pid, jobpid, start_time);
+
+		/* Add this job as a running job */
+		addOrphanJob(jobid, pid, jobpid, start_time);
+	}
+
+	free(line);
+	globfree(&globbuff);
+
+	return;
+}
+
+int handleJobAdoptConnection(struct connectionType * connection) {
+	int client_fd = _accept(connection->socket);
+
+	if (client_fd < 0) {
+		print_msg(JERS_LOG_INFO, "accept() failed during job adopt connect: %s", strerror(errno));
+		return 1;
+	}
+
+	/* Get the PID off the socket to match to the job */
+	struct ucred creds;
+	socklen_t len = sizeof(struct ucred);
+
+	if (getsockopt(client_fd, SOL_SOCKET, SO_PEERCRED, &creds, &len) == -1) {
+		print_msg(JERS_LOG_WARNING, "Failed to get peercred from job adopt connection: %s", strerror(errno));
+		print_msg(JERS_LOG_WARNING, "Closing connection to job adopt");
+		close(client_fd);
+		return 1;
+	}
+
+	/* Locate the corrisponding 'running_job' entry */
+	struct runningJob *j = agent.jobs;
+
+	while (j && j->pid != creds.pid)
+		j = j->next;
+
+	if (j == NULL) {
+		print_msg_warning("Job adoption attempt from unknown PID");
+		close(client_fd);
+		return 1;
+	}
+
+	j->connection.type = JOB_ADOPT;
+	j->connection.ptr = j;
+	j->connection.socket = client_fd;
+	j->connection.event_fd = connection->event_fd;
+	j->connection.events = 0;
+
+	/* Add this client to our event polling */
+	if (pollSetReadable(&j->connection) != 0) {
+		print_msg(JERS_LOG_WARNING, "Failed to set job adoption as readable: %s", strerror(errno));
+		close(client_fd);
+		return 1;
+	}
+
+	return 0;
+}
+
+int handleJobAdoptRead(struct runningJob *j) {
+	ssize_t len = _recv(j->connection.socket, &j->job_completion + j->completion_read, sizeof(struct jobCompletion) - j->completion_read);
+
+	if (len < 0) {
+		if ((errno == EAGAIN || errno == EWOULDBLOCK))
+			return 0;
+
+		print_msg(JERS_LOG_WARNING, "failed to read from job adoption: %s\n", strerror(errno));
+		close(j->connection.socket);
+		return 1;
+	} else if (len == 0) {
+		/* Disconnected */
+		close(j->connection.socket);
+		return 1;
+	}
+
+	j->completion_read += len;
+
+	if (j->completion_read == sizeof(struct jobCompletion)) {
+		if (pollRemoveSocket(&j->connection) != 0)
+			fprintf(stderr, "Failed to remove job adoption socket");
+
+		close(j->connection.socket);
+	}
+
+	return 0;
 }
 
 int main (int argc, char * argv[]) {
@@ -1815,6 +2186,10 @@ int main (int argc, char * argv[]) {
 
 	/* Sort the fields */
 	sortfields();
+
+	/* Attempt to adopt running jobs and setup the connection socket */
+	adoptionScan();
+	setupAdoptionSocket();
 
 	/* Create a proxy listening unix socket */
 	setupProxySocket(NULL);
