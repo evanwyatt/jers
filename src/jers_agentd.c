@@ -786,7 +786,7 @@ spawn_exit:
 		int fd;
 		int connect_attempts = 0;
 
-		dprintf(stdout_fd, "*** JERS - Job has been orphaned, attempting to reconnect to jers_agentd to finish sending completion.\n",);
+		dprintf(stdout_fd, "*** JERS - Job has been orphaned, attempting to reconnect to jers_agentd to finish sending completion.\n");
 
 		fd = socket(AF_UNIX, SOCK_STREAM, 0);
 
