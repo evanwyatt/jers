@@ -46,6 +46,7 @@ struct cmd objects[] = {
 	{"queue",    queue_func},
 	{"resource", resource_func},
 	{"agent",    agent_func},
+	{"clear",    clear_func},
 	{NULL, NULL}
 };
 
@@ -80,6 +81,12 @@ struct cmd agent_cmds[] = {
 	{"show", show_agent},
 	{NULL, NULL}
 };
+
+struct cmd clear_cmds[] = {
+	{"cache", clearcache},
+	{NULL, NULL}
+};
+
 
 int add_job(int argc, char *argv[]) {
 	struct add_job_args args;
@@ -558,6 +565,26 @@ watch_job_cleanup:
 	return rc;
 }
 
+int clearcache(int argc, char *argv[]) {
+	struct clearcache_args args = {0};
+
+	if (parse_clearcache(argc, argv, &args))
+		return 1;
+
+	if (args.verbose)
+		fprintf(stderr, "Sending clearcache command\n");
+
+	if (jersClearCache() != 0) {
+		fprintf(stderr, "Failed to send clearcache command: %s\n", jersGetErrStr(jers_errno));
+		return 1;
+	}
+
+	if (args.verbose)
+		fprintf(stderr, "Done\n");
+
+	return 0;
+}
+
 int start_job(int argc, char *argv[]) {
 	struct start_job_args args;
 	int rc = 0;
@@ -749,7 +776,6 @@ int show_resource(int argc, char *argv[]) {
 	return rc;
 }
 
-
 void print_cmd_help(void) {
 	//TODO: Make this help better
 	printf("Expected one of the following object names:\n");
@@ -785,6 +811,14 @@ void print_obj_help(const char * cmd) {
 }
 
 int run_action(int argc, char  *argv[], struct cmd cmds[]) {
+	if (argc < 3) {
+		fprintf(stderr, "No action provided. Expected:\n");
+		for (int i = 0; cmds[i].name; i++)
+			fprintf(stderr, "- %s\n", cmds[i].name);
+
+		return 1;
+	}
+
 	int cmd_len = strlen(argv[2]);
 
 	for (int n = 3; n <= cmd_len; n++) {
@@ -802,7 +836,7 @@ int run_action(int argc, char  *argv[], struct cmd cmds[]) {
 			return cmd->func(argc, argv);
 	}
 
-	fprintf(stderr, "Unknown object '%s' provided\n", argv[2]);
+	fprintf(stderr, "Unknown action '%s' provided\n", argv[2]);
 	return 1;
 }
 
@@ -822,16 +856,18 @@ int agent_func(int argc, char *argv[]) {
 	return run_action(argc, argv, agent_cmds);
 }
 
+int clear_func(int argc, char *argv[]) {
+	return run_action(argc, argv, clear_cmds);
+}
+
 int main (int argc, char * argv[]) {
 	if (argc <= 1) {
-		fprintf(stderr, "No object(job/queue/resource/agent) provided.\n");
-		print_cmd_help();
-		return 1;
-	}
+		fprintf(stderr, "No object provided. Expected:\n");
 
-	if (argc <= 2) {
-		fprintf(stderr, "No action provided(add,modify,delete,show,signal).\n");
-		print_obj_help(argv[1]);
+		for (int i = 0; objects[i].name; i++)
+			fprintf(stderr, "- %s\n", objects[i].name);
+
+		print_cmd_help();
 		return 1;
 	}
 
@@ -846,8 +882,8 @@ int main (int argc, char * argv[]) {
 
 		for (int i = 0; objects[i].name; i++) {
 			if (strncasecmp(objects[i].name, argv[1], n) == 0) {
-				obj = &objects[i];
-				matches++;
+					obj = &objects[i];
+					matches++;
 			}
 		}
 

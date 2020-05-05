@@ -932,7 +932,7 @@ int send_start(struct runningJob * j) {
 	buff_t b;
 	print_msg(JERS_LOG_INFO, "Job started: JOBID:%d PID:%d", j->jobID, j->pid);
 
-	initRequest(&b, AGENT_JOB_STARTED, CONST_STRLEN(AGENT_JOB_STARTED), 1);
+	initRequest(&b, AGENT_JOB_STARTED, 1);
 	JSONAddInt(&b, JOBID, j->jobID);
 	JSONAddInt(&b, JOBPID, j->pid);
 	JSONAddInt(&b, STARTTIME, j->start_time);
@@ -947,7 +947,7 @@ int send_job_initfail(jobid_t jobid, int status) {
 
 	print_msg(JERS_LOG_WARNING, "JOBID %d failed to initialise: %d (%s)", jobid, status, getFailString(status));
 
-	initRequest(&b, AGENT_JOB_COMPLETED, CONST_STRLEN(AGENT_JOB_COMPLETED), 1);
+	initRequest(&b, AGENT_JOB_COMPLETED, 1);
 	JSONAddInt(&b, JOBID, jobid);
 	JSONAddInt(&b, FINISHTIME, time(NULL));
 	JSONAddInt(&b, EXITCODE, status | JERS_EXIT_FAIL);
@@ -971,7 +971,7 @@ int send_completion(struct runningJob * j) {
 		return 0;
 	}
 
-	initRequest(&b, AGENT_JOB_COMPLETED, CONST_STRLEN(AGENT_JOB_COMPLETED), 1);
+	initRequest(&b, AGENT_JOB_COMPLETED, 1);
 
 	print_msg(JERS_LOG_INFO, "Job complete: JOBID:%d PID:%d RC:%08x Adopted:%d\n", j->jobID, j->pid, j->job_completion.exitcode, j->adopted);
 
@@ -1010,7 +1010,7 @@ int send_login(void) {
 
 	print_msg(JERS_LOG_INFO, "Sending login");
 
-	initRequest(&b, AGENT_LOGIN, CONST_STRLEN(AGENT_LOGIN), 1);
+	initRequest(&b, AGENT_LOGIN, 1);
 	sendRequest(&b);
 	return 0;
 }
@@ -1267,6 +1267,15 @@ int start_command(msg_t * m) {
 	free(j.wrapper);
 	freeStringArray(j.argc, &j.argv);
 	freeStringArray(j.env_count, &j.envs);
+
+	return 0;
+}
+
+int clearcache_command(msg_t *m) {
+	UNUSED(m);
+
+	clearCacheHandler(0);
+	print_msg_info("Flagged cache clear");
 
 	return 0;
 }
@@ -1532,7 +1541,7 @@ int auth_challenge(msg_t *m) {
 	hmac = generateHMAC(hmac_input, agent.secret_hash, sizeof(agent.secret_hash));
 
 	buff_t auth_resp;
-	initRequest(&auth_resp, AGENT_AUTH_RESP, CONST_STRLEN(AGENT_AUTH_RESP), 1);
+	initRequest(&auth_resp, AGENT_AUTH_RESP, 1);
 
 	JSONAddInt(&auth_resp, DATETIME, time_now);
 	JSONAddString(&auth_resp, NONCE, agent.nonce);
@@ -1571,6 +1580,8 @@ int process_message(msg_t * m) {
 		status = auth_challenge(m);
 	} else if (strcmp(m->command, AGENT_PROXY_DATA) == 0) {
 		status = proxy_response(m);
+	} else if (strcmp(m->command, CMD_CLEAR_CACHE) == 0) {
+		status = clearcache_command(m);
 	} else {
 		print_msg(JERS_LOG_WARNING, "Got an unexpected command message '%s'", m->command);
 		status = 1;
@@ -1836,7 +1847,7 @@ void setupProxySocket(const char *path) {
 
 int send_proxy_connect(proxyClient *c) {
 	buff_t connRequest;
-	initRequest(&connRequest, AGENT_PROXY_CONN, CONST_STRLEN(AGENT_PROXY_CONN), 1);
+	initRequest(&connRequest, AGENT_PROXY_CONN, 1);
 
 	JSONAddInt(&connRequest, PID, c->pid);
 	JSONAddInt(&connRequest, UID, c->uid);
@@ -1848,7 +1859,7 @@ int send_proxy_connect(proxyClient *c) {
 
 int send_proxy_data(proxyClient *c, char *data, size_t size) {
 	buff_t dataRequest;
-	initRequest(&dataRequest, AGENT_PROXY_DATA, CONST_STRLEN(AGENT_PROXY_DATA), 1);
+	initRequest(&dataRequest, AGENT_PROXY_DATA, 1);
 
 	JSONAddInt(&dataRequest, PID, c->pid);
 	JSONAddStringN(&dataRequest, PROXYDATA, data, size);
@@ -1859,7 +1870,7 @@ int send_proxy_data(proxyClient *c, char *data, size_t size) {
 
 int send_proxy_close(proxyClient *c) {
 	buff_t closeRequest;
-	initRequest(&closeRequest, AGENT_PROXY_CLOSE, CONST_STRLEN(AGENT_PROXY_DATA), 1);
+	initRequest(&closeRequest, AGENT_PROXY_CLOSE, 1);
 
 	JSONAddInt(&closeRequest, PID, c->pid);
 

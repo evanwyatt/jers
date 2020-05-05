@@ -772,6 +772,36 @@ static error_t watch_job_parse(int key, char *arg, struct argp_state *state)
 	return 0;
 }
 
+
+static char clearcache_doc[] = "Clear the caches in the scheduler";
+static char clearcache_arg_doc[] = "";
+static struct argp_option clearcache_options[] = {
+	{"verbose", 'v', 0, 0, "Produce verbose output"},
+	{0}};
+
+static error_t clearcache_parse(int key, char *arg, struct argp_state *state)
+{
+	struct clearcache_args *arguments = state->input;
+	UNUSED(arg);
+
+	switch (key)
+	{
+		case 'v':
+			arguments->verbose = 1;
+			break;
+
+		case ARGP_KEY_INIT:
+		case ARGP_KEY_ARG:
+		case ARGP_KEY_END:
+			break;
+
+		default:
+			return ARGP_ERR_UNKNOWN;
+	}
+	return 0;
+}
+
+
 static char start_job_doc[] = "start job -- (re)start job/s\nForces a job into a pending state by removing defertimes/hold flags.";
 static char start_job_arg_doc[] = "JOBID...";
 static struct argp_option start_job_options[] = {
@@ -1064,3 +1094,4 @@ CMD_PARSE(delete_resource)
 CMD_PARSE(modify_resource)
 
 CMD_PARSE(show_agent)
+CMD_PARSE(clearcache)

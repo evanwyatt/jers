@@ -450,6 +450,7 @@ struct user * lookup_user(uid_t uid, int load_env) {
 
 	if (clear_cache) {
 		clear_cache = 0;
+		fprintf(stderr, "Clearing user cache\n");
 		freeUserCache();
 	}
 

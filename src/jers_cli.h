@@ -72,6 +72,10 @@ struct watch_job_args {
 	jobid_t *jobids;
 };
 
+struct clearcache_args {
+	int verbose;
+};
+
 struct start_job_args {
     int verbose;
     
@@ -120,6 +124,7 @@ int job_func(int argc, char *argv[]);
 int queue_func(int argc, char *argv[]);
 int resource_func(int argc, char *argv[]);
 int agent_func(int argc, char *argv[]);
+int clear_func(int argc, char *argv[]);
 
 #define CMD(__cmd) \
 	int __cmd(int argc, char *argv[]); \
@@ -144,5 +149,7 @@ CMD(delete_resource)
 CMD(modify_resource)
 
 CMD(show_agent)
+
+CMD(clearcache)
 
 #endif

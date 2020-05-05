@@ -68,6 +68,7 @@ command_t commands[] = {
 	{CMD_DEL_TAG,      0,                     CMDFLG_REPLAY, command_del_tag,      deserialize_del_tag, free_del_tag},
 	{CMD_GET_AGENT,    PERM_READ,             0,             command_get_agent,    deserialize_get_agent, free_get_agent},
 	{CMD_STATS,        PERM_READ,             0,             command_stats,        NULL, NULL},
+	{CMD_CLEAR_CACHE,  0,                     0,             command_clearcache,   NULL, NULL},
 };
 
 agent_command_t agent_commands[] = {
@@ -250,7 +251,7 @@ static int _sendMessage(struct connectionType *connection, buff_t *b, buff_t *me
 		/* Null terminate it so it can be treated as a string */
 		buffAdd(message, "\0", 1);
 
-		if (initRequest(&forward, AGENT_PROXY_DATA, CONST_STRLEN(AGENT_PROXY_DATA), 1) != 0)
+		if (initRequest(&forward, AGENT_PROXY_DATA, 1) != 0)
 			return 0;
 
 		JSONAddInt(&forward, PID, connection->proxy.pid);
@@ -464,6 +465,23 @@ int command_stats(client * c, void * args) {
 	JSONEndObject(&b);
 
 	return sendClientMessage(c, NULL, &b);
+}
+
+int command_clearcache(client * c, void * args) {
+	UNUSED(args);
+
+	/* Clear our own cache first */
+	clearCacheHandler(0);
+	print_msg_info("Flagged cache clear");
+
+	/* Forward a clearcache command to each connected agent */
+	for (agent *a = agentList; a; a = a->next) {
+		buff_t clear_message;
+		initRequest(&clear_message, CMD_CLEAR_CACHE, 1);
+		sendAgentMessage(a, &clear_message);
+	}
+
+	return sendClientReturnCode(c, NULL, "0");
 }
 
 /* Load a users permissions based on groups in the config file */

@@ -85,6 +85,8 @@ int command_set_tag(client *, void *);
 int command_del_tag(client *, void *);
 
 int command_get_agent(client *, void *);
+int command_clearcache(client *, void *);
+
 
 void* deserialize_add_job(msg_t *);
 void* deserialize_get_job(msg_t *);

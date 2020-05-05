@@ -57,7 +57,7 @@ void sendStartCmd(struct job * j) {
 
 	print_msg(JERS_LOG_INFO, "Sending start message for JobID:%-7d Queue:%s QueuePriority:%d Priority:%d", j->jobid, j->queue->name, j->queue->priority, j->priority);
 
-	initRequest(&b, "START_JOB", CONST_STRLEN("START_JOB"), 1);
+	initRequest(&b, "START_JOB", 1);
 
 	JSONAddInt(&b, JOBID, j->jobid);
 	JSONAddString(&b, JOBNAME, j->jobname);

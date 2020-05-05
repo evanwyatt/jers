@@ -972,7 +972,7 @@ int command_sig_job(client * c, void * args) {
 
 	/* Send the requested signal to the job (via the agent) */
 	buff_t sig_message;
-	initRequest(&sig_message, CMD_SIG_JOB, CONST_STRLEN(CMD_SIG_JOB), 1);
+	initRequest(&sig_message, CMD_SIG_JOB, 1);
 
 	JSONAddInt(&sig_message, JOBID, js->jobid);
 	JSONAddInt(&sig_message, SIGNAL, js->signum);

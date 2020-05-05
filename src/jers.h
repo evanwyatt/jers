@@ -517,6 +517,8 @@ void jersFreeResourceInfo(jersResourceInfo *info);
 int jersGetAgents(const char *name, jersAgentInfo *info);
 int jersGetStats(jersStats * s);
 
+int jersClearCache(void);
+
 void jersFinish(void);
 const char * jersGetErrStr(int jers_error);
 const char * jersGetPendStr(int pend_reason);

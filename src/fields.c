@@ -563,7 +563,7 @@ static int loadItemArray(char **json, msg_t *m) {
 
 /* Initalise a new request */
 
-int initRequest(buff_t *b, const char *resp_name, size_t resp_name_len, int version) {
+int _initRequest(buff_t *b, const char *resp_name, size_t resp_name_len, int version) {
 	if (buffNew(b, 1024) != 0)
 		return 1;
 
