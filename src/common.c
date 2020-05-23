@@ -53,7 +53,7 @@
 struct user * user_cache = NULL;
 volatile sig_atomic_t clear_cache = 0;
 volatile sig_atomic_t reopen_logfile = 1;
-
+volatile sig_atomic_t reopen_slowlog = 1;
 
 /* Escape / unescape newlines, tabs and backslash characters
  *  - A static buffer is used to hold the escaped string,
@@ -593,6 +593,7 @@ void clearCacheHandler(int signum) {
 void hupHandler(int signum) {
 	(void) signum;
 	reopen_logfile = 1;
+	reopen_slowlog = 1;
 }
 
 void setup_handlers(void(*shutdownHandler)(int)) {

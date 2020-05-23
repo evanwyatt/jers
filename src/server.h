@@ -76,6 +76,7 @@
 #define DEFAULT_CONFIG_FLUSHDEFER 1
 #define DEFAULT_CONFIG_FLUSHDEFERMS 5000
 #define DEFAULT_CONFIG_EMAIL_FREQ 5000
+#define DEFAULT_SLOWLOG 50 // Milliseconds
 
 enum readonly_modes {
 	READONLY_ENOSPACE = 1,
@@ -286,8 +287,8 @@ struct jersServer {
 
 	int auto_cleanup;
 
-	char slow_logging;		// Write slow commands to a slow log
-	int slow_threshold_ms;	// milliseconds before a cmd is considered slow.
+	int slowrequest_logging;
+	uint64_t slow_threshold_ms;	// milliseconds before a cmd is considered slow.
 
 	jobid_t max_jobid;		// Max jobID possible
 	jobid_t start_jobid;	// Jobid to start allocating from

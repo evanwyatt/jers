@@ -126,7 +126,7 @@ void freeSortedCommands(void) {
 }
 int runCommand(client *c) {
 	static int cmd_count = sizeof(commands) / sizeof(command_t);
-	uint64_t start, end;
+	uint64_t start, duration;
 	command_t * command_to_run = NULL;
 	void * args = NULL;
 
@@ -198,9 +198,14 @@ int runCommand(client *c) {
 	if (likely(command_to_run->free_func != NULL))
 		command_to_run->free_func(args, status);
 
-	end = getTimeMS();
+	duration = getTimeMS() - start;
 
-	print_msg(JERS_LOG_DEBUG, "Command '%s' took %ldms\n", c->msg.command, end - start);
+	print_msg(JERS_LOG_DEBUG, "Command '%s' took %ldms\n", c->msg.command, duration);
+
+	if (server.slowrequest_logging != SLOWREQUEST_OFF) {
+		if (server.slowrequest_logging == SLOWREQUEST_ALL || duration > server.slow_threshold_ms)
+			logSlowRequest(c->msg.command, c->uid, duration, c->msg.msg_cpy);
+	}
 
 	free_message(&c->msg);
 	return status;

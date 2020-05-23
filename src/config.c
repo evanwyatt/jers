@@ -150,6 +150,9 @@ void loadConfig(char * config) {
 
 	server.default_job_nice = JERS_JOB_DEFAULT_NICE;
 
+	server.slowrequest_logging = SLOWREQUEST_ON;
+	server.slow_threshold_ms = DEFAULT_SLOWLOG;
+
 	while ((len = getline(&line, &line_size, f)) != -1) {
 		line[strcspn(line, "\n")] = '\0';
 		char *key, *value;
@@ -241,6 +244,16 @@ void loadConfig(char * config) {
 			if (server.default_job_nice < 0)
 				print_msg(JERS_LOG_WARNING, "Warning - Setting a default nice value below 0 is not recommended");
 
+		} else if (strcmp(key, "slowrequest_threshold") == 0) {
+			if (strcasecmp(value, "off") == 0) {
+				server.slowrequest_logging = SLOWREQUEST_OFF;
+				continue;
+			} else if (strcasecmp(value, "all") == 0) {
+				server.slowrequest_logging = SLOWREQUEST_ALL;
+				continue;
+			}
+
+			server.slow_threshold_ms = atoi(value);
 		} else {
 			print_msg(JERS_LOG_WARNING, "Skipping unknown config key: %s\n", key);
 			continue;

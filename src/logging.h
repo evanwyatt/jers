@@ -6,9 +6,14 @@
 
 void error_die(char * format, ...) __attribute__((format(printf,1,2)));
 void print_msg(int level, const char * format, ...) __attribute__((format(printf,2,3)));
-void _logMessage(const char * whom, int level, const char * message);
 void openDaemonLog(char * logfile);
 void setLogfileName(char * name);
+
+#define SLOWREQUEST_OFF 0
+#define SLOWREQUEST_ON  1
+#define SLOWREQUEST_ALL 2
+
+void logSlowRequest(const char *cmd, uid_t uid, int64_t duration, const char *request);
 
 #define print_msg_debug(...)    print_msg(JERS_LOG_DEBUG, __VA_ARGS__)
 #define print_msg_info(...)     print_msg(JERS_LOG_INFO, __VA_ARGS__)
