@@ -198,6 +198,44 @@ int check_checkname(char *str, int valid) {
 	return 0;
 }
 
+int check_getArg(char *_string, char **expected_array) {
+	int i = 0;
+	char *arg = NULL;
+	char *copy = _string ? strdup(_string) : NULL;
+	char *string = copy;
+
+	while ((arg = getArg(&string)) != NULL) {
+		if (expected_array[i] == NULL) {
+			if (__debug)
+				printf("Unexpected result for getArg. Expected NULL, but got a result back '%s'\n", arg);
+
+			free(copy);
+			return 1;
+		}
+
+		if (strcmp(arg, expected_array[i]) != 0) {
+			if (__debug)
+				printf("Unexpected result for stringtoarray. Expected:'%s' Got:'%s'\n", expected_array[i], arg);
+
+			free(copy);
+			return 1;
+		}
+
+		i++;
+	}
+
+	if (expected_array && expected_array[i] != NULL) {
+		if (__debug)
+			printf("Unexpected result for getArg. Expected a result of '%s', but got NULL\n", expected_array[i]);
+
+		free(copy);
+		return 1;
+	}
+
+	free(copy);
+	return 0;
+}
+
 void test_strings(void) {
 	/* removeWhitespace - Expect leading and trailing whitespace
 	 * (Spaces and tabs) to be removed */
@@ -280,4 +318,15 @@ void test_strings(void) {
 	TEST("checkname - Invalid name", check_checkname("/hello/world.txt", 0));
 	TEST("checkname - Invalid name", check_checkname("hello(world).txt", 0));
 
+	TEST("getArg - NULL", check_getArg(NULL, NULL));
+	TEST("getArg - Empty string", check_getArg("", NULL));
+
+	char *getArgResult1[] = {"Hello", "World", NULL};
+	TEST("getArg - Simple string", check_getArg("Hello World", getArgResult1));
+	TEST("getArg - Simple string", check_getArg("Hello\tWorld", getArgResult1));
+	TEST("getArg - Simple string, quoted", check_getArg("'Hello' 'World'", getArgResult1));
+	TEST("getArg - Simple string, quoted", check_getArg("\"Hello\" 'World'", getArgResult1));
+
+	char *getArgResult2[] = {"H e l l o", "World", NULL};
+	TEST("getArg - Simple string, quote with whitespace", check_getArg("\"H e l l o\" World", getArgResult2));
 }

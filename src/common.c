@@ -747,3 +747,55 @@ int splitConfigLine(char *line, char **key, char **value) {
 
 	return 0;
 }
+
+/* getArg() - Return a pointer to the next argument in 'string'
+ * Note: This modifies the contents of 'string' */
+
+char *getArg(char **string) {
+	char *arg;
+	char *c;
+	int state = 0;
+
+	if (string == NULL || *string == NULL)
+		return NULL;
+
+	c = skipWhitespace(*string);
+
+	if (*c == '\0')
+		return NULL;
+
+	arg = c;
+
+	while (*c) {
+		switch (*c) {
+			case ' ':
+			case '\t':
+				if (state == 0)
+					goto return_arg;
+
+				break;
+
+			case '\'':
+			case '"':
+				if (state == *c) {
+					goto return_arg;
+				}
+				else if (state == 0) {
+					if (arg == c)
+						arg++;
+
+					state = *c;
+				}
+		}
+
+		c++;
+	}
+
+	*string = c;
+	return arg;
+
+return_arg:
+	*c = '\0';
+	*string = c + 1;
+	return arg;
+}
