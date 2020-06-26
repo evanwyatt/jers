@@ -88,9 +88,9 @@ int command_agent_authresp(agent * a, msg_t * msg) {
 	//Expecting a nonce and a hmac
 	for (int i = 0; i < msg->items[0].field_count; i++) {
 		switch(msg->items[0].fields[i].number) {
-			case NONCE : c_nonce = getStringField(&msg->items[0].fields[i]); break;
+			case NONCE : if (c_nonce == NULL) c_nonce = getStringField(&msg->items[0].fields[i]); break;
 			case DATETIME: datetime = getNumberField(&msg->items[0].fields[i]); break;
-			case MSG_HMAC  : hmac = getStringField(&msg->items[0].fields[i]); break;
+			case MSG_HMAC  : if (hmac == NULL) hmac = getStringField(&msg->items[0].fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", msg->items[0].fields[i].name); break;
 		}
@@ -424,7 +424,7 @@ int command_agent_proxydata(agent *a, msg_t *msg) {
 	for (int i = 0; i < msg->items[0].field_count; i++) {
 		switch(msg->items[0].fields[i].number) {
 			case PID : pid = getNumberField(&msg->items[0].fields[i]); break;
-			case PROXYDATA: data = getStringField(&msg->items[0].fields[i]); break;
+			case PROXYDATA: if (data == NULL) data = getStringField(&msg->items[0].fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", msg->items[0].fields[i].name); break;
 		}

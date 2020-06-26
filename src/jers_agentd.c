@@ -1082,11 +1082,16 @@ void check_children(void) {
 		if (j->pid == 0) {
 			if (get_job_completion(j) == 0)
 				send_completion(j);
+
+			j = next;
+			continue;
 		}
 
 		/* Check for adopted child completion */
 		if (j->adopted && j->completion_read == sizeof(struct jobCompletion)) {
 			send_completion(j);
+			j = next;
+			continue;
 		}
 
 		j = next;
@@ -1359,6 +1364,7 @@ int recon_command(msg_t * m) {
 
 		if (datetime == 0) {
 			print_msg(JERS_LOG_CRITICAL, "DATETIME not provided in recon request");
+			free(hmac);
 			return 1;
 		}
 		sprintf(datetime_str, "%ld", datetime);
@@ -1367,16 +1373,19 @@ int recon_command(msg_t * m) {
 
 		if (verify_hmac == NULL) {
 			print_msg(JERS_LOG_CRITICAL, "Failed to generate HMAC during recon request.");
+			free(hmac);
 			return 1;
 		}
 
 		if (strcasecmp(verify_hmac, hmac) != 0) {
 			print_msg(JERS_LOG_CRITICAL, "HMAC does not match - Disconnecting from daemon");
 			free(verify_hmac);
+			free(hmac);
 			return 1;
 		}
 
 		free(verify_hmac);
+		free(hmac);
 	}
 
 	/* The master daemon is requesting a list of all the jobs we have in memory.
@@ -1486,6 +1495,7 @@ int proxy_response(msg_t *m) {
 
 	if (c == NULL) {
 		print_msg(JERS_LOG_WARNING, "Failed to locate proxy client for response pid: %d", pid);
+		free(data);
 		return 0;
 	}
 
@@ -1511,7 +1521,7 @@ int auth_challenge(msg_t *m) {
 
 	for (int i = 0; i < item->field_count; i++) {
 		switch(item->fields[i].number) {
-			case NONCE: nonce = getStringField(&item->fields[i]); break;
+			case NONCE: if (nonce == NULL) nonce = getStringField(&item->fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", item->fields[i].name); break;
 		}
@@ -1642,13 +1652,6 @@ int connectjers(void) {
 		return 1;
 	}
 
-	fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
-
-	if (fd < 0) {
-		print_msg(JERS_LOG_WARNING, "Failed to connect to JERS daemon (socket failed): %s", strerror(errno));
-		goto connect_fail;
-	}
-
 	if (agent.daemon_host) {
 		/* Get the details of the host we are trying to connect to */
 		struct addrinfo hint = {.ai_family = AF_UNSPEC, .ai_socktype = SOCK_STREAM};
@@ -1690,6 +1693,13 @@ int connectjers(void) {
 		}
 	} else {
 		print_msg(JERS_LOG_INFO, "Attempting to connect locally to JERS daemon using UNIX socket");
+
+		fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+
+		if (fd < 0) {
+			print_msg(JERS_LOG_WARNING, "Failed to connect to JERS daemon (socket failed): %s", strerror(errno));
+			goto connect_fail;
+		}
 
 		struct sockaddr_un addr;
 		memset(&addr, 0, sizeof(addr));

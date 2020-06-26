@@ -250,15 +250,20 @@ static int readResponse(void) {
 		/* Got a full message yet? */
 		nl = memchr(response.data + checked, '\n', bytes_read);
 
-		if (nl != NULL)
+		if (nl != NULL) {
+			*nl = '\0';
+			nl++;
 			break;
+		}
 
 		checked = response.used;
 	}
 
-	/* Try and process the request */
-	*nl = '\0';
-	nl++;
+	if (nl == NULL) {
+		setJersErrno(JERS_ERR_ERECV, NULL);
+		fprintf(stderr, "Failed to read response from jers daemon\n");
+		return 1;
+	}
 
 	if (load_message(response.data, &msg)) {
 		setJersErrno(JERS_ERR_INVRESP, NULL);
