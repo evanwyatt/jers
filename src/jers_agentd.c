@@ -1441,6 +1441,7 @@ int recon_command(msg_t * m) {
 	sendResponse(&b);
 
 	agent.in_recon = 1;
+	free(hmac);
 
 	print_msg(JERS_LOG_INFO, "=== End Recon %d job/s ===\n", count);
 	return 0;
@@ -1483,8 +1484,10 @@ int proxy_response(msg_t *m) {
 		}
 	}
 
-	if (pid == 0)
+	if (pid == 0) {
+		free(data);
 		return 0;
+	}
 
 	/* Locate the client structure */
 	proxyClient * c;
@@ -1645,7 +1648,7 @@ void process_messages(void) {
  * connect locally using a unix socket */
 
 int connectjers(void) {
-	int fd;
+	int fd = -1;
 
 	if (time(NULL) < agent.next_connect) {
 		sleep(5);
@@ -2135,7 +2138,7 @@ int handleJobAdoptConnection(struct connectionType * connection) {
 }
 
 int handleJobAdoptRead(struct runningJob *j) {
-	ssize_t len = _recv(j->connection.socket, &j->job_completion + j->completion_read, sizeof(struct jobCompletion) - j->completion_read);
+	ssize_t len = _recv(j->connection.socket, (unsigned char *)&j->job_completion + j->completion_read, sizeof(struct jobCompletion) - j->completion_read);
 
 	if (len < 0) {
 		if ((errno == EAGAIN || errno == EWOULDBLOCK))
