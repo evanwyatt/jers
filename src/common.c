@@ -799,3 +799,42 @@ return_arg:
 	*string = c + 1;
 	return arg;
 }
+
+/* Parse a string, seperating the tokens based on 'sep'
+ * Returns a NULL terminated malloced array of pointers
+ * The input string is modified */
+char **seperateTokens(char *string, char sep) {
+	size_t count = 0;
+	char **tokens = NULL;
+	char *p, *start;
+
+	for (p = string; *p; p++) {
+		if (*p == sep)
+			count++;
+	}
+
+	count++;
+	tokens = malloc(sizeof(char*) * (count + 1));
+
+	if (tokens == NULL)
+		return NULL;
+
+	count = 0;
+	start = string;
+
+	for (p = string; *p; p++) {
+		if (*p == sep) {
+			*p = '\0';
+			tokens[count++] = removeWhitespace(start);
+			p++;
+			start = p;
+		}
+	}
+
+	if (*start)
+		tokens[count++] = removeWhitespace(start);
+
+	tokens[count] = NULL;
+
+	return tokens;
+}

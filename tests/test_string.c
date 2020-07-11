@@ -236,6 +236,47 @@ int check_getArg(char *_string, char **expected_array) {
 	return 0;
 }
 
+
+int check_seperateTokens(char *_string, char sep, char **expected_array) {
+	char *copy = _string ? strdup(_string) : NULL;
+	int rc = 0;
+	int count = 0;
+
+	char **result = seperateTokens(copy, sep);
+
+	if (result == NULL) {
+		if (__debug)
+			printf("Unexpected NULL result from seperateTokens\n");
+
+		rc = 1;
+		goto seperateTokens_done;
+	}
+
+	for (count = 0; result[count] && expected_array[count]; count++) {
+		if (strcmp(result[count], expected_array[count]) != 0) {
+			if (__debug)
+				printf("Unexpected result from seperateTokens. Got: '%s' Expected: '%s'\n", result[count], expected_array[count]);
+
+			rc = 1;
+			goto seperateTokens_done;
+		}
+	}
+
+	if (result[count] || expected_array[count]) {
+		if (__debug)
+			printf("Unexpected result from seperateTokens. Got: '%s' Expected: '%s'\n", result[count], expected_array[count]);
+
+		rc = 1;
+		goto seperateTokens_done;
+	}
+
+seperateTokens_done:
+	free(copy);
+	free(result);
+	return rc;
+}
+
+
 void test_strings(void) {
 	/* removeWhitespace - Expect leading and trailing whitespace
 	 * (Spaces and tabs) to be removed */
@@ -329,4 +370,17 @@ void test_strings(void) {
 
 	char *getArgResult2[] = {"H e l l o", "World", NULL};
 	TEST("getArg - Simple string, quote with whitespace", check_getArg("\"H e l l o\" World", getArgResult2));
+
+	char *seperateTokensResult1[] = {"Hello World", NULL};
+	TEST("seperateTokens - Simple - No sep ", check_seperateTokens("Hello World", ',', seperateTokensResult1));
+
+	char *seperateTokensResult2[] = {"Hello", "World", NULL};
+	TEST("seperateTokens - Simple ", check_seperateTokens("Hello,World", ',', seperateTokensResult2));
+	TEST("seperateTokens - Simple, whitespace", check_seperateTokens("   Hello  ,   World", ',', seperateTokensResult2));
+	TEST("seperateTokens - Pipe delimited, whitespace", check_seperateTokens("   Hello  |   World   ", '|', seperateTokensResult2));
+
+	char *seperateTokensResult3[] = {"Hello", "W o r l d", NULL};
+	TEST("seperateTokens - Token with embedded whitespace", check_seperateTokens("Hello,   W o r l d   ", ',', seperateTokensResult3));
+
+
 }
