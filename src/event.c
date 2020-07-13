@@ -8,13 +8,13 @@
  *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation 
+ *    this list of conditions and the following disclaimer in the documentation
  *    and/or other materials provided with the distribution.
  *
  * 3. Neither the name of the copyright holder nor the names of its contributors may
  *    be used to endorse or promote products derived from this software without
  *    specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -22,7 +22,7 @@
  * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
  * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
@@ -78,7 +78,7 @@ void checkBlockingClientEvent(void) {
 
 		if (c->blocking.callback) {
 			if (c->blocking.timeout > 0 && getTimeMS() > c->blocking.timeout) {
-				if (c->blocking.timeout_callback == NULL || 
+				if (c->blocking.timeout_callback == NULL ||
 						(c->blocking.timeout_callback)(c, c->blocking.data) != 0) {
 					handleClientDisconnect(c);
 				}
@@ -154,7 +154,7 @@ void checkAgentEvent(void) {
 			if (load_message(p, &a->msg)) {
 				print_msg(JERS_LOG_WARNING, "Failed to load agent message - Disconnecting them");
 				handleAgentDisconnect(a);
-				break;		
+				break;
 			}
 
 			if (runAgentCommand(a) != 0)
@@ -232,6 +232,19 @@ void cleanupEvent(void) {
 	cleanupResources(max_clean - cleaned);
 }
 
+void cleanupIndexTag(void) {
+	/* Check for unused index tag tables and clean them up */
+	struct indexed_tag *t = NULL, *tmp = NULL;
+
+	HASH_ITER(hh, server.index_tag_table, t, tmp) {
+		if (t->jobs == NULL) {
+			HASH_DELETE(hh, server.index_tag_table, t);
+			free(t->value);
+			free(t);
+		}
+	}
+}
+
 void backgroundSaveEvent(void) {
 	stateSaveToDisk(0);
 }
@@ -269,6 +282,9 @@ void initEvents(void) {
 	registerEvent(checkClientEvent, 0);
 	registerEvent(checkBlockingClientEvent, 500);
 	registerEvent(checkAcctEvent, 1000);
+
+	if (server.index_tag)
+		registerEvent(cleanupIndexTag, 5000);
 
 	if (server.auto_cleanup != 0)
 		registerEvent(autoCleanup, MINUTE_MS(5));

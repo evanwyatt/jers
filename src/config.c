@@ -8,13 +8,13 @@
  *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation 
+ *    this list of conditions and the following disclaimer in the documentation
  *    and/or other materials provided with the distribution.
  *
  * 3. Neither the name of the copyright holder nor the names of its contributors may
  *    be used to endorse or promote products derived from this software without
  *    specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -22,7 +22,7 @@
  * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
  * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
@@ -119,7 +119,7 @@ void loadConfig(char * config) {
 
 	if (config == NULL)
 		config = DEFAULT_CONFIG_FILE;
-	
+
 	f = fopen(config, "r");
 
 	if (f == NULL) {
@@ -164,7 +164,7 @@ void loadConfig(char * config) {
 			print_msg(JERS_LOG_WARNING, "Skipping unknown line: %ld %s\n", strlen(line),line);
 			continue;
 		}
-	
+
 		if (strcmp(key, "state_dir") == 0) {
 			free(server.state_dir);
 			server.state_dir = strdup(value);
@@ -230,7 +230,7 @@ void loadConfig(char * config) {
 			}
 		} else if(strcmp(key, "secret") == 0) {
 			server.secret = 1;
-			
+
 			if (loadSecret(value, server.secret_hash) != 0)
 				error_die("Unable to load secret specified in configuration file: %s", value);
 		} else if (strcmp(key, "auto_cleanup") == 0) {
@@ -254,6 +254,8 @@ void loadConfig(char * config) {
 			}
 
 			server.slow_threshold_ms = atoi(value);
+		} else if (strcmp(key, "index_tag") == 0) {
+			server.index_tag = strdup(value);
 		} else {
 			print_msg(JERS_LOG_WARNING, "Skipping unknown config key: %s\n", key);
 			continue;

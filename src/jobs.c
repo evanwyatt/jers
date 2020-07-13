@@ -8,13 +8,13 @@
  *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation 
+ *    this list of conditions and the following disclaimer in the documentation
  *    and/or other materials provided with the distribution.
  *
  * 3. Neither the name of the copyright holder nor the names of its contributors may
  *    be used to endorse or promote products derived from this software without
  *    specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -22,7 +22,7 @@
  * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
  * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
@@ -123,6 +123,10 @@ int cleanupJob(struct job *j) {
 		}
 	}
 
+	/* Remove the job from the indexed tag table */
+	if (server.index_tag)
+		delIndexTag(j);
+
 	freeJob(j);
 
 	server.deleted--;
@@ -172,6 +176,16 @@ int addJob(struct job * j, int dirty) {
 	}
 
 	HASH_ADD_INT(server.jobTable, jobid, j);
+
+	/* Add the job to the indexed tag table, if it has the indexed tag */
+	if (server.index_tag && j->tag_count) {
+		for (int i = 0; i < j->tag_count; i++) {
+			if (strcmp(j->tags[i].key, server.index_tag) == 0) {
+				addIndexTag(j, j->tags[i].value);
+				break;
+			}
+		}
+	}
 
 	j->obj.type = JERS_OBJECT_JOB;
 	changeJobState(j, state, NULL, dirty);

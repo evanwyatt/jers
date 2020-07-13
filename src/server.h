@@ -52,6 +52,7 @@
 #include <agent.h>
 #include <client.h>
 #include <acct.h>
+#include <tags.h>
 
 #define UNUSED(x) (void)(x)
 
@@ -165,7 +166,7 @@ struct job {
 	pid_t pid;
 	int exitcode;
 	int signal;
-	
+
 	/* Email instructions */
 	int email_states;
 	char *email_addresses;
@@ -191,7 +192,10 @@ struct job {
 
 	int32_t internal_state;
 
+	struct indexed_tag *index_table;
+
 	UT_hash_handle hh;
+	UT_hash_handle tag_hh;
 };
 
 struct gid_array {
@@ -324,6 +328,11 @@ struct jersServer {
 		off_t record;
 		char datetime[10]; // YYYYMMDD
 	} journal;
+
+	/* A tag can be designated an 'index' tag, which adds jobs to a
+	 * table of jobs in a hash table under the tag value */
+	char *index_tag;
+	struct indexed_tag *index_tag_table;
 };
 
 #define STATE_DIV_FACTOR 10000

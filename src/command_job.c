@@ -306,7 +306,7 @@ void serialize_jersJob(buff_t *b, struct job *j, int fields) {
 		JSONAddString(b, STDOUT, j->stdout);
 
 	if (j->stderr && (fields == 0 || fields & JERS_RET_STDERR))
-		JSONAddString(b, STDERR, j->stderr);	
+		JSONAddString(b, STDERR, j->stderr);
 
 	if (j->defer_time && (fields == 0 || fields & JERS_RET_DEFERTIME))
 		JSONAddInt(b, DEFERTIME, j->defer_time);
@@ -321,7 +321,7 @@ void serialize_jersJob(buff_t *b, struct job *j, int fields) {
 		JSONAddMap(b, TAGS, j->tag_count, j->tags);
 
 	if (j->shell && (fields == 0 || fields & JERS_RET_SHELL))
-		JSONAddString(b, SHELL, j->shell);	
+		JSONAddString(b, SHELL, j->shell);
 
 	if (j->pre_cmd && (fields == 0 || fields & JERS_RET_PRECMD))
 		JSONAddString(b, POSTCMD, j->pre_cmd);
@@ -573,6 +573,8 @@ int command_get_job(client *c, void * args) {
 	jersJobFilter * s = args;
 	struct queue * q = NULL;
 	struct job * j = NULL;
+	struct indexed_tag *it = NULL;
+	int indexed_tag_index;
 	int read_all = (c->uid == 0 || c->user->permissions &PERM_READ);
 	int self = (server.permissions.self.count == 0 || c->uid == 0 || (c->user->permissions &PERM_SELF) == PERM_SELF);
 
@@ -615,11 +617,28 @@ int command_get_job(client *c, void * args) {
 		}
 
 		initClientResponse(&r, 1);
+
+		/* If the user is filtering on tags, check if one is the indexed tag.
+		 * This greatly speeds up the lookups */
+		if (server.index_tag && s->filter_fields &JERS_FILTER_TAGS && s->filters.tag_count) {
+			for (int i = 0; i < s->filters.tag_count; i++) {
+				if (strcmp(server.index_tag, s->filters.tags[i].key) == 0) {
+					/* Only attempt to use it if it's not wildcarded */
+					if (strchr(s->filters.tags[i].key, '*') == NULL && strchr(s->filters.tags[i].key, '?') == NULL) {
+						HASH_FIND_STR(server.index_tag_table, s->filters.tags[i].key, it);
+						indexed_tag_index = i;
+					}
+
+					break;
+				 }
+			}
+		}
+
 		/* Loop through all non-deleted jobs and match against the criteria provided
-		 * Add the jobs to the response as we go */
+		 * Add the jobs to the response as we go. We either drive though the main job
+		 * table, or the tag index table */
 
-		for (j = server.jobTable; j != NULL; j = j->hh.next) {
-
+		for (j = (it ? it->jobs : server.jobTable); j != NULL; j = (it ? j->tag_hh.next : j->hh.next)) {
 			if (j->internal_state &JERS_FLAG_DELETED)
 				continue;
 
@@ -654,6 +673,10 @@ int command_get_job(client *c, void * args) {
 				int i;
 				int match = 1;
 				for (i = 0; i < s->filters.tag_count; i++) {
+					/* Skip the indexed tag */
+					if (it && i == indexed_tag_index)
+						continue;
+
 					int k;
 					for (k = 0; k < j->tag_count; k++) {
 						/* Match the tag first */
@@ -823,7 +846,7 @@ int command_mod_job(client *c, void *args) {
 
 		dirty = 1;
 	}
- 
+
 	if (mj->nice != UNSET_32) {
 		if (mj->nice == JERS_CLEAR_NICE)
 			j->nice = UNSET_32;
@@ -984,7 +1007,7 @@ int command_sig_job(client * c, void * args) {
 
 /* wait job is a blocking command for the client.
  * If we can't respond straight away, we define our callback
- * function which will get run in the event loop to check for changes */ 
+ * function which will get run in the event loop to check for changes */
 
 int command_wait_job_callback(client *c, void *args) {
 	jersJobWait *jw = args;
@@ -1050,6 +1073,7 @@ int command_set_tag(client * c, void * args) {
 	jersTagSet * ts = args;
 	struct job * j = NULL;
 	int i;
+	int indexed = 0;
 
 	j = findJob(ts->jobid);
 
@@ -1073,10 +1097,17 @@ int command_set_tag(client * c, void * args) {
 		return 1;
 	}
 
+	if (server.index_tag && strcmp(ts->key, server.index_tag) == 0)
+		indexed = 1;
+
 	/* Does it have that tag? */
 	for (i = 0; i < j->tag_count; i++) {
 		if (strcmp(j->tags[i].key, ts->key) == 0) {
-			/* Update the existing tag */
+			/* Update an existing tag.
+			 * Remove it from the index tag table if it's the index tag*/
+			if (indexed)
+				delIndexTag(j);
+
 			free(j->tags[i].value);
 			free(ts->key);
 			j->tags[i].value = ts->value;
@@ -1091,6 +1122,9 @@ int command_set_tag(client * c, void * args) {
 		j->tags[i].value = ts->value;
 	}
 
+	if (indexed)
+		addIndexTag(j, ts->value);
+
 	updateObject(&j->obj, 1);
 
 	return sendClientReturnCode(c, &j->obj, "0");
@@ -1100,6 +1134,7 @@ int command_del_tag(client * c, void * args) {
 	jersTagDel * td = args;
 	struct job * j = NULL;
 	int i;
+	int indexed = 0;
 
 	j = findJob(td->jobid);
 
@@ -1117,9 +1152,15 @@ int command_del_tag(client * c, void * args) {
 		return 1;
 	}
 
+	if (server.index_tag && strcmp(server.index_tag, td->key) == 0)
+		indexed = 1;
+
 	/* Does it have that tag? */
 	for (i = 0; i < j->tag_count; i++) {
 		if (strcmp(j->tags[i].key, td->key) == 0) {
+			if (indexed)
+				delIndexTag(j);
+
 			free(j->tags[i].key);
 			free(j->tags[i].value);
 
