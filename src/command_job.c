@@ -783,7 +783,7 @@ int command_mod_job(client *c, void *args) {
 		 *  - Hold
 		 *  - Defer
 		 */
-		if (mj->defer_time != -1 || mj->hold != -1) {
+		if (mj->defer_time != UNSET_TIME_T || mj->hold != UNSET_8) {
 			sendError(c, JERS_ERR_INVARG, "Unable to modify a completed job without restart flag");
 			return 0;
 		}
