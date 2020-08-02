@@ -34,6 +34,8 @@
 #include <commands.h>
 #include <json.h>
 
+#include <utlist.h>
+
 int __comp(const void * a_, const void * b_) {
 	const struct job * a = *((struct job **) a_);
 	const struct job * b = *((struct job **) b_);
@@ -116,20 +118,17 @@ void sendStartCmd(struct job * j) {
 
 void releaseDeferred(void) {
 	int64_t released = 0;
-	struct job * j = server.jobTable;
+	struct job *j, *tmp;
 	time_t now = time(NULL);
 
-	if (server.stats.jobs.deferred == 0)
-		return;
+	DL_FOREACH_SAFE2(server.deferred_list, j, tmp, deferred_next) {
+		if (now < j->defer_time)
+			break;
 
-	while (j) {
-		if (j->state == JERS_JOB_DEFERRED && now >= j->defer_time) {
-			changeJobState(j, JERS_JOB_PENDING, NULL, 0);
-			j->defer_time = 0;
-			released++;
-		}
-
-		j = j->hh.next;
+		j->defer_time = 0;
+		changeJobState(j, JERS_JOB_PENDING, NULL, 0);
+		removeDeferredJob(j);
+		released++;
 	}
 
 	if (released)

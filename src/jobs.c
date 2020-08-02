@@ -32,6 +32,8 @@
 
 #include <json.h>
 
+#include <utlist.h>
+
 /* Return the next free jobid.
  * 0 is returned if no ids are available */
 
@@ -187,6 +189,9 @@ int addJob(struct job * j, int dirty) {
 		}
 	}
 
+	if (j->defer_time)
+		addDeferredJob(j);
+
 	j->obj.type = JERS_OBJECT_JOB;
 	changeJobState(j, state, NULL, dirty);
 
@@ -196,6 +201,10 @@ int addJob(struct job * j, int dirty) {
 void deleteJob(struct job *j) {
 	j->internal_state |= JERS_FLAG_DELETED;
 	changeJobState(j, 0, NULL, 0);
+
+	if (j->defer_time)
+		removeDeferredJob(j);
+
 	server.stats.total.deleted++;
 	server.deleted++;
 }
@@ -280,4 +289,18 @@ int jobToJSON(struct job *j, buff_t *buff)
 	JSONEnd(buff);
 
 	return 0;
+}
+
+/* Maintain the deferred job linked list */
+
+static inline int deferCmp(const struct job *a, const struct job *b) {
+	return a->defer_time - b->defer_time;
+}
+
+void addDeferredJob(struct job *j) {
+	DL_INSERT_INORDER2(server.deferred_list, j, deferCmp, deferred_prev, deferred_next);
+}
+
+void removeDeferredJob(struct job *j) {
+	DL_DELETE2(server.deferred_list, j, deferred_prev, deferred_next);
 }

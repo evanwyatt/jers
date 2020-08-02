@@ -836,6 +836,12 @@ int command_mod_job(client *c, void *args) {
 	}
 
 	if (mj->defer_time != UNSET_TIME_T) {
+		if (j->defer_time)
+			removeDeferredJob(j);
+
+		if (mj->defer_time)
+			addDeferredJob(j);
+
 		j->defer_time = mj->defer_time;
 
 		dirty = 1;

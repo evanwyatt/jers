@@ -12,6 +12,7 @@ j->state = JERS_JOB_DEFERRED;
 
 HASH_ADD_INT(server.jobTable, jobid, j);
 server.stats.jobs.deferred++;
+addDeferredJob(j);
 
 j = calloc(1, sizeof (struct job));
 j->jobid = 10;
@@ -21,6 +22,8 @@ j->state = JERS_JOB_DEFERRED;
 
 HASH_ADD_INT(server.jobTable, jobid, j);
 server.stats.jobs.deferred++;
+addDeferredJob(j);
+
 
 j = calloc(1, sizeof (struct job));
 j->jobid = 12;
@@ -30,12 +33,16 @@ j->state = JERS_JOB_DEFERRED;
 
 HASH_ADD_INT(server.jobTable, jobid, j);
 server.stats.jobs.deferred++;
+addDeferredJob(j);
+
 
 j = calloc(1, sizeof (struct job));
 j->jobid = 32;
 j->queue = &q;
 j->defer_time = __now;
 j->state = JERS_JOB_DEFERRED;
+addDeferredJob(j);
+
 
 HASH_ADD_INT(server.jobTable, jobid, j);
 server.stats.jobs.deferred++;
@@ -48,6 +55,8 @@ j->state = JERS_JOB_DEFERRED;
 
 HASH_ADD_INT(server.jobTable, jobid, j);
 server.stats.jobs.deferred++;
+addDeferredJob(j);
+
 
 j = calloc(1, sizeof (struct job));
 j->jobid = 1020;
@@ -57,6 +66,7 @@ j->state = JERS_JOB_DEFERRED;
 
 HASH_ADD_INT(server.jobTable, jobid, j);
 server.stats.jobs.deferred++;
+addDeferredJob(j);
 
 /* Add some decoy jobs in there as well. (deleted and non pending) */
 j = calloc(1, sizeof (struct job));

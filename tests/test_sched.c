@@ -61,10 +61,62 @@ int test_releaseDeferred(void) {
 	jobid_t expected_pend[] = {5, 10, 32, 500};
 	int64_t expected_pend_count = 4;
 
+	jobid_t expected_defer[] = {10, 5, 500, 32, 12, 1020};
+	int64_t expected_defer_count = 6;
+
 /* Load the jobs */
 #include <_test_gen_jobs2.c>
 
+	int64_t count = 0;
+
+	/* Check the jobs loaded into the deferred linked list in order */
+	for (struct job *j = server.deferred_list; j; j = j->deferred_next)
+	{
+		if (j->deferred_next) {
+			if (j->deferred_next->defer_time < j->defer_time) {
+				printf("Unexpected defer time order:\n");
+				printf("Current - jobid:%u defer_time:%ld\n", j->jobid, j->defer_time);
+				printf("Next    - jobid:%u defer_time:%ld\n", j->deferred_next->jobid, j->deferred_next->defer_time);
+				status = 1;
+				goto end;
+			}
+		}
+
+		count++;
+	}
+
+	if (count != expected_defer_count)
+	{
+		printf("Unexpected number of jobs in deferred list, expected %ld, got %ld\n", expected_pend_count, count);
+		status = 1;
+		goto end;		
+	}
+
 	releaseDeferred();
+
+	/* After releasing the jobs, they should have been removed from the linked list */
+	for (struct job *j = server.deferred_list; j; j = j->deferred_next)
+	{
+		/* Check if it should be in the list at all */
+		for (int i = 0; i < expected_pend_count; i++) {
+			if (expected_pend[i] == j->jobid)
+			{
+				printf("Error - Released job %d was in the deferred list\n", j->jobid);
+				status = 1;
+				goto end;
+			}
+		}
+
+		if (j->deferred_next) {
+			if (j->deferred_next->defer_time < j->defer_time) {
+				printf("Unexpected defer time order (after release):\n");
+				printf("Current - jobid:%u defer_time:%ld\n", j->jobid, j->defer_time);
+				printf("Next    - jobid:%u defer_time:%ld\n", j->deferred_next->jobid, j->deferred_next->defer_time);
+				status = 1;
+				goto end;
+			}
+		}
+	}
 
 	/* Check the expected jobs are now the only ones pending */
 	for (j = server.jobTable; j; j = j->hh.next) {
@@ -72,12 +124,12 @@ int test_releaseDeferred(void) {
 			continue;
 
 		int i;
-		for (i = 0; i < expected_pend_count; i++) {
-			if (expected_pend[i] == j->jobid)
+		for (i = 0; i < expected_defer_count; i++) {
+			if (expected_defer[i] == j->jobid)
 				break;
 		}
 
-		if (i >= expected_pend_count) {
+		if (i >= expected_defer_count) {
 			printf("Got unexpected pending job %d\n", j->jobid);
 			status = 1;
 			goto end;

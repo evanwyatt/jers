@@ -196,6 +196,12 @@ struct job {
 
 	UT_hash_handle hh;
 	UT_hash_handle tag_hh;
+
+	/* We keep a sorted linked list of jobs in a deferred state,
+	 * sorted by the defer time. This helps efficiently release
+	 * deferred jobs */
+	struct job *deferred_next;
+	struct job *deferred_prev;
 };
 
 struct gid_array {
@@ -333,6 +339,9 @@ struct jersServer {
 	 * table of jobs in a hash table under the tag value */
 	char *index_tag;
 	struct indexed_tag *index_tag_table;
+
+	/* Sorted linked list of deferred jobs */
+	struct job *deferred_list;
 };
 
 #define STATE_DIV_FACTOR 10000
@@ -357,6 +366,9 @@ int addJob(struct job * j, int dirty);
 void deleteJob(struct job * j);
 void freeJob(struct job * j);
 struct job * findJob(jobid_t jobid);
+
+void addDeferredJob(struct job *j);
+void removeDeferredJob(struct job *j);
 
 int addRes(struct resource * r, int dirty);
 void freeRes(struct resource *r);

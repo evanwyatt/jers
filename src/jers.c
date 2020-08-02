@@ -257,7 +257,7 @@ int delete_resource(int argc, char *argv[]) {
 
 static inline char * print_state(jersJob * job) {
 	char *state = "?";
-	static char str[64];
+	static char str[128];
 
 	switch (job->state) {
 		case JERS_JOB_COMPLETED: state = "Completed"; break;
@@ -273,6 +273,10 @@ static inline char * print_state(jersJob * job) {
 
 	if (job->state == JERS_JOB_EXITED)
 		sprintf(str + strlen(str), "(%d)", job->exit_code);
+	else if (job->state == JERS_JOB_DEFERRED) {
+		struct tm *tm = localtime(&job->defer_time);
+		strftime(str + strlen(str), sizeof(str) - strlen(str), " - %d-%b-%Y %H:%M:%S", tm);
+	}
 
 	return str;
 }
@@ -406,8 +410,8 @@ static void print_job(jersJob *j, int all) {
 		/* Short summary display */
 
 		if (first) {
-			printf("JobID     Queue        JobName          User       State\n");
-			printf("==================================================================\n");
+			printf("JobID     Queue        JobName          User       State                          \n");
+			printf("==================================================================================\n");
 			first = 0;
 		}
 
