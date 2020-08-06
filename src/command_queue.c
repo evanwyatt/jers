@@ -139,9 +139,6 @@ int command_add_queue(client * c, void * args) {
 	q = findQueue(qa->name);
 
 	if (q != NULL) {
-		if (server.recovery.in_progress)
-			return 0;
-
 		if ((q->internal_state &JERS_FLAG_DELETED) == 0) {
 			sendError(c, JERS_ERR_QUEUEEXISTS, NULL);
 			return 1;
