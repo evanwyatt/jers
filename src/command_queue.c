@@ -89,6 +89,7 @@ void * deserialize_mod_queue(msg_t * msg) {
 	q->state = UNSET_32;
 	q->job_limit = UNSET_32;
 	q->default_queue = UNSET_32;
+	q->nice = UNSET_32;
 
 	for (i = 0; i < item->field_count; i++) {
 		switch(item->fields[i].number) {
