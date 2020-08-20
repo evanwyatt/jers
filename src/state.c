@@ -214,6 +214,7 @@ int openStateFile(time_t now) {
 		server.journal.len = 0;
 		server.journal.size = 0;
 		server.journal.limit = 0;
+		server.journal.record = 0;
 	}
 
 	free(state_file);
@@ -303,6 +304,7 @@ int stateSaveCmd(uid_t uid, char * cmd, char * msg, jobid_t jobid, int64_t revis
 	}
 
 	server.journal.len += len;
+	server.journal.record++;
 
 	if (server.flush.defer == 0)
 		fdatasync(server.journal.fd);

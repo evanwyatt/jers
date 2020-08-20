@@ -8,13 +8,13 @@
  *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation 
+ *    this list of conditions and the following disclaimer in the documentation
  *    and/or other materials provided with the distribution.
  *
  * 3. Neither the name of the copyright holder nor the names of its contributors may
  *    be used to endorse or promote products derived from this software without
  *    specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -22,14 +22,18 @@
  * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
  * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <server.h>
+#include <logging.h>
 #include <acct.h>
 #include <json.h>
+
+#include <ctype.h>
+#include <glob.h>
 
 int jobToJSON(struct job *j, buff_t *buf);
 int queueToJSON(struct queue *q, buff_t *buf);
@@ -37,7 +41,7 @@ int resourceToJSON(struct resource *r, buff_t *buf);
 
 acctClient *acctClientList = NULL;
 
-static void acctMain(acctClient *a, int journal_fd, off_t stream_start);
+static void acctMain(acctClient *a);
 
 void addAcctClient(acctClient *a) {
 	if (acctClientList) {
@@ -90,7 +94,7 @@ int handleAcctClientConnection(struct connectionType * conn) {
 	a->connection.type = ACCT_CLIENT;
 	a->connection.ptr = a;
 	a->connection.socket = acct_fd;
-	
+
 	addAcctClient(a);
 
 	/* Fork off to handle this stream
@@ -99,8 +103,6 @@ int handleAcctClientConnection(struct connectionType * conn) {
 	 * that we can start streaming of that location */
 
 	print_msg(JERS_LOG_INFO, "Starting accounting stream client for fd:%d uid:%d", a->connection.socket, a->uid);
-
-	off_t stream_start = lseek(server.journal.fd, 0, SEEK_CUR);
 
 	pid_t pid = fork();
 
@@ -119,7 +121,7 @@ int handleAcctClientConnection(struct connectionType * conn) {
 	}
 
 	/* Child does not return */
-	acctMain(a, server.journal.fd, stream_start);
+	acctMain(a);
 
 	exit(1);
 }
@@ -176,20 +178,87 @@ static int handleAcctClientWrite(acctClient * a) {
 
 /* Convert all jobs/queues/resources to JSON messages and send them to the client */
 static int sendInitial(acctClient *a) {
-	for(struct queue *q = server.queueTable; q; q = q->hh.next) {
-		queueToJSON(q, &a->response);	
-	}
+	for(struct queue *q = server.queueTable; q; q = q->hh.next)
+		queueToJSON(q, &a->response);
 
-	for(struct resource *r = server.resTable; r; r = r->hh.next) {
-		resourceToJSON(r, &a->response);	
-	}
+	for(struct resource *r = server.resTable; r; r = r->hh.next)
+		resourceToJSON(r, &a->response);
 
-
-	for(struct job *j = server.jobTable; j; j = j->hh.next) {
+	for(struct job *j = server.jobTable; j; j = j->hh.next)
 		jobToJSON(j, &a->response);
-	}
+
+	/* Send a 'stream-start' message */
+	buff_t b;
+	buffNew(&b, 0);
+
+	JSONStart(&b);
+	JSONStartObject(&b, "STREAM_START", 12);
+
+	asprintf(&a->id, "%s:%ld", server.journal.datetime, server.journal.record);
+
+	JSONAddString(&b, ACCT_ID, a->id);
+
+	JSONEndObject(&b);
+	JSONEnd(&b);
+
+	buffAddBuff(&a->response, &b);
+	buffFree(&b);
 
 	pollSetWritable(&a->connection);
+
+	return 0;
+}
+
+/* Locate to 'id' */
+int locateJournal(acctClient *a, char *id) {
+	print_msg_debug("LOCATING Journal to : %s\n", id);
+	/* Break up and validate the id */
+	char *sep = strchr(id, ':');
+
+	if (sep == NULL)
+		return 1;
+
+	*sep = '\0';
+	sep++;
+
+	if (strlen(id) > 8) //YYYYMMDD
+		return 1;
+
+	strcpy(a->datetime, id);
+
+	while(*id) {
+		if (!isdigit(*id))
+			return 1;
+
+		id++;
+	}
+
+	a->record = atol(sep);
+
+	char journal[PATH_MAX];
+	sprintf(journal, "%s/journal.%s", server.state_dir, a->datetime);
+
+	a->journal = fopen(journal, "rb");
+
+	if (a->journal == NULL)
+		error_die("Failed to open journal file '%s': %s", journal, strerror(errno));
+
+	/* Now locate to the requested record */
+	char *record = NULL;
+	size_t record_size = 0;
+	ssize_t record_len = 0;
+
+	off_t current = 0;
+
+	while ((record_len = getline(&record, &record_size, a->journal)) != -1) {
+		if (*record == '\0')
+			break;
+
+		if (++current == a->record)
+			break;
+	}
+
+	free(record);
 
 	return 0;
 }
@@ -214,15 +283,16 @@ static int processRequest(acctClient *a, const char *cmd) {
 				return 1;
 			}
 
-			/* Load this ID from our state files to determine what to send next */
-			//TODO:
-			
-
+			/* Locate onto the provided position */
+			locateJournal(a, a->id);
 		} else {
 			if (a->initalised == 0) {
 				/* Need to send them the current list of jobs/queue/resources */
 				sendInitial(a);
 				a->initalised = 1;
+
+				asprintf(&a->id, "%s:%ld", server.journal.datetime, server.journal.record);
+				locateJournal(a, a->id);
 			}
 		}
 
@@ -230,8 +300,6 @@ static int processRequest(acctClient *a, const char *cmd) {
 
 	} else if (strcasecmp(cmd, "STOP") == 0) {
 		a->state = ACCT_STOPPED;
-	} else if (strncasecmp(cmd, "ACK", 3)) {
-
 	} else {
 		print_msg(JERS_LOG_WARNING, "Unknown command sent from accounting stream client: %s", cmd);
 		return 1;
@@ -271,13 +339,15 @@ static void acctShutdownHandler(int signo) {
 }
 
 /* Does not return */
-static void acctMain(acctClient *a, int journal_fd, off_t stream_start) {
+static void acctMain(acctClient *a) {
 	setproctitle("jersd_acct[%d]", a->connection.socket);
-	buff_t j, line, temp;
-	off_t journal_offset = stream_start;
-	char read_buffer[4096];
-	int ack = 0;
-	int64_t current_id = 0;
+	buff_t b;
+
+	char *record = NULL;
+	size_t record_size = 0;
+	ssize_t record_len = 0;
+	char id[32];
+	off_t current_pos = 0;
 
 	/* Termination handler */
 	struct sigaction sigact;
@@ -303,27 +373,20 @@ static void acctMain(acctClient *a, int journal_fd, off_t stream_start) {
 		exit(1);
 	}
 
-	/* Position ourselves on the next journal message */
-	if (lseek(journal_fd, stream_start, SEEK_SET) == -1) {
-		print_msg(JERS_LOG_WARNING, "Failed to seek in journal: %s", strerror(errno));
-		exit(1);
-	}
-
+	/* Buffer to read client requests into */
 	buffNew(&a->request, 0);
-	buffNew(&j, 0);
-	buffNew(&temp, 0);
-	buffNew(&line, 256);
+
+	buffNew(&b, 0);
 
 	/* Main processing loop */
 	while (1) {
-
 		if (shutdown_flag) {
 			print_msg(JERS_LOG_INFO, "Shutdown of accounting stream requested.\n");
 			break;
 		}
 
 		/* Poll for any events on our sockets */
-		int status = epoll_wait(a->connection.event_fd, events, MAX_EVENTS, 500);
+		int status = epoll_wait(a->connection.event_fd, events, MAX_EVENTS, 2000);
 
 		for (int i = 0; i < status; i++) {
 			struct epoll_event * e = &events[i];
@@ -350,103 +413,118 @@ static void acctMain(acctClient *a, int journal_fd, off_t stream_start) {
 		if (a->state == ACCT_STOPPED)
 			continue;
 
-		/* Check the journal for new messages to send
-		 * - We might need to switch journal files if we hit the
-		 *   end of journal marker. (This might not have been written
-		 *   so we also need to check if a new journal was created) */
+		/* Read the current journal, sending any new messages.
+		 * We need to also check if we need to open the next journal. */
 
-		/* Read a chunk of the file in,
-		 * We might get a lot of nulls, so just consume everything until we hit a null */
-		ssize_t len = pread(journal_fd, read_buffer, sizeof(read_buffer) - 1, journal_offset);
+		current_pos = ftell(a->journal);
 
-		if (len < 0) {
-			print_msg(JERS_LOG_WARNING, "Accounting stream Failed to read journal file: %s\n", strerror(errno));
-			exit(1);
-		}
+		while ((record_len = getline(&record, &record_size, a->journal)) != -1) {
+			if (*record == '\0') {
+				fseek(a->journal, current_pos, SEEK_SET);
 
-		read_buffer[len] = 0;
+				/* Check if we need to switch to a new journal file */
+				/* Get a list of all journal files, find the one we currently have open */
+				char glob_pattern[PATH_MAX];
+				char current_journal[PATH_MAX];
+				sprintf(glob_pattern, "%s/journal.*", server.state_dir);
+				sprintf(current_journal, "%s/journal.%s", server.state_dir, a->datetime);
 
-		if (len <= 0)
-			continue;
+				glob_t glob_buff;
 
-		/* Get the real length */
-		len = strlen(read_buffer);
+				if (glob(glob_pattern, 0, NULL, &glob_buff) == 0) {
+					size_t i = 0;
+					for (i = 0; i < glob_buff.gl_pathc; i++) {
+						if (strcmp(current_journal, glob_buff.gl_pathv[i]) == 0) {
+							i++;
+							break;
+						}
+					}
 
-		if (len <= 0)
-			continue;
+					if (i < glob_buff.gl_pathc) {
+						/* Have a new journal to open */
+						FILE *new_journal = fopen(glob_buff.gl_pathv[i], "rb");
 
-		/* Advance our read position */
-		journal_offset += len;
+						if (new_journal == NULL)
+							error_die("Failed to open journal file '%s': %s", glob_buff.gl_pathv[i], strerror(errno));
 
-		ssize_t used = 0;
+						/* Opened a new journal. Reset the current stats */
+						fclose(a->journal);
+						a->record = 0;
+						char *dot = strchr(glob_buff.gl_pathv[i], '.');
+						dot++;
+						strcpy(a->datetime, dot);
 
-		/* Copy this new data into our line buffer */
-		while (used < len)
-		{
-			char *nl = strchr(read_buffer + used, '\n');
+						a->journal = new_journal;
+						current_pos = 0;
 
-			if (nl == NULL)
-			{
-				/* Consumed all the read data */
-				if (len - used != 0)
-					buffAdd(&temp, read_buffer + used, len - used);
+						print_msg_info("Switched to new journal %s\n", a->datetime);
+					}
+
+					globfree(&glob_buff);
+				}
 
 				break;
 			}
 
-			/* Null terminate this line */
-			*nl = '\0';
+			current_pos = ftell(a->journal);
 
-			/* Append this to the used buffer */
-			size_t line_len = strlen(read_buffer + used);
+			if (record[record_len - 1] == '\n')
+				record[record_len - 1] = '\0';
 
-			buffAdd(&temp, read_buffer + used, line_len);
-			used += line_len + 1;
+			a->record++;
 
-			int field_count = 0;
-			int msg_offset = 0;
-			struct journal_hdr hdr;
+			/* Load this message */
+			char timestamp[64];
+			int64_t revision;
+			char command[64];
+			uid_t uid;
+			jobid_t jobid;
+			int msg_offset;
 
-			field_count = sscanf(temp.data, "%c%ld.%d\t%d\t%64s\t%u\t%ld\t%n", &hdr.saved, &hdr.timestamp_s, &hdr.timestamp_ms, (int *)&hdr.uid, hdr.command, &hdr.jobid, &hdr.revision, &msg_offset);
+			int field_count = sscanf(record, " %64s\t%d\t%64s\t%u\t%ld\t%n", timestamp, (int *)&uid, command, &jobid, &revision, &msg_offset);
 
-			if (field_count != 7) {
-				print_msg(JERS_LOG_CRITICAL, "Failed entry (len:%ld): %s", strlen(temp.data), temp.data);
-				error_die("Accounting Stream: Failed to load journal entry. Got %d fields, wanted 6\n", field_count);
-			}
+			if (field_count != 5)
+				error_die("Failed to load 5 required fields from message");
 
-			if (*(temp.data + msg_offset)) {
-				/* Construct an 'update' message */
-				buffClear(&line, line.used);
-				JSONStart(&line);
-				JSONStartObject(&line, "UPDATE", 6);
+			if (strcmp(command, "REPLAY_COMPLETE") == 0)
+				continue;
 
-				JSONAddInt(&line, DATETIME, hdr.timestamp_s);
-				JSONAddInt(&line, UID, hdr.uid);
+			/* Serialize this message */
+			JSONStart(&b);
+			JSONStartObject(&b, "UPDATE", 6);
 
-				if (ack)
-					JSONAddInt(&line, ACCT_ID, ++current_id);
+			sprintf(id, "%s:%ld", a->datetime, a->record);
 
-				if (hdr.jobid)
-					JSONAddInt(&line, JOBID, hdr.jobid);
+			JSONAddString(&b, ACCT_ID, id);
+			JSONAddString(&b, TIMESTAMP, timestamp);
+			JSONAddString(&b, COMMAND, command);
+			JSONAddInt(&b, UID, uid);
 
-				buffAdd(&line, "\"COMMAND\":", 10);
-				buffAdd(&line, temp.data + msg_offset, line_len);
+			if (jobid)
+				JSONAddInt(&b, JOBID, jobid);
 
-				JSONEndObject(&line);
-				JSONEnd(&line);
+			buffAdd(&b, "\"MESSAGE\":", 10);
+			buffAdd(&b, record + msg_offset, strlen(record + msg_offset));
 
-				fprintf(stderr, "Sending: '%.*s' to accounting stream\n", (int)line.used, line.data);
-				buffAddBuff(&a->response, &line);
-				pollSetWritable(&a->connection);
-			}
+			JSONEndObject(&b);
+			JSONEnd(&b);
 
-			/* Processed a line, clear our the buffer for the next line */
-			temp.used = 0;
+			//fprintf(stderr, "Sending: '%.*s' to accounting stream\n", (int)b.used, b.data);
+
+			buffAddBuff(&a->response, &b);
+			buffAdd(&a->response, "\n", 1);
+
+			buffClear(&b, 0);
+
+			pollSetWritable(&a->connection);
 
 			if (shutdown_flag)
 				break;
 		}
 	}
+
+	free(record);
+	free(a->id);
 
 	exit(0);
 }
