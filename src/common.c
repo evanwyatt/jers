@@ -838,3 +838,35 @@ char **seperateTokens(char *string, char sep) {
 
 	return tokens;
 }
+
+#define DEFAULT_ITEM_SIZE 32
+
+void listNew(struct item_list *list, size_t item_size) {
+	memset(list, 0, sizeof(struct item_list));
+	list->item_size = item_size;
+}
+
+int listAdd(struct item_list *list, void *item) {
+	if (list->count == list->size) {
+		size_t new_size = list->size == 0 ? DEFAULT_ITEM_SIZE : (list->size * 2);
+
+		void *new_list = realloc(list->items, new_size * list->item_size);
+
+		if (new_list == NULL)
+			return 1;
+
+		list->items = new_list;
+		list->size = new_size;
+		list->end  = (char *)list->items + (list->count * list->item_size);
+	}
+
+	memcpy(list->end, item, list->item_size);
+	list->end = (char *)list->end + list->item_size;
+	list->count++;
+
+	return 0;
+}
+
+void listSort(struct item_list *list, int (*compar)(const void *, const void *, void *), void *arg) {
+	qsort_r(list->items, list->count, list->item_size, compar, arg);
+}

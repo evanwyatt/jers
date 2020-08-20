@@ -125,4 +125,20 @@ char * hexEncode(const unsigned char *input, int input_len, char *output);
 int splitConfigLine(char *line, char **key, char **value);
 char *getArg(char **string);
 char **seperateTokens(char *string, char sep);
+
+struct item_list {
+	size_t size;
+	size_t count;
+	size_t item_size;
+	void *items;
+	void *end;
+};
+
+void listNew(struct item_list *list, size_t item_size);
+void listFree(struct item_list *list);
+int listAdd(struct item_list *list, void *item);
+void listSort(struct item_list *list, int (*compar)(const void *, const void *, void *), void *arg);
+
+#define LIST_ITER(_list, _ptr) for (((_ptr) = (_list)->items); (void *)(_ptr) < (_list)->end; (_ptr) = (void *) ((char *)(_ptr) + (_list)->item_size))
+
 #endif
