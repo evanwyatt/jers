@@ -35,10 +35,9 @@
 #include <unistd.h>
 #include <errno.h>
 #include <grp.h>
+#include <pwd.h>
 
 #include "agent.h"
-
-#define GROUP_LIMIT 32
 
 extern agent *agentList;
 
@@ -46,10 +45,11 @@ static gid_t getGroup(char * name) {
 	struct group * g = getgrnam(name);
 
 	if (g == NULL)
-		error_die("Invalid read_group specified: %s", strerror(errno));
+		error_die("Invalid group specified: %s", strerror(errno));
 
 	return g->gr_gid;
 }
+
 /* Convert a space seperated list of groups into an array of gids
  * Note: There is a hard limit of 32 groups per security. */
 
@@ -98,6 +98,92 @@ void loadAllowedAgents(char * agents_string) {
 	}
 
 	return;
+}
+
+int cmp_queue_acl(const void *a, const void *b, void *arg) {
+	(void)arg;
+
+	return ((struct queue_acl *)b)->allow - ((struct queue_acl *)a)->allow;
+}
+
+void loadQueueACL(char *in_acl) {
+	struct queue_acl acl = {0};
+	int group_count = 0;
+	print_msg_info("Loading queue ACL: %s", in_acl);
+
+	/* A ACL should be in the format of: '<allow/disallow> <permission[,permission...]> <queue_expr[,queue_expr...]> <group[,group...]'
+	 * These are loaded into the server memory and evaluated when a queue is loaded. */
+	char *allow, *permissions, *expressions, *groups;
+	char *tok = strtok(in_acl, " ");
+
+	if (tok == NULL)
+		error_die("Invalid queue_perm acl specified");
+
+	allow = tok;
+
+	tok = strtok(NULL, " ");
+
+	if (tok == NULL)
+		error_die("Invalid queue_perm acl specified");
+
+	permissions = tok;
+
+	tok = strtok(NULL, " ");
+
+	if (tok == NULL)
+		error_die("Invalid queue_perm acl specified");
+
+	expressions = tok;
+
+	tok = strtok(NULL, " ");
+
+	if (tok == NULL)
+		error_die("Invalid queue_perm acl specified");
+
+	groups = tok;
+
+	/* Allow/Disallow */
+	if (strcasecmp(allow, "ALLOW") == 0)
+		acl.allow = 1;
+	else if (strcasecmp(allow, "DENY") != 0)
+		error_die("Invalid allow field '%s' in queue_perm", allow);
+
+	/* Permissions */
+	char *p = strtok(permissions, ",");
+	while (p) {
+		if (strcasecmp(p, "control") == 0) {
+			acl.permissions |= QUEUE_CONTROL;
+		} else if (strcasecmp(p, "limit") == 0) {
+			acl.permissions |= QUEUE_LIMIT;
+		} else if (strcasecmp(p, "admin") == 0) {
+			acl.permissions |= QUEUE_ADMIN;
+			break;
+		} else {
+			error_die("Invalid permission in queue_acl: %s", p);
+		}
+
+		p = strtok(NULL, ",");
+	}
+
+	/* Groups */
+	p = strtok(groups, ",");
+	while (p) {
+		if (group_count + 1 > GROUP_LIMIT)
+			error_die("Too many groups specified for queue acl (max %d)", GROUP_LIMIT);
+
+		acl.gids[group_count++] = getGroup(p);
+		p = strtok(NULL, ",");
+	}
+
+	/* Add an entry for each expression */
+	p = strtok(expressions, ",");
+	while (p) {
+		acl.expr = strdup(p);
+
+		listAdd(&server.queue_acls, &acl);
+
+		p = strtok(NULL, ",");
+	}
 }
 
 void freeConfig(void) {
@@ -152,6 +238,8 @@ void loadConfig(char * config) {
 
 	server.slowrequest_logging = SLOWREQUEST_ON;
 	server.slow_threshold_ms = DEFAULT_SLOWLOG;
+
+	listNew(&server.queue_acls, sizeof(struct queue_acl));
 
 	while ((len = getline(&line, &line_size, f)) != -1) {
 		line[strcspn(line, "\n")] = '\0';
@@ -209,10 +297,10 @@ void loadConfig(char * config) {
 			getGroups(value, &server.permissions.write);
 		} else if (strcmp(key, "setuid_group") == 0) {
 			getGroups(value, &server.permissions.setuid);
-		} else if (strcmp(key, "queue_group") == 0) {
-			getGroups(value, &server.permissions.queue);
 		} else if (strcmp(key, "self_group") == 0) {
 			getGroups(value, &server.permissions.self);
+		} else if (strcmp(key, "queue_admin") == 0 || strcmp(key, "queue_group") == 0) {
+			getGroups(value, &server.permissions.queue);
 		} else if (strcmp(key, "agents") == 0) {
 			loadAllowedAgents(value);
 		} else if (strcmp(key, "logging_mode") == 0) {
@@ -256,6 +344,8 @@ void loadConfig(char * config) {
 			server.slow_threshold_ms = atoi(value);
 		} else if (strcmp(key, "index_tag") == 0) {
 			server.index_tag = strdup(value);
+		} else if (strcmp(key, "queue_acl") == 0) {
+			loadQueueACL(value);
 		} else {
 			print_msg(JERS_LOG_WARNING, "Skipping unknown config key: %s\n", key);
 			continue;
@@ -279,6 +369,10 @@ void loadConfig(char * config) {
 
 		print_msg(JERS_LOG_WARNING, "No agents in config file. Only allowing an agent from localhost");
 	}
+
+	/* Sort the loaded queue ACLs */
+	if (server.queue_acls.count != 0)
+		listSort(&server.queue_acls, cmp_queue_acl, NULL);
 
 	return;
 }

@@ -266,6 +266,7 @@ int command_mod_queue(client *c, void * args) {
 	struct queue * q = NULL;
 	int dirty = 0;
 	agent *a = NULL;
+	int required_privs = 0;
 
 	if (qm->name == NULL) {
 		sendError(c, JERS_ERR_INVARG, "No queue provided");
@@ -284,6 +285,22 @@ int command_mod_queue(client *c, void * args) {
 			print_msg(JERS_LOG_DEBUG, "Skipping recovery of queue_mod queue %s rev:%ld trans rev:%ld", q->name, q->obj.revision, server.recovery.revision);
 			return 0;
 		}
+	}
+
+	/* Check the permissions before we go any further */
+	if (qm->node || qm->desc || qm->nice != UNSET_32 || qm->priority != UNSET_32 ||
+		qm->default_queue != UNSET_32 || qm->nice != UNSET_32 || qm->default_queue != UNSET_32)
+		required_privs |= QUEUE_ADMIN;
+
+	if (qm->state != UNSET_32)
+		required_privs |= QUEUE_CONTROL;
+
+	if (qm->job_limit != UNSET_32)
+		required_privs |= QUEUE_LIMIT;
+
+	if (checkQueueACL(c, q, required_privs) != 0) {
+		sendError(c, JERS_ERR_NOPERM, NULL);
+		return 1;
 	}
 
 	if (qm->node) {

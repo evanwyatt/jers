@@ -55,6 +55,10 @@ void setproctitle(const char *fmt, ...);
 
 #define PERM_NOTUSED 0x8000
 
+#define QUEUE_CONTROL 0x01
+#define QUEUE_LIMIT   0x02
+#define QUEUE_ADMIN   0xFFFF
+
 #define CMDFLG_REPLAY 0x01
 
 /* Exit code flags to indicate issues between agent and daemon */

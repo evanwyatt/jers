@@ -893,6 +893,11 @@ void stateSaveToDisk(int block) {
 	static uint64_t startTime = 0;
 	uint64_t now = getTimeMS();
 
+	if (server.nosave) {
+		print_msg_critical("NO SAVE ENABLED - Skipping background save");
+		return;
+	}
+
 	static struct job ** dirtyJobs = NULL;
 	static struct queue ** dirtyQueues = NULL;
 	static struct resource ** dirtyResources = NULL;

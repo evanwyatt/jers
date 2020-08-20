@@ -53,6 +53,8 @@ int parseOpts(int argc, char * argv[]) {
 	for (int i = 0; i < argc; i++) {
 		if (strcasecmp("--daemon", argv[i]) == 0)
 			server.daemon = 1;
+		else if (strcasecmp("--no-save", argv[i]) == 0)
+			server.nosave = 1;
 	}
 
 	return 0;

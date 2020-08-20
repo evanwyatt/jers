@@ -79,6 +79,8 @@
 #define DEFAULT_CONFIG_EMAIL_FREQ 5000
 #define DEFAULT_SLOWLOG 50 // Milliseconds
 
+#define GROUP_LIMIT 32
+
 enum readonly_modes {
 	READONLY_ENOSPACE = 1,
 	READONLY_BGSAVE
@@ -95,6 +97,12 @@ typedef struct _jers_object {
 	int64_t revision;
 	int dirty;
 } jers_object;
+
+struct gid_perm {
+	gid_t gid;
+	int perm;
+	UT_hash_handle hh;
+};
 
 struct queue {
 	jers_object obj;
@@ -113,6 +121,8 @@ struct queue {
 	int32_t internal_state;
 
 	struct jobStats stats;
+
+	struct gid_perm *permissions;
 
 	UT_hash_handle hh;
 };
@@ -209,11 +219,19 @@ struct gid_array {
 	gid_t * groups;
 };
 
+struct queue_acl {
+	char *expr;
+	int allow;
+	gid_t gids[GROUP_LIMIT];
+	int permissions;
+};
+
 struct jersServer {
 	char * state_dir;
 	int state_count;
 	int readonly;
 
+	int nosave;
 	int daemon;
 
 	int secret;
@@ -274,6 +292,7 @@ struct jersServer {
 		struct gid_array read;
 		struct gid_array write;
 		struct gid_array setuid;
+
 		struct gid_array queue;
 	} permissions;
 
@@ -342,6 +361,8 @@ struct jersServer {
 
 	/* Sorted linked list of deferred jobs */
 	struct job *deferred_list;
+
+	struct item_list queue_acls;
 };
 
 #define STATE_DIV_FACTOR 10000
@@ -381,6 +402,7 @@ int addQueue(struct queue * q, int dirty);
 void freeQueue(struct queue * q);
 struct queue * findQueue(char * name);
 void setDefaultQueue(struct queue *q);
+int checkQueueACL(client *c, struct queue *q, int required_privs);
 
 void loadConfig(char * config);
 void freeConfig(void);

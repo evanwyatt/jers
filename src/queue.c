@@ -30,6 +30,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <errno.h>
+#include <fnmatch.h>
 
 #include <server.h>
 #include <jers.h>
@@ -50,7 +51,64 @@ int addQueue(struct queue * q, int dirty) {
 
 	q->obj.type = JERS_OBJECT_QUEUE;
 	updateObject(&q->obj, dirty);
+
+	/* Work out the permissions for this queue based off ACLs */
+	struct queue_acl *acl;
+
+	LIST_ITER(&server.queue_acls, acl) {
+		if (fnmatch(acl->expr, q->name, 0) == 0) {
+			/* Expression matches this queue name. We need to add/remove
+			 * the permissions for the gids */
+			for (int i = 0; acl->gids[i]; i++) {
+				struct gid_perm *gid = NULL;
+				HASH_FIND_INT(q->permissions, &acl->gids[i], gid);
+
+				if (gid == NULL) {
+					/* GID not listed on this queue, add it if we are allowing permissions */
+					if (!acl->allow)
+						continue;
+
+					gid = calloc(1, sizeof(struct gid_perm));
+					gid->gid = acl->gids[i];
+
+					HASH_ADD_INT(q->permissions, gid, gid);
+				}
+
+				if (acl->allow)
+					gid->perm |= acl->permissions;
+				else
+					gid->perm &= ~acl->permissions;
+			}
+		}
+	}
+
 	return 0;
+}
+
+int checkQueueACL(client *c, struct queue *q, int required_perms) {
+	int perms = 0;
+
+	if (c->uid == 0)
+		return 0;
+
+	/* Are they a global queue admin? */
+	if (c->user->permissions &PERM_QUEUE)
+		return 0;
+
+	/* For each group a user is a member of, check if the queue has permissions listed for it */
+	for (int i = 0; i < c->user->group_count; i++) {
+		struct gid_perm *gp = NULL;
+		HASH_FIND_INT(q->permissions, &c->user->group_list[i], gp);
+
+		if (gp) {
+			perms |= gp->perm;
+
+			if ((perms &required_perms) == required_perms)
+				return 0;
+		}
+	}
+
+	return 1;
 }
 
 void setDefaultQueue(struct queue *q) {
