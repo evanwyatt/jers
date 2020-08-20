@@ -2024,22 +2024,14 @@ void adoptionScan(void) {
 	for (size_t i = 0; i < globbuff.gl_pathc; i++) {
 		FILE *f = fopen(globbuff.gl_pathv[i], "r");
 
-		if (f == NULL) {
-			if (errno == ENOENT)
-				continue;
-
-			error_die("Failed to open '%s': %s", globbuff.gl_pathv[i], strerror(errno));
-		}
+		if (f == NULL)
+			continue;
 
 		ssize_t len = getline(&line, &line_size, f);
 
 		if (len <= 0) {
-			if (errno == ENOENT) {
 				fclose(f);
 				continue;
-			}
-
-			error_die("Failed to read '%s': %s", globbuff.gl_pathv[i], strerror(errno));
 		}
 
 		fclose(f);
