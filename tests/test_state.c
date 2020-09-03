@@ -43,8 +43,10 @@ static int cmp_str(const char *a, const char *b) {
 static int cmp_strarray(int count, char **a, char **b)
 {
 	for (int i = 0; i < count; i++) {
-		if (strcmp(a[i], b[i]) != 0)
+		if (strcmp(a[i], b[i]) != 0) {
+			printf("[%d] '%s' != '%s'\n", i, a[i], b[i]);
 			return 1;
+		}
 	}
 
 	return 0;

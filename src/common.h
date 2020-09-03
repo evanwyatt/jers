@@ -31,6 +31,7 @@
 #define __JERS_COMMON_H
 
 #include <sys/types.h>
+#include <ctype.h>
 
 #include <uthash.h>
 
@@ -98,10 +99,26 @@ char * escapeString(const char * string, size_t * length);
 void unescapeString(char * string);
 char * removeWhitespace(char * str);
 char *skipChars(char *str, const char *skip);
-char *skipWhitespace(char *str);
 
-void uppercasestring(char * str);
-void lowercasestring(char * str);
+#define skipWhitespace(str) __extension__ ({char *_ret = str; while(*_ret != '\0' && (*_ret == ' ' || *_ret == '\t')) _ret++; _ret;})
+#define skipUntilWhitespace(str) __extension__ ({char *_ret = str; while(*_ret != '\0' && (*_ret != ' ' && *_ret != '\t')) _ret++; _ret;})
+
+#define uppercasestring(str) do { \
+	char *__str = str; \
+	while (*__str) { \
+		*__str = toupper(*__str); \
+		__str++; \
+	} \
+} while (0);
+
+#define lowercasestring(str) do { \
+	char *__str = str; \
+	while (*__str) { \
+		*__str = tolower(*__str); \
+		__str++; \
+	} \
+} while (0);
+
 int isprintable(const char * str);
 void * dup_mem(void * src, size_t len, size_t size);
 
@@ -129,6 +146,8 @@ char * hexEncode(const unsigned char *input, int input_len, char *output);
 int splitConfigLine(char *line, char **key, char **value);
 char *getArg(char **string);
 char **seperateTokens(char *string, char sep);
+
+int loadKeyValue (char *line, char **key, char ** value, int *index);
 
 struct item_list {
 	size_t size;

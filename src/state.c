@@ -97,7 +97,7 @@ static off_t findJournalEnd(int fd) {
 
 /* To ensure we don't run out of space when writing journal entries, space is pre-allocated.
  *  We ensure we have 2 'extend' blocks at the end of journal:
- *  One is used for writing new journal entries, the other is reserved for if we 
+ *  One is used for writing new journal entries, the other is reserved for if we
  *  go into 'readonly' mode. This second block allows us to write job start/completion messages
  *  which might have a triggered before readonly mode was activated. */
 
@@ -233,10 +233,10 @@ time_t getRollOver(time_t now) {
 
 /* Function to save the current command to disk (& flush it, if in sync mode)
  * Only 'update' command are written, ie command that modify jobs/queues or resources.
- * 
+ *
  * Records are formatted as tab seperated fields. newline, tabs and
  * backslashes are escaped before being written to disk.
- * 
+ *
  *  TIME\tUID\tCMDt\tJOBID\tREVISION\tJSON.
   *
  * Note: There is a space at the start of line, this space will have a '*' character written
@@ -293,7 +293,7 @@ int stateSaveCmd(uid_t uid, char * cmd, char * msg, jobid_t jobid, int64_t revis
 	/* Do we need to extend the journal? */
 	if (server.journal.len + len >= server.journal.limit) {
 		extendJournal();
-		// Even if extendJournal fails, we want to write this message out. 
+		// Even if extendJournal fails, we want to write this message out.
 	}
 
 	len = write(server.journal.fd, msg_string, len);
@@ -326,7 +326,7 @@ off_t checkForLastCommit(char * journal) {
 
 	if ((f = fopen(journal, "r")) == NULL)
 		error_die("Failed to open journal %s: %s", journal, strerror(errno));
-	
+
 	while ((len = getline(&line, &line_size, f)) != -1) {
 		if (line[0] == '*') {
 			last_commit = ftell(f);
@@ -414,7 +414,7 @@ void replayTransaction(char * line) {
 
 /* Read and replay transactions from the journal.
  * 'Offset' is provided for the first file, subsequent files have the offset passed in as
- * a negative number. - All entries should be replayed for these files */ 
+ * a negative number. - All entries should be replayed for these files */
 
 void replayJournal(char * journal, off_t offset) {
 	FILE * f = NULL;
@@ -432,7 +432,7 @@ void replayJournal(char * journal, off_t offset) {
 
 	if (offset >= 0 && fseek(f, offset, SEEK_SET) != 0)
 		error_die("Failed to offset into journal at offset %ld: %s", offset, strerror(errno));
-	
+
 	while ((len = getline(&line, &line_size, f)) != -1) {
 		replayTransaction(line);
 	}
@@ -521,8 +521,8 @@ void stateReplayJournal(void) {
 
 	for (j = server.jobTable; j; j = j->hh.next) {
 		if (j->state == JERS_JOB_RUNNING || j->internal_state & JERS_FLAG_JOB_STARTED) {
-			j->internal_state &= ~JERS_FLAG_JOB_STARTED;
 			changeJobState(j, JERS_JOB_UNKNOWN, NULL, 1);
+			j->internal_state &= ~JERS_FLAG_JOB_STARTED;
 			print_msg(JERS_LOG_WARNING, "Job %d is now unknown", j->jobid);
 
 			/* We want to allocate the resources for this job here, as it might be in use */
@@ -1125,51 +1125,6 @@ void stateSaveToDisk(int block) {
 	return;
 }
 
-/* Return a key/value from the provided line
- * 'line' is modified and the pointers returned should not be freed */
-
-int loadKeyValue (char * line, char **key, char ** value, int * index) {
-	char * l_key = NULL;
-	char * l_value = NULL;
-	char * temp;
-
-	/* Remove a trailing newline if present */
-	line[strcspn(line, "\n")] = '\0';
-
-	if (!*line || *line == '#') {
-		/* Empty line/ commented out*/
-		*key = NULL;
-		*value = NULL;
-		return 0;
-	}
-
-	l_key = line;
-	l_value = strpbrk(l_key, " \t");
-
-	if (l_value) {
-		*l_value = '\0';
-		l_value++;
-	}
-
-	/* Does the key have an index? ie KEY[1] */
-
-	temp = strchr(l_key, '[');
-
-	if (temp) {
-		*temp = '\0';
-		if (index)
-			*index = atoi(temp + 1);
-	}
-
-	/* Need to unescape the value. We would have escaped '\n' & '\' characters */
-	unescapeString(l_value);
-
-	*key = l_key;
-	*value = l_value;
-
-	return 0;
-}
-
 /* Create a directory if it doesn't exist */
 void createDir(const char *path) {
 	struct stat buf;
@@ -1330,6 +1285,9 @@ struct job * stateLoadJob(const char * fileName) {
 
 		char *key, *value;
 		int index = 0;
+
+		if (line[len - 1] == '\n')
+			line[len - 1] = '\0';
 
 		if (loadKeyValue(line, &key, &value, &index))
 			error_die("Failed to parse job file: %s", fileName);
@@ -1539,6 +1497,9 @@ struct queue * stateLoadQueue(const char * fileName) {
 		char * key = NULL, *value = NULL;
 		int index;
 
+		if (line[len - 1] == '\n')
+			line[len - 1] = '\0';
+
 		if (loadKeyValue(line, &key, &value, &index))
 			error_die("stateLoadQueue: Error parsing queue file: %s\n", fileName);
 
@@ -1664,6 +1625,9 @@ struct resource * stateLoadResource(const char * file_name) {
 		char * key = NULL, *value = NULL;
 		int index;
 
+		if (line[len - 1] == '\n')
+			line[len - 1] = '\0';
+
 		if (loadKeyValue(line, &key, &value, &index))
 			error_die("stateLoadRes: Error parsing resource file: %s\n", file_name);
 
@@ -1775,8 +1739,12 @@ static inline void increment_state(struct job *j) {
 			server.stats.jobs.running++;
 			j->queue->stats.running++;
 
-			server.stats.jobs.start_pending--;
-			j->queue->stats.start_pending--;
+			/* If this job was marked as started, we can safely decrement the pending count. */
+			if (j->internal_state &JERS_FLAG_JOB_STARTED) {
+				server.stats.jobs.start_pending--;
+				j->queue->stats.start_pending--;
+			}
+
 			break;
 
 		case JERS_JOB_PENDING:

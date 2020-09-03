@@ -212,11 +212,6 @@ char *skipChars(char *str, const char *skip) {
 	return str;
 }
 
-char *skipWhitespace(char *str) {
-	while (*str != '\0' && (*str == ' ' || *str == '\t')) str++;
-	return str;
-}
-
 char * gethost(void) {
 	static char host[1024] = "";
 
@@ -226,24 +221,6 @@ char * gethost(void) {
 	gethostname(host, sizeof(host));
 	host[sizeof(host) -1] = '\0';
 	return host;
-}
-
-void uppercasestring(char * str) {
-	char * ptr = str;
-
-	while (*ptr) {
-		*ptr = toupper(*ptr);
-		ptr++;
-	}
-}
-
-void lowercasestring(char * str) {
-	char * ptr = str;
-
-	while (*ptr) {
-		*ptr = tolower(*ptr);
-		ptr++;
-	}
 }
 
 /* Return non-zero if all the characters are printable */
@@ -869,4 +846,46 @@ int listAdd(struct item_list *list, void *item) {
 
 void listSort(struct item_list *list, int (*compar)(const void *, const void *, void *), void *arg) {
 	qsort_r(list->items, list->count, list->item_size, compar, arg);
+}
+
+/* Return a key/value from the provided line
+ * 'line' is modified and the pointers returned should not be freed */
+
+int loadKeyValue (char *line, char **key, char ** value, int *index) {
+	char *l_key = NULL;
+	char *l_value = NULL;
+
+	/* Skip leading whitespace */
+	char *ptr = skipWhitespace(line);
+
+	if (*ptr == '\0' || *ptr == '#') {
+		*key = NULL;
+		*value = NULL;
+		return 0;
+	}
+
+	l_key = ptr;
+
+	ptr = skipUntilWhitespace(ptr);
+	*ptr = '\0';
+
+	l_value = ptr + 1;
+
+	*key = l_key;
+	*value = l_value;
+
+	/* Check if the key has an index */
+	ptr = l_key;
+	while (*ptr != '\0' && *ptr != '[') ptr++;
+
+	if (*ptr == '[') {
+		*ptr = '\0';
+
+		if (index)
+			*index = atoi(ptr + 1);
+	}
+
+	unescapeString(l_value);
+
+	return 0;
 }

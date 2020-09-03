@@ -276,6 +276,58 @@ seperateTokens_done:
 	return rc;
 }
 
+struct keyvalue_test {
+	char *key;
+	char *value;
+	int index;
+};
+
+int test_loadKeyValue(char *input, struct keyvalue_test *expected)
+{
+	int rc = 0;
+	struct keyvalue_test result = {0};
+	char *_input = strdup(input);
+
+	loadKeyValue(_input, &result.key, &result.value, &result.index);
+	if (expected->key == NULL || result.key == NULL) {
+		if (result.key != expected->key) {
+			rc = 1;
+			goto test_loadKeyValue_finished;
+		}
+	} else if (strcmp(expected->key, result.key) != 0) {
+		rc = 1;
+		goto test_loadKeyValue_finished;
+	}
+
+	if (expected->value == NULL || result.value == NULL) {
+		if (result.value != expected->value) {
+			rc = 1;
+			goto test_loadKeyValue_finished;
+		}
+	} else if (strcmp(expected->key, result.key) != 0) {
+		rc = 1;
+		goto test_loadKeyValue_finished;
+	}
+
+	if (expected->index != result.index) {
+		rc = 1;
+		goto test_loadKeyValue_finished;
+	}
+
+test_loadKeyValue_finished:
+	if (rc) {
+		printf("Unexpected result from test_loadKeyValue: '%s'\n", input);
+		printf("Expected Key = '%s'\n", expected->key ? expected->key : "(NULL)");
+		printf("Result Key   = '%s'\n", result.key ? result.key : "(NULL)");
+		printf("Expected value = '%s'\n", expected->value ? expected->value : "(NULL)");
+		printf("Result value   = '%s'\n", result.value ? result.value : "(NULL)");
+		printf("Expected index = '%d'\n", expected->index);
+		printf("Result index   = '%d'\n", result.index);
+	}
+	
+	free(_input);
+	return rc;
+}
 
 void test_strings(void) {
 	/* removeWhitespace - Expect leading and trailing whitespace
@@ -382,5 +434,40 @@ void test_strings(void) {
 	char *seperateTokensResult3[] = {"Hello", "W o r l d", NULL};
 	TEST("seperateTokens - Token with embedded whitespace", check_seperateTokens("Hello,   W o r l d   ", ',', seperateTokensResult3));
 
+	/* LoadKeyValue
+	 * Loads strings that looks like:
+	 * 'key value'
+	 * 'key[1] value */
 
+	struct keyvalue_test result;
+
+	result.key = NULL;
+	result.value = NULL;
+	result.index = 0;
+
+	TEST("loadKeyValue - Empty string", test_loadKeyValue("", &result));
+	TEST("loadKeyValue - \"#key value\"", test_loadKeyValue("#key value", &result));
+	TEST("loadKeyValue - \"    #key value\"", test_loadKeyValue("    #key value", &result));
+	TEST("loadKeyValue - \" #  key value\"", test_loadKeyValue(" #  key value", &result));
+
+	result.key = "key";
+	result.value = "value";
+	result.index = 0;
+	TEST("loadKeyValue - key value", test_loadKeyValue("key value", &result));
+	TEST("loadKeyValue - key value", test_loadKeyValue("  key     value", &result));
+	TEST("loadKeyValue - key value", test_loadKeyValue("  key   \t  value     ", &result));
+	TEST("loadKeyValue - key value\\n", test_loadKeyValue("key value\n", &result));
+
+	result.key = "key";
+	result.value = "value";
+	result.index = 1;
+	TEST("loadKeyValue - key[index] value", test_loadKeyValue("key[1] value", &result));
+	TEST("loadKeyValue - key[index] value", test_loadKeyValue("  key[1] value", &result));
+	TEST("loadKeyValue - key[index] value", test_loadKeyValue("\tkey[1]    value", &result));
+
+
+	result.key = "key";
+	result.value = "v\ta\tl\tu\te";
+	result.index = 0;
+	TEST("loadKeyValue - Escaped value", test_loadKeyValue("key  v\\t\\ta\\t\\tl\\tu\\te", &result));
 }
