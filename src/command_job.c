@@ -839,10 +839,10 @@ int command_mod_job(client *c, void *args) {
 		if (j->defer_time)
 			removeDeferredJob(j);
 
+		j->defer_time = mj->defer_time;
+
 		if (mj->defer_time)
 			addDeferredJob(j);
-
-		j->defer_time = mj->defer_time;
 
 		dirty = 1;
 	}
