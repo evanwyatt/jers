@@ -1,0 +1,12 @@
+JERS 1.1 release notes
+=======================
+
+JERS 1.1.3 - 2020-09-11
+================================================================================
+
+Bug fixes:
+- Fix bug where deleting and re-adding the same queue in a short time frame retains the old stats of the queue
+- Fix bug where a job going from PEND->EXIT causes a job slot on a queue to be held indefinitely
+
+New features / Changes:
+ - Add this RELEASENOTES file
