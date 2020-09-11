@@ -8,13 +8,13 @@
  *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation 
+ *    this list of conditions and the following disclaimer in the documentation
  *    and/or other materials provided with the distribution.
  *
  * 3. Neither the name of the copyright holder nor the names of its contributors may
  *    be used to endorse or promote products derived from this software without
  *    specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -22,7 +22,7 @@
  * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
  * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
@@ -333,12 +333,6 @@ int command_agent_jobcompleted(agent * a, msg_t * msg) {
 		return 1;
 	}
 
-	if (j->internal_state & JERS_FLAG_JOB_STARTED) {
-		/* Job failed to start correctly */
-		j->internal_state &= ~JERS_FLAG_JOB_STARTED;
-		print_msg(JERS_LOG_WARNING, "Got completion for job without start: %d", jobid);
-	}
-
 	if (j->res_count)
 		deallocateRes(j);
 
@@ -358,6 +352,12 @@ int command_agent_jobcompleted(agent * a, msg_t * msg) {
 	memcpy(&j->usage, &usage, sizeof(struct rusage));
 
 	changeJobState(j, j->exitcode ? JERS_JOB_EXITED : JERS_JOB_COMPLETED, NULL, 1);
+
+	if (j->internal_state & JERS_FLAG_JOB_STARTED) {
+		/* Job failed to start correctly */
+		j->internal_state &= ~JERS_FLAG_JOB_STARTED;
+		print_msg(JERS_LOG_WARNING, "Got completion (status:%d) for job without start: %d", j->exitcode, jobid);
+	}
 
 	if (exitcode)
 		server.stats.total.exited++;
@@ -383,7 +383,7 @@ int command_agent_proxyconn(agent *a, msg_t *msg) {
 	}
 
 	client *c = NULL;
-	
+
 	/* Check if we already had this client connected, if so remove the old client */
 	for (c = clientList; c; c = c->next) {
 		if (c->connection.proxy.pid == 0)
@@ -392,7 +392,7 @@ int command_agent_proxyconn(agent *a, msg_t *msg) {
 		if (c->connection.proxy.agent == a && c->connection.proxy.pid == pid)
 			break;
 	}
-	
+
 	if (c != NULL) {
 		print_msg(JERS_LOG_WARNING, "Had previous proxy client connected on agent %s pid:%d", ((agent *)c->connection.proxy.agent)->host, c->connection.proxy.pid);
 		buffFree(&c->response);
@@ -400,7 +400,7 @@ int command_agent_proxyconn(agent *a, msg_t *msg) {
 		removeClient(c);
 		free(c);
 	}
-	
+
 	c = calloc(sizeof(client), 1);
 
 	if (c == NULL)

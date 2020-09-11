@@ -1773,6 +1773,13 @@ static inline void increment_state(struct job *j) {
 		case JERS_JOB_EXITED:
 			server.stats.jobs.exited++;
 			j->queue->stats.exited++;
+
+			/* A job can go from pending -> exited if it failed to start */
+			if (j->internal_state &JERS_FLAG_JOB_STARTED) {
+				server.stats.jobs.start_pending--;
+				j->queue->stats.start_pending--;
+			}
+
 			break;
 
 		case JERS_JOB_UNKNOWN:

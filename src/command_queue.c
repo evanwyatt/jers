@@ -151,7 +151,7 @@ int command_add_queue(client * c, void * args) {
 			free(q->name);
 			free(q->desc);
 			free(q->host);
-			q->internal_state &= ~JERS_FLAG_DELETED;
+			memset(q, 0, sizeof(struct queue));
 		}
 	} else {
 		q = calloc(sizeof(struct queue), 1);
@@ -431,7 +431,7 @@ void free_get_queue(void * args, int status) {
 
 void free_mod_queue(void * args, int status) {
 	jersQueueMod * qm = args;
-	
+
 	if (status) {
 		free(qm->desc);
 		free(qm->node);
