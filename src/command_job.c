@@ -966,7 +966,7 @@ int command_sig_job(client * c, void * args) {
 
 	/* Validate the user has permission
 	 * We use a bogus ID if the job doesn't exist, just to check their permissions */
-	if (check_perm(c, j ? j->uid : 0, PERM_WRITE)) {
+	if (check_perm(c, j ? j->uid : 0, (js->signum == 0 ? PERM_READ : PERM_WRITE))) {
 		sendError(c, JERS_ERR_NOPERM, NULL);
 		return -1;
 	}
@@ -979,7 +979,7 @@ int command_sig_job(client * c, void * args) {
 	if (j->state != JERS_JOB_RUNNING) {
 		/* If the job state is unknown, we will set this job state to the signal provided
 		 * We also need to deallocate the resources assigned to this job */
-		if (j->state == JERS_JOB_UNKNOWN) {
+		if (j->state == JERS_JOB_UNKNOWN && js->signum != 0) {
 			j->state = JERS_JOB_EXITED;
 			j->pid = -1;
 			j->finish_time = time(NULL);
