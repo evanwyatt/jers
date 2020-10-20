@@ -8,13 +8,13 @@
  *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation 
+ *    this list of conditions and the following disclaimer in the documentation
  *    and/or other materials provided with the distribution.
  *
  * 3. Neither the name of the copyright holder nor the names of its contributors may
  *    be used to endorse or promote products derived from this software without
  *    specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -22,7 +22,7 @@
  * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
  * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
@@ -80,6 +80,7 @@
 #define ADOPT_SLEEP 2
 
 struct runningJob;
+struct jersJobSpawn;
 
 const char * getFailString(int);
 const char * getErrType(int jers_error);
@@ -88,7 +89,7 @@ void disconnectFromDaemon(void);
 int handleJobAdoptConnection(struct connectionType * connection);
 int handleJobAdoptRead(struct runningJob *j);
 
-void jersRunJob() __attribute__((noreturn));
+void jersRunJob(struct jersJobSpawn *j, struct timespec * start, int _socket) __attribute__((noreturn));
 
 char * server_log = "jers_agentd";
 int server_log_mode = JERS_LOG_DEBUG;
@@ -276,7 +277,7 @@ void loadConfig(char * config) {
 			print_msg(JERS_LOG_WARNING, "Skipping unknown line: %ld %s\n", strlen(line),line);
 			continue;
 		}
-	
+
 		if (strcmp(key, "daemon_socket") == 0) {
 			free(agent.daemon_socket_path);
 			agent.daemon_socket_path = strdup(value);
@@ -286,7 +287,7 @@ void loadConfig(char * config) {
 			agent.daemon_host = strdup(value);
 			if (agent.daemon_port == 0)
 				agent.daemon_port = DEFAULT_DAEMON_PORT;
-		} else if (strcmp(key, "default_tmpdir") == 0) { 
+		} else if (strcmp(key, "default_tmpdir") == 0) {
 			if (access(value, F_OK) != 0) {
 				print_msg(JERS_LOG_WARNING, "TMPDIR specified in configuration file does not exist: %s", value);
 				print_msg(JERS_LOG_WARNING, "Using default TMPDIR: %s", agent.tmpdir);
@@ -1345,7 +1346,7 @@ int recon_command(msg_t * m) {
 	msg_item * item = &m->items[0];
 
 	if (item != NULL) {
-		for (int i = 0; i < item->field_count; i++) { 
+		for (int i = 0; i < item->field_count; i++) {
 			switch(item->fields[i].number) {
 				case MSG_HMAC: hmac = getStringField(&item->fields[i]); break;
 				case DATETIME: datetime = getNumberField(&item->fields[i]); break;
@@ -1447,7 +1448,7 @@ int recon_command(msg_t * m) {
 	return 0;
 }
 
-/* Master daemon has acknowleged it has completed the recon 
+/* Master daemon has acknowleged it has completed the recon
  * We can now cleanup all the jobs that have completed. */
 
 int recon_complete(msg_t * m) {
@@ -1613,7 +1614,7 @@ void process_messages(void) {
 	if (agent.requests.used == 0)
 		return;
 
-	while (1) { 
+	while (1) {
 		char *nl = memchr(p, '\n', agent.requests.used - consumed);
 
 		if (nl == NULL)
@@ -1789,7 +1790,7 @@ void setupAdoptionSocket(void) {
 	if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1)
 		error_die("Failed to bind socket for job adoption socket: %s\n", strerror(errno));
 
-	if (listen(fd, 1024) == -1) 
+	if (listen(fd, 1024) == -1)
 		error_die("Failed to listen on socket for job adoption socket: %s\n", strerror(errno));
 
 	if (chmod(socket_path, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH) != 0)
@@ -1829,13 +1830,13 @@ void setupProxySocket(const char *path) {
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_UNIX;
 	strncpy(addr.sun_path, path, sizeof(addr.sun_path)-1);
-	
+
 	unlink(path);
 
 	if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1)
 		error_die("Failed to bind socket for proxy socket: %s\n", strerror(errno));
 
-	if (listen(fd, 1024) == -1) 
+	if (listen(fd, 1024) == -1)
 		error_die("Failed to listen on socket for proxy socket: %s\n", strerror(errno));
 
 	if (chmod(path, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH) != 0)

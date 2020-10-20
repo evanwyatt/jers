@@ -43,6 +43,7 @@
 #include <fields.h>
 #include <buffer.h>
 #include <commands.h>
+#include <jers_assert.h>
 
 #define JERS_EXPORT __attribute__((visibility("default")))
 

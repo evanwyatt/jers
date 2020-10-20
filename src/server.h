@@ -54,6 +54,8 @@
 #include <acct.h>
 #include <tags.h>
 
+#include <jers_assert.h>
+
 #define UNUSED(x) (void)(x)
 
 #define UNLIMITED_JOBS -1
