@@ -624,8 +624,8 @@ int command_get_job(client *c, void * args) {
 			for (int i = 0; i < s->filters.tag_count; i++) {
 				if (strcmp(server.index_tag, s->filters.tags[i].key) == 0) {
 					/* Only attempt to use it if it's not wildcarded */
-					if (strchr(s->filters.tags[i].key, '*') == NULL && strchr(s->filters.tags[i].key, '?') == NULL) {
-						HASH_FIND_STR(server.index_tag_table, s->filters.tags[i].key, it);
+					if (strchr(s->filters.tags[i].value, '*') == NULL && strchr(s->filters.tags[i].value, '?') == NULL) {
+						HASH_FIND_STR(server.index_tag_table, s->filters.tags[i].value, it);
 						indexed_tag_index = i;
 					}
 
