@@ -261,7 +261,7 @@ static int _sendMessage(struct connectionType *connection, buff_t *b, buff_t *me
 
 		JSONAddInt(&forward, PID, connection->proxy.pid);
 		JSONAddString(&forward, PROXYDATA, message->data);
-	
+
 		sendAgentMessage(a, &forward);
 
 	} else {
@@ -303,13 +303,25 @@ void sendError(client *c, int error, const char *err_msg) {
 	_sendMessage(&c->connection, &c->response, &response);
 }
 
+void sendErrorFmt(client *c, int error, const char *fmt, ...) {
+	char string[1024];
+
+	/* Expand the message */
+	va_list args;
+	va_start(args, fmt);
+	vsnprintf(string, sizeof(string), fmt, args);
+	va_end(args);
+
+	sendError(c, error, string);
+}
+
 int sendClientReturnCode(client *c, jers_object *obj, const char *ret) {
 	buff_t rc;
 
 	if (c == NULL) {
 		if (server.recovery.in_progress)
 			return 0;
-		
+
 		print_msg(JERS_LOG_WARNING, "Trying to send a return code, but no client provided");
 		return 1;
 	}
@@ -399,7 +411,7 @@ void replayCommand(msg_t * msg) {
 			}
 		}
 	}
-	
+
 	return;
 }
 

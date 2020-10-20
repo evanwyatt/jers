@@ -34,6 +34,7 @@ int sendClientReturnCode(client *c, jers_object * obj, const char *ret);
 int sendClientMessage(client *c, jers_object *obj, buff_t *b);
 void sendAgentMessage(agent * a, buff_t *b);
 void sendError(client * c, int error, const char * msg);
+void sendErrorFmt(client *c, int error, const char *fmt, ...) __attribute__((format(printf,3,4)));
 
 int initClientResponse(buff_t *b, int version);
 

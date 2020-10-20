@@ -424,7 +424,7 @@ int command_add_job(client *c, void *args) {
 		q = findQueue(s->queue);
 
 		if (q == NULL || q->internal_state &JERS_FLAG_DELETED) {
-			sendError(c, JERS_ERR_NOQUEUE, NULL);
+			sendErrorFmt(c, JERS_ERR_NOQUEUE, "Queue '%s' not found", s->queue);
 			return -1;
 		}
 
