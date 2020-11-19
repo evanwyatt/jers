@@ -90,30 +90,31 @@ typedef uint32_t jobid_t;
 #define JERS_FILTER_BEFORE    0x0200
 #define JERS_FILTER_AFTER     0x0400
 
-#define JERS_RET_JOBID      0x01
-#define JERS_RET_QUEUE      0x02
-#define JERS_RET_NAME       0x04
-#define JERS_RET_STATE      0x08
+#define JERS_RET_JOBID		0x01
+#define JERS_RET_QUEUE		0x02
+#define JERS_RET_NAME		0x04
+#define JERS_RET_STATE		0x08
 
-#define JERS_RET_UID        0x20
-#define JERS_RET_STDOUT     0x40
-#define JERS_RET_STDERR     0x80
-#define JERS_RET_TAGS       0x0100
-#define JERS_RET_RESOURCES  0x0200
-#define JERS_RET_PRIORITY   0x0400
-#define JERS_RET_SUBMITTIME 0x0800
-#define JERS_RET_DEFERTIME  0x1000
-#define JERS_RET_STARTTIME  0x2000
-#define JERS_RET_FINISHTIME 0x4000
-#define JERS_RET_NICE       0x008000
-#define JERS_RET_PRECMD     0x010000
-#define JERS_RET_POSTCMD    0x020000
-#define JERS_RET_ARGS       0x040000
-#define JERS_RET_SHELL      0x080000
-#define JERS_RET_NODE       0x100000
-#define JERS_RET_SUBMITTER  0x200000
-#define JERS_RET_PID        0x400000
-#define JERS_RET_REVISON    0x800000
+#define JERS_RET_UID		0x20
+#define JERS_RET_STDOUT		0x40
+#define JERS_RET_STDERR		0x80
+#define JERS_RET_TAGS		0x0100
+#define JERS_RET_RESOURCES	0x0200
+#define JERS_RET_PRIORITY	0x0400
+#define JERS_RET_SUBMITTIME	0x0800
+#define JERS_RET_DEFERTIME	0x1000
+#define JERS_RET_STARTTIME	0x2000
+#define JERS_RET_FINISHTIME	0x4000
+#define JERS_RET_NICE		0x008000
+#define JERS_RET_PRECMD		0x010000
+#define JERS_RET_POSTCMD	0x020000
+#define JERS_RET_ARGS		0x040000
+#define JERS_RET_SHELL		0x080000
+#define JERS_RET_NODE		0x100000
+#define JERS_RET_SUBMITTER	0x200000
+#define JERS_RET_PID		0x400000
+#define JERS_RET_REVISON	0x800000
+#define JERS_RET_ENV		0x10000000
 
 #define JERS_RET_ALL        0x7FFFFFFFFFFFFFFF
 
@@ -304,7 +305,10 @@ typedef struct {
 
 	int64_t revision;
 
-	char filler[68];
+	int env_count;
+	char **envs;
+
+	char filler[56];
 } jersJob;
 
 typedef struct {

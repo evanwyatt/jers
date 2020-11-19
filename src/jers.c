@@ -373,7 +373,7 @@ static void print_job(jersJob *j, int all) {
 			printf("Tags\n");
 			for (int k = 0; k < j->tag_count; k++) {
 				printf("Tag[%d] %s%s%s\n", k, j->tags[k].key, j->tags[k].value ? "=":"", j->tags[k].value ? j->tags[k].value : "");
-			} 
+			}
 		}
 
 		printf("Arguments:");
@@ -386,6 +386,11 @@ static void print_job(jersJob *j, int all) {
 		}
 
 		printf("\n");
+
+		if (j->env_count) {
+			for (int i = 0; i < j->env_count; i++)
+				printf("Env[%d]: %s\n", i, j->envs[i]);
+		}
 
 		if (j->pend_reason)
 			printf("Pend Reason: %s\n", jersGetPendStr(j->pend_reason));
@@ -415,7 +420,7 @@ static void print_job(jersJob *j, int all) {
 			first = 0;
 		}
 
-		printf("%9d %-12s %-16s %-10.10s %s\n", 
+		printf("%9d %-12s %-16s %-10.10s %s\n",
 			j->jobid, j->queue, j->jobname,
 			getUser(j->uid), print_state(j));
 	}
@@ -607,7 +612,7 @@ int start_job(int argc, char *argv[]) {
 
 		if (args.restart)
 			mod_request.restart = 1;
-		
+
 		if (jersModJob(&mod_request) != 0) {
 			fprintf(stderr, "Failed to start Job %d: %s\n", args.jobids[i], jersGetErrStr(jers_errno));
 			rc = 1;

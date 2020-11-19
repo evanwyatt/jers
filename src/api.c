@@ -71,7 +71,7 @@ static int jersConnect(void);
 static void setJersErrno(int err, char * msg) {
 	int saved_errno = errno;
 	jers_errno = err;
-	
+
 	free(jers_err_string);
 	jers_err_string = NULL;
 
@@ -333,6 +333,11 @@ JERS_EXPORT void jersFreeJobInfo (jersJobInfo * info) {
 			free(job->resources[j]);
 
 		free(job->resources);
+
+		for (j = 0; j < job->env_count; j++)
+			free(job->envs[j]);
+
+		free(job->envs);
 	}
 
 	free(info->jobs);
@@ -398,10 +403,8 @@ static int deserialize_jersAgent(msg_item * item, jersAgent *a) {
 }
 
 static int deserialize_jersJob(msg_item * item, jersJob *j) {
-	int i;
-
-	for (i = 0; i < item->field_count; i++) {
-		switch(item->fields[i].number) {
+	for (int i = 0; i < item->field_count; i++) {
+		switch((enum field_type)item->fields[i].number) {
 			case JOBID     : j->jobid = getNumberField(&item->fields[i]); break;
 			case JOBNAME   : j->jobname = getStringField(&item->fields[i]); break;
 			case QUEUENAME : j->queue = getStringField(&item->fields[i]); break;
@@ -429,6 +432,7 @@ static int deserialize_jersJob(msg_item * item, jersJob *j) {
 			case FAILREASON: j->fail_reason = getNumberField(&item->fields[i]); break;
 			case JOBPID    : j->pid = getNumberField(&item->fields[i]); break;
 			case REVISION  : j->revision = getNumberField(&item->fields[i]); break;
+			case ENVS      : j->env_count = getStringArrayField(&item->fields[i], &j->envs); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",item->fields[i].name); break;
 		}
@@ -797,7 +801,7 @@ JERS_EXPORT void jersInitQueueAdd(jersQueueAdd *q) {
 /* Note: filter is currently not used for queues */
 
 JERS_EXPORT int jersGetQueue(const char * name, const jersQueueFilter * filter, jersQueueInfo * info) {
-	if (jersInitAPI(NULL)) 
+	if (jersInitAPI(NULL))
 		return 0;
 
 	(void) filter;
@@ -984,7 +988,7 @@ JERS_EXPORT int jersAddResource(const char *name, int count) {
 	}
 
 	buff_t b;
-	
+
 	initRequest(&b, CMD_ADD_RESOURCE, 1);
 
 	JSONAddString(&b, RESNAME, name);

@@ -27,6 +27,7 @@ static struct argp_option add_job_options[] = {
 	{"resource", 'r', "resource:count", 0, "Resource needed for job. Example 'software_licence:1' - Can be specified multiple times"},
 	{"user", 'u', "username", 0, "User to submit job under"},
 	{"jobid", 'i', "jobid", 0, "JobID to submit job as"},
+	{"env", 'E', "name=value", 0, "Environment variable to add to job"},
 	{0}};
 
 static int getUID(const char *username, uid_t *uid) {
@@ -45,7 +46,7 @@ static time_t getDeferTime(const char *_time) {
 	time_t t = 0;
 	struct tm tm = {0};
 	time_t now = time(NULL);
-	
+
 
 	if (_time[0] == '@')
 		return atol(&_time[1]);
@@ -62,7 +63,7 @@ static time_t getDeferTime(const char *_time) {
 
 		if (sscanf(_time, "%d-%d-%d", &year, &month, &day) != 3)
 			return -1;
-		
+
 		tm.tm_year = year - 1900;
 		tm.tm_mon = month - 1;
 		tm.tm_mday = day;
@@ -94,7 +95,7 @@ static int getSignal(const char *str) {
 static int addResource(char *** res, int64_t * count, char *resource) {
 	/* Expand the array to hold the resources */
 	*res = realloc(*res, sizeof(char *) * (*count + 1));
- 	*res[*count] = resource;
+	(*res)[*count] = resource;
 	(*count)++;
 	return 0;
 }
@@ -111,6 +112,14 @@ static int addTag(jers_tag_t **tags, int64_t *count, char *tag) {
 	*tags = realloc(*tags, sizeof(jers_tag_t) * (*count + 1));
 	(*tags[*count]).key = key;
 	(*tags[*count]).value = value;
+	(*count)++;
+	return 0;
+}
+
+static int addEnv(char ***envs, int64_t *count, char *env) {
+	/* Expand the array to hold the variables */
+	*envs = realloc(*envs, sizeof(char *) * (*count + 1));
+	(*envs)[*count] = env;
 	(*count)++;
 	return 0;
 }
@@ -182,6 +191,13 @@ static error_t add_job_parse(int key, char *arg, struct argp_state *state)
 		case 't':
 			if (addTag(&arguments->add.tags, &arguments->add.tag_count, arg) != 0) {
 				fprintf(stderr, "Failed to add tag '%s' to job.", arg);
+				return EINVAL;
+			}
+			break;
+
+		case 'E':
+			if (addEnv(&arguments->add.envs, &arguments->add.env_count, arg) != 0) {
+				fprintf(stderr, "Failed to add env '%s' to job.", arg);
 				return EINVAL;
 			}
 			break;

@@ -330,16 +330,18 @@ void serialize_jersJob(buff_t *b, struct job *j, int fields) {
 		JSONAddString(b, PRECMD, j->post_cmd);
 
 	if (j->res_count && (fields == 0 || fields & JERS_RET_RESOURCES)) {
-			int i;
-			char ** res_strings = convertResourceToStrings(j->res_count, j->req_resources);
-			JSONAddStringArray(b, RESOURCES, j->res_count, res_strings);
+		char ** res_strings = convertResourceToStrings(j->res_count, j->req_resources);
+		JSONAddStringArray(b, RESOURCES, j->res_count, res_strings);
 
-			for (i = 0; i < j->res_count; i++) {
-				free(res_strings[i]);
-			}
+		for (int i = 0; i < j->res_count; i++) {
+			free(res_strings[i]);
+		}
 
-			free(res_strings);
+		free(res_strings);
 	}
+
+	if (j->env_count && (fields == 0 || fields & JERS_RET_ENV))
+		JSONAddStringArray(b, ENVS, j->env_count, j->envs);
 
 	if (j->pid && (fields == 0 || fields & JERS_RET_PID))
 		JSONAddInt(b, JOBPID, j->pid);
