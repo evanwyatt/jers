@@ -552,6 +552,7 @@ JERS_EXPORT void jersInitJobAdd(jersJobAdd * j) {
 	memset(j, 0, sizeof(jersJobAdd));
 	j->priority = UNSET_32;
 	j->defer_time = -1;
+	j->env_count = UNSET_64;
 }
 
 JERS_EXPORT jobid_t jersAddJob(const jersJobAdd * j) {
@@ -608,7 +609,7 @@ JERS_EXPORT jobid_t jersAddJob(const jersJobAdd * j) {
 	if (j->res_count)
 		JSONAddStringArray(&b, RESOURCES, j->res_count, j->resources);
 
-	if (j->env_count)
+	if (j->env_count != UNSET_64)
 		JSONAddStringArray(&b, ENVS, j->env_count, j->envs);
 
 	if (j->jobid)
@@ -657,6 +658,7 @@ JERS_EXPORT void jersInitJobMod(jersJobMod *j) {
 	j->hold = UNSET_8;
 	j->priority = UNSET_32;
 	j->defer_time = UNSET_TIME_T;
+	j->env_count = UNSET_64;
 }
 
 JERS_EXPORT int jersModJob(const jersJobMod *j) {
@@ -694,7 +696,7 @@ JERS_EXPORT int jersModJob(const jersJobMod *j) {
 	if (j->hold != UNSET_8)
 		JSONAddBool(&b, HOLD, j->hold);
 
-	if (j->env_count)
+	if (j->env_count != UNSET_64)
 		JSONAddStringArray(&b, ENVS, j->env_count, j->envs);
 
 	if (j->tag_count)

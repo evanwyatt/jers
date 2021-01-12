@@ -154,6 +154,7 @@ void * deserialize_mod_job(msg_t * t) {
 	jm->nice = UNSET_32;
 	jm->priority = UNSET_32;
 	jm->defer_time = UNSET_TIME_T;
+	jm->env_count = UNSET_64;
 
 	for (int i = 0; i < item->field_count; i++) {
 		switch(item->fields[i].number) {
@@ -864,7 +865,7 @@ int command_mod_job(client *c, void *args) {
 		dirty = 1;
 	}
 
-	if (mj->env_count) {
+	if (mj->env_count != UNSET_64) {
 		if (j->env_count)
 			freeStringArray(j->env_count, &j->envs);
 
