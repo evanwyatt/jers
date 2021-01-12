@@ -1,6 +1,26 @@
 JERS 1.1 release notes
 =======================
 
+JERS 1.1.5 - 2021-01-12
+================================================================================
+
+Bug fixes:
+- Fix initialisation of env_count variables
+
+JERS 1.1.4 - 2020-11-19
+================================================================================
+
+Bug fixes:
+- Fix bug where indexed tags are incorrectly looked up
+- Fix permission problem when checking a job via signal0, now only requires read access
+- Fix restarting of unknown jobs
+
+New features / Changes:
+- Add compile time asserts for external structures
+- Added extra compiler warning flags
+- Add ability to return custom error messages via API
+- Return details of environment variables and allow setting/changing via Add/Mod
+
 JERS 1.1.3 - 2020-09-11
 ================================================================================
 
