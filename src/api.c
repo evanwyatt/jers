@@ -634,6 +634,9 @@ JERS_EXPORT jobid_t jersAddJob(const jersJobAdd * j) {
 	if (j->defer_time != -1)
 		JSONAddInt(&b, DEFERTIME, j->defer_time);
 
+	if (j->flags)
+		JSONAddInt(&b, FLAGS, j->flags);
+
 	if (sendRequest(&b))
 		return 0;
 

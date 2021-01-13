@@ -101,7 +101,8 @@ void * deserialize_add_job(msg_t * t) {
 			case STDOUT   : s->stdout = getStringField(&t->items[0].fields[i]); break;
 			case STDERR   : s->stderr = getStringField(&t->items[0].fields[i]); break;
 			case WRAPPER  : s->wrapper = getStringField(&t->items[0].fields[i]); break;
-			case NICE     : s->nice =  getNumberField(&t->items[0].fields[i]); break;
+			case NICE     : s->nice = getNumberField(&t->items[0].fields[i]); break;
+			case FLAGS    : s->flags = getNumberField(&t->items[0].fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field %s encountered - Ignoring\n",t->items[0].fields[i].name); break;
 		}
@@ -524,6 +525,7 @@ int command_add_job(client *c, void *args) {
 	j->nice = s->nice;
 	j->tag_count = s->tag_count;
 	j->tags = (key_val_t *)s->tags;
+	j->flags = s->flags;
 
 	if (resources) {
 		j->res_count = s->res_count;

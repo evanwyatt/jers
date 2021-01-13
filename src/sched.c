@@ -8,13 +8,13 @@
  *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation 
+ *    this list of conditions and the following disclaimer in the documentation
  *    and/or other materials provided with the distribution.
  *
  * 3. Neither the name of the copyright holder nor the names of its contributors may
  *    be used to endorse or promote products derived from this software without
  *    specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -22,7 +22,7 @@
  * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
  * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
@@ -77,7 +77,7 @@ void sendStartCmd(struct job * j) {
 	else if (j->queue->nice != UNSET_32)
 		JSONAddInt(&b, NICE, j->queue->nice);
 	else
-		JSONAddInt(&b, NICE, server.default_job_nice);	
+		JSONAddInt(&b, NICE, server.default_job_nice);
 
 	if (j->shell)
 		JSONAddString(&b, SHELL, j->shell);
@@ -109,6 +109,9 @@ void sendStartCmd(struct job * j) {
 
 		free(resources);
 	}
+
+	if (j->flags)
+		JSONAddInt(&b, FLAGS, j->flags);
 
 	sendAgentMessage(j->queue->agent, &b);
 	return;
@@ -148,7 +151,7 @@ int64_t generateCandidatePool(void) {
 	print_msg(JERS_LOG_DEBUG, "Regenerating job candidate pool");
 
 	/* Assume we will need to add every non-completed job into this pool at some point.
-	 * We add some additional room so we don't need to realloc constantly */ 
+	 * We add some additional room so we don't need to realloc constantly */
 
 	if (server.candidate_pool_size < total_job_count) {
 		server.candidate_pool_size = total_job_count * 1.5;

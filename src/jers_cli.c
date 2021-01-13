@@ -21,13 +21,14 @@ static struct argp_option add_job_options[] = {
 	{"queue", 'q', "queue_name", 0, "Queue to submit job on"},
 	{"hold", 'h', 0, 0, "Submit job on hold"},
 	{"nice", 'N', "nice", 0, "Nice level of job"},
-	{"priority", 'p', "priorty", 0, "Priority of job"},
+	{"priority", 'p', "priority", 0, "Priority of job"},
 	{"defer", 'd', "defer_time", 0, "Defer job until at least this time. Expected formats: '[yyyy-mm-dd] HH:MM[:SS]' or '@seconds_since_epoch'"},
 	{"tag", 't', "key=value", 0, "Tag to add to job. Example 'type=type1' - Can be specified multiple times"},
 	{"resource", 'r', "resource:count", 0, "Resource needed for job. Example 'software_licence:1' - Can be specified multiple times"},
 	{"user", 'u', "username", 0, "User to submit job under"},
 	{"jobid", 'i', "jobid", 0, "JobID to submit job as"},
 	{"env", 'E', "name=value", 0, "Environment variable to add to job"},
+	{"preamble", 'P', 0, 0, "Add a preamble to stdout when the job starts executing"},
 	{0}};
 
 static int getUID(const char *username, uid_t *uid) {
@@ -148,6 +149,10 @@ static error_t add_job_parse(int key, char *arg, struct argp_state *state)
 
 		case 'n':
 			arguments->add.name = arg;
+			break;
+
+		case 'P':
+			arguments->add.flags |= JERS_JOBADD_PREAMBLE;
 			break;
 
 		case 'N':
