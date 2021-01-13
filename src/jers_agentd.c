@@ -181,6 +181,7 @@ struct jersJobSpawn {
 
 	uid_t uid;
 	int nice;
+	int64_t flags;
 
 	int64_t argc;
 	char ** argv;
@@ -604,6 +605,21 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int _socket) {
 			launch_status = JERS_FAIL_INIT;
 			goto launch_cleanup;
 		}
+	}
+
+	/* Write the preamble if needed */
+	if ((j->flags &JERS_JOBADD_PREAMBLE)) {
+		char host[256];
+		gethostname(host, sizeof(host) - 1);
+		host[sizeof(host) - 1] = '\0';
+
+		dprintf(stdout_fd, "========= Job Starting ========\n");
+		dprintf(stdout_fd, " Job ID       : %d\n", j->jobid);
+		dprintf(stdout_fd, " Queue        : %s\n", j->queue);
+		dprintf(stdout_fd, " Hostname     : %s\n", host);
+		dprintf(stdout_fd, " UID          : %d (%s)\n", j->u->uid, j->u->username);
+		dprintf(stdout_fd, " Start time   : %s\n", print_time(start, 0));
+		dprintf(stdout_fd, "===============================\n");
 	}
 
 	/* Fork & exec the job */
@@ -1239,6 +1255,7 @@ int start_command(msg_t * m) {
 			case STDERR   : j.stderr = getStringField(&item->fields[i]); break;
 			case WRAPPER  : j.wrapper = getStringField(&item->fields[i]) ; break;
 			case RESOURCES: j.res_count = getStringArrayField(&item->fields[i], &j.resources); break;
+			case FLAGS    : j.flags = getNumberField(&item->fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", item->fields[i].name); break;
 		}

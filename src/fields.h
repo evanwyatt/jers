@@ -188,6 +188,8 @@ enum field_type {
 	COMMAND,
 	TIMESTAMP,
 
+	FLAGS,
+
 	ENDOFFIELDS
 };
 

@@ -160,6 +160,8 @@ struct job {
 	char * stdout;
 	char * stderr;
 
+	int64_t flags;
+
 	/* Command to run */
 	int argc;
 	char ** argv;

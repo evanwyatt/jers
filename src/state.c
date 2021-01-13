@@ -649,6 +649,9 @@ int stateSaveJob(struct job * j) {
 	if (j->signal)
 		fprintf(f,"SIGNAL %d\n", j->signal);
 
+	if (j->flags)
+		fprintf(f,"FLAGS %ld\n", j->flags);
+
 	/* Usage */
 	if (j->finish_time) {
 		fprintf(f, "USAGE_UTIME_SEC %ld\n", j->usage.ru_utime.tv_sec);
@@ -1369,6 +1372,8 @@ struct job * stateLoadJob(const char * fileName) {
 			j->exitcode = atoi(value);
 		} else if (strcmp(key, "SIGNAL") == 0) {
 			j->signal = atoi(value);
+		} else if (strcmp(key, "FLAGS") == 0) {
+			j->flags = atol(value);
 		} else if (strcmp(key, "REVISION") == 0) {
 			j->obj.revision = atol(value);
 		} else if (strcmp(key, "USAGE_UTIME_SEC") == 0) {
