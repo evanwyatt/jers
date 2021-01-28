@@ -844,6 +844,12 @@ int listAdd(struct item_list *list, void *item) {
 	return 0;
 }
 
+void listFree(struct item_list *list) {
+	free(list->items);
+	memset(list, 0, sizeof(struct item_list));
+	return;
+}
+
 void listSort(struct item_list *list, int (*compar)(const void *, const void *, void *), void *arg) {
 	qsort_r(list->items, list->count, list->item_size, compar, arg);
 }

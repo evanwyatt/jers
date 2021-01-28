@@ -25,7 +25,7 @@ int list_test_insert(void) {
 			return 1;
 		}
 
-		check++;	
+		check++;
 	}
 
 	/* Sort it backwards and check again */
@@ -39,6 +39,8 @@ int list_test_insert(void) {
 		}
 		check--;
 	}
+
+	listFree(&list);
 
 	return 0;
 }

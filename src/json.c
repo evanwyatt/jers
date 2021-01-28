@@ -8,13 +8,13 @@
  *    this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation 
+ *    this list of conditions and the following disclaimer in the documentation
  *    and/or other materials provided with the distribution.
  *
  * 3. Neither the name of the copyright holder nor the names of its contributors may
  *    be used to endorse or promote products derived from this software without
  *    specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -22,7 +22,7 @@
  * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
  * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
@@ -156,9 +156,6 @@ int JSONAddStringArray(buff_t *buff, int field_no, int64_t count, char **values)
 	const char *field_name = getFieldName(field_no, &name_len);
 	size_t required = name_len + 6;
 	size_t value_lengths[count];
-
-	if (count == 0)
-		return 0;
 
 	for (int64_t i = 0; i < count; i++) {
 		value_lengths[i] = strlen(values[i]);
@@ -573,7 +570,7 @@ int JSONGetBool(char **json, char *value) {
 
 int64_t JSONGetStringArray(char **json, char ***strings) {
 	int64_t count = 0;
-	int64_t max_strings = 8;
+	int64_t max_strings = 0;
 	char *pos = *json;
 	char *str;
 
@@ -585,15 +582,12 @@ int64_t JSONGetStringArray(char **json, char ***strings) {
 
 	pos++; /* Consume the '[' */
 
-	*strings = malloc(sizeof(char *) * max_strings);
-
-	if (*strings == NULL)
-		return -1;
+	*strings = NULL;
 
 	while (JSONGetString(&pos, &str) == 0) {
 		/* Resize if needed */
 		if (count >= max_strings) {
-			*strings = realloc(*strings, sizeof(char *) * (max_strings *= 2));
+			*strings = realloc(*strings, sizeof(char *) * ( max_strings == 0 ? (max_strings = 8) : (max_strings *= 2)));
 
 			if (*strings == NULL)
 				return -1;
@@ -611,8 +605,11 @@ int64_t JSONGetStringArray(char **json, char ***strings) {
 			pos++;
 	}
 
-	if (*pos != ']')
+	if (*pos != ']') {
+		free(*strings);
+		*strings = NULL;
 		return -1;
+	}
 
 	pos++; /* Consume the ']' */
 	*json = pos;
@@ -625,7 +622,7 @@ int64_t JSONGetMap(char **json, key_val_t **map) {
 	char *pos = *json;
 	char *name;
 	int64_t count = 0;
-	int64_t max_keys = 8;
+	int64_t max_keys = 0;
 
 	/* A Map is object with key/values */
 	map_object = JSONGetObject(&pos);
@@ -633,11 +630,7 @@ int64_t JSONGetMap(char **json, key_val_t **map) {
 	if (map_object == NULL)
 		return -1;
 
-	/* Guess about how many object we will have */
-	*map = malloc(sizeof(key_val_t) * max_keys);
-
-	if (*map == NULL)
-		return -1;
+	*map = NULL;
 
 	while ((name = JSONGetName(&map_object)) != NULL) {
 		char *value;
@@ -646,7 +639,7 @@ int64_t JSONGetMap(char **json, key_val_t **map) {
 			return -1;
 
 		if (count >= max_keys) {
-			*map = realloc(*map, sizeof(key_val_t) * (max_keys *= 2));
+			*map = realloc(*map, sizeof(key_val_t) * (max_keys == 0 ? (max_keys = 8) : (max_keys *= 2)));
 
 			if (*map == NULL)
 				return -1;
