@@ -1,6 +1,19 @@
 JERS 1.1 release notes
 =======================
 
+JERS 1.1.6 - 2021-01-28
+================================================================================
+
+Bug fixes:
+- Fix memory leaks in various test routines
+
+New features / Changes:
+- Allow empty JSON arrays/objects in requests/responses
+- Use empty arrays/object to signify clearing of env vars/tags/resources
+- Add comment to state files signifying what object type/name the file is, ie JOB/QUEUE/RESOURCE
+- Allow flags to be passed to a job on submission
+- New flag to add a 'preamble' to a batch job, this contains information such as the jobid/queue/host/user/start time.
+
 JERS 1.1.5 - 2021-01-12
 ================================================================================
 
