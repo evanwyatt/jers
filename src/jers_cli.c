@@ -95,6 +95,9 @@ static int getSignal(const char *str) {
 
 static int addResource(char *** res, int64_t * count, char *resource) {
 	/* Expand the array to hold the resources */
+	if (*count < 0)
+		*count = 0;
+
 	*res = realloc(*res, sizeof(char *) * (*count + 1));
 	(*res)[*count] = resource;
 	(*count)++;
@@ -110,6 +113,9 @@ static int addTag(jers_tag_t **tags, int64_t *count, char *tag) {
 		value++;
 	}
 
+	if (*count < 0)
+		*count = 0;
+
 	*tags = realloc(*tags, sizeof(jers_tag_t) * (*count + 1));
 	(*tags[*count]).key = key;
 	(*tags[*count]).value = value;
@@ -119,6 +125,9 @@ static int addTag(jers_tag_t **tags, int64_t *count, char *tag) {
 
 static int addEnv(char ***envs, int64_t *count, char *env) {
 	/* Expand the array to hold the variables */
+	if (*count < 0)
+		*count = 0;
+
 	*envs = realloc(*envs, sizeof(char *) * (*count + 1));
 	(*envs)[*count] = env;
 	(*count)++;

@@ -156,6 +156,8 @@ void * deserialize_mod_job(msg_t * t) {
 	jm->priority = UNSET_32;
 	jm->defer_time = UNSET_TIME_T;
 	jm->env_count = UNSET_64;
+	jm->res_count = UNSET_64;
+	jm->tag_count = UNSET_64;
 
 	for (int i = 0; i < item->field_count; i++) {
 		switch(item->fields[i].number) {
@@ -872,10 +874,10 @@ int command_mod_job(client *c, void *args) {
 			freeStringArray(j->env_count, &j->envs);
 
 		j->env_count = mj->env_count;
-		j->envs = mj->envs;;
+		j->envs = mj->envs;
 	}
 
-	if (mj->tag_count) {
+	if (mj->tag_count != UNSET_64) {
 		if (j->tag_count)
 			freeStringMap(j->tag_count, &j->tags);
 
@@ -883,14 +885,21 @@ int command_mod_job(client *c, void *args) {
 		j->tags = (key_val_t *)mj->tags;
 	}
 
-	if (new_resources) {
-		if (j->res_count)
+	if (mj->res_count != UNSET_64) {
+		if (j->res_count) {
 			free(j->req_resources);
+			j->req_resources = NULL;
+			j->res_count = 0;
 
-		j->req_resources = new_resources;
-		j->res_count = mj->res_count;
+			dirty = 1;
+		}
 
-		dirty = 1;
+		if (new_resources) {
+			j->req_resources = new_resources;
+			j->res_count = mj->res_count;
+
+			dirty = 1;
+		}
 	}
 
 	if (mj->clear_resources) {
