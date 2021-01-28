@@ -573,6 +573,7 @@ int stateSaveJob(struct job * j) {
 		}
 	}
 
+	fprintf(f, "# JOB %u\n", j->jobid);
 	fprintf(f, "# SAVETIME %ld\n", time(NULL));
 	fprintf(f, "REVISION %ld\n", j->obj.revision);
 
@@ -702,6 +703,7 @@ int stateSaveQueue(struct queue * q) {
 		return 1;
 	}
 
+	fprintf(f, "# QUEUE %s\n", q->name);
 	fprintf(f, "# SAVETIME %ld\n", time(NULL));
 
 	if (q->desc)
@@ -763,6 +765,7 @@ int stateSaveResource(struct resource * r) {
 		return 1;
 	}
 
+	fprintf(f, "# RESOURCE %s\n", r->name);
 	fprintf(f, "# SAVETIME %ld\n", time(NULL));
 
 	fprintf(f, "COUNT %d\n", r->count);
