@@ -12,6 +12,7 @@ enum json_test_types {
 	JSON_STRING_ARRAY,
 	JSON_NUM,
 	JSON_BOOL,
+	JSON_MAP,
 };
 
 struct json_test {
@@ -26,6 +27,10 @@ struct json_test {
 			int64_t count;
 			char **strings;
 		} string_array;
+		struct {
+			int64_t count;
+			key_val_t *maps;
+		} map;
 
 	} expected;
 };
@@ -39,7 +44,9 @@ static int _test_json(struct json_test *t, char *json) {
 	int64_t num;
 	char bool;
 	int64_t array_count;
+	int64_t map_count;
 	char **array;
+	key_val_t *map;
 
 	for (int i = 0; t[i].test_type != JSON_END; i++) {
 		switch(t[i].test_type) {
@@ -122,6 +129,14 @@ static int _test_json(struct json_test *t, char *json) {
 					return 1;
 				}
 
+				if (array_count == 0) {
+					/* Check that an empty array does not return a pointer */
+					if (array != NULL) {
+						printf("Empty array returned a pointer\n");
+						return 1;
+					}
+				}
+
 				for (int64_t count = 0; count < array_count; count++) {
 					if (strcmp(array[count], t[i].expected.string_array.strings[count]) != 0) {
 						printf("Unexpected array value index %ld.\n", count);
@@ -129,6 +144,8 @@ static int _test_json(struct json_test *t, char *json) {
 						return 1;
 					}
 				}
+
+				free(array);
 
 				break;
 
@@ -170,6 +187,47 @@ static int _test_json(struct json_test *t, char *json) {
 					return 1;
 				}
 
+				break;
+
+			case JSON_MAP:
+				name = JSONGetName(&levels[depth]);
+				if (name == NULL || strcmp(name, t[i].name) != 0) {
+					printf("Unexpected value when getting the fieldname for a map.\n");
+					printf("Got: '%s' Expected: '%s'\n", name ? name : "NULL", t[i].name);
+					return 1;
+				}
+
+				if ((map_count = JSONGetMap(&levels[depth], &map)) != t[i].expected.map.count) {
+					printf("Unexpected array count when getting map.\n");
+					printf("Got: %ld Expected: %ld\n", map_count, t[i].expected.map.count);
+					return 1;
+				}
+
+				if (map_count == 0) {
+					/* Check that an empty map does not return a pointer */
+					if (map != NULL) {
+						printf("Empty map returned a pointer\n");
+						return 1;
+					}
+				}
+
+				for (int64_t count = 0; count < map_count; count++) {
+					/* Compare the key */
+					if (strcmp(map[count].key, t[i].expected.map.maps[count].key) != 0) {
+						printf("Unexpected map key count:%ld.\n", count);
+						printf("Got: '%s' Expected: '%s'\n", map[count].key, t[i].expected.map.maps[count].key);
+						return 1;
+					}
+
+					/* Compare the value */
+					if (strcmp(map[count].value, t[i].expected.map.maps[count].value) != 0) {
+						printf("Unexpected map value. count:%ld.\n", count);
+						printf("Got: '%s' Expected: '%s'\n", map[count].value, t[i].expected.map.maps[count].value);
+						return 1;
+					}
+				}
+
+				free(map);
 				break;
 		}
 	}
@@ -286,6 +344,23 @@ int test_json5(void) {
 	return status;
 }
 
+int test_json5_2(void) {
+	int status = 0;
+	buff_t b = {0};
+	char *expected = "{\"test_obj\":{\"ARGS\":[]}}\n";
+	size_t expected_len = strlen(expected);
+
+	JSONStart(&b);
+	JSONStartObject(&b, "test_obj", strlen("test_obj"));
+	JSONAddStringArray(&b, ARGS, 0, NULL);
+	JSONEndObject(&b);
+	JSONEnd(&b);
+
+	status = cmp_json(&b, expected, expected_len);
+	buffFree(&b);
+	return status;
+}
+
 int test_json6(void) {
 	int status = 0;
 	buff_t b = {0};
@@ -353,6 +428,23 @@ int test_json9(void) {
 	JSONStart(&b);
 	JSONStartObject(&b, "test_obj", strlen("test_obj"));
 	JSONAddMap(&b, TAGS, 2, tags);
+	JSONEndObject(&b);
+	JSONEnd(&b);
+
+	status = cmp_json(&b, expected, expected_len);
+	buffFree(&b);
+	return status;
+}
+
+int test_json9_2(void) {
+	int status = 0;
+	buff_t b = {0};
+	char *expected = "{\"test_obj\":{\"TAGS\":{}}}\n";
+	size_t expected_len = strlen(expected);
+
+	JSONStart(&b);
+	JSONStartObject(&b, "test_obj", strlen("test_obj"));
+	JSONAddMap(&b, TAGS, 0, NULL);
 	JSONEndObject(&b);
 	JSONEnd(&b);
 
@@ -507,6 +599,20 @@ int test_json19(void) {
 	return _test_json(_test, json);
 }
 
+int test_json19_2(void) {
+	char json[] = "{\"test_obj\":{\"ARGS\": []}}";
+
+	struct json_test _test[] = {
+		{JSON_OBJ},
+		{JSON_NAMED_OBJ, "test_obj"},
+		{JSON_STRING_ARRAY, "ARGS", {.string_array.count = 0, .string_array.strings = NULL}},
+		{JSON_END_OBJ},
+		{JSON_END}
+	};
+
+	return _test_json(_test, json);
+}
+
 int test_json20(void) {
 	char json[] = "{\"test_obj\":{\"ARGS\": [\"Hello\", \"\\\"W\\to\\tr\\tl\\td\\n\"]}}";
 	char *strings[] = {"Hello", "\"W\to\tr\tl\td\n"};
@@ -514,6 +620,40 @@ int test_json20(void) {
 		{JSON_OBJ},
 		{JSON_NAMED_OBJ, "test_obj"},
 		{JSON_STRING_ARRAY, "ARGS", {.string_array.count = 2, .string_array.strings = strings}},
+		{JSON_END_OBJ},
+		{JSON_END}
+	};
+
+	return _test_json(_test, json);
+}
+
+
+int test_json21(void) {
+	char json[] = "{\"test_obj\":{\"TAGS\": {\"Key1\": \"Value 1\", \"Key2\":\"Value 2\"}}}";
+	key_val_t map[] = {
+		{"Key1", "Value 1"},
+		{"Key2", "Value 2"},
+	};
+
+	struct json_test _test[] = {
+		{JSON_OBJ},
+		{JSON_NAMED_OBJ, "test_obj"},
+		{JSON_MAP, "TAGS", {.map.count = 2, .map.maps = map}},
+		{JSON_END_OBJ},
+		{JSON_END}
+	};
+
+	return _test_json(_test, json);
+}
+
+
+int test_json22(void) {
+	char json[] = "{\"test_obj\":{\"TAGS\": {}}}";
+
+	struct json_test _test[] = {
+		{JSON_OBJ},
+		{JSON_NAMED_OBJ, "test_obj"},
+		{JSON_MAP, "TAGS", {.map.count = 0, .map.maps = NULL}},
 		{JSON_END_OBJ},
 		{JSON_END}
 	};
@@ -733,7 +873,7 @@ int test_json_malformed_7(void) {
 	int64_t count;
 	char **array;
 
-	if ((count = JSONGetStringArray(&next_obj, &array)) == 2) {
+	if ((count = JSONGetStringArray(&next_obj, &array)) != -1) {
 		printf("Expected to not load the string array, but got %ld items\n", count);
 		for (int i  = 0; i < count; i++)
 			printf("[%d] %s\n", i, array[i]);
@@ -772,6 +912,7 @@ int test_msg_1(void) {
 	}
 
 	free_message(&loaded);
+	free_message(&expected);
 
 	return 0;
 }
@@ -802,6 +943,7 @@ int test_msg_2(void) {
 	}
 
 	free_message(&loaded);
+	free_message(&expected);
 
 	return 0;
 }
@@ -860,10 +1002,12 @@ void test_json(void) {
 	TEST("Create two JSON objects", test_json3());
 	TEST("Create JSON object with single field", test_json4());
 	TEST("Create JSON object with array", test_json5());
+	TEST("Create JSON object with empty array", test_json5_2());
 	TEST("Create JSON object with multiple fields", test_json6());
 	TEST("Create JSON object with string field requiring escaping", test_json7());
 	TEST("Create JSON object with string field requiring lots of escaping", test_json8());
 	TEST("Create JSON object with 'map' field", test_json9());
+	TEST("Create JSON object with empty 'map' field", test_json9_2());
 	TEST("Create JSON object with single fixed length string field", test_json10());
 	TEST("Create JSON object with null string field", test_json11());
 	TEST("Create JSON object with bool field", test_json12());
@@ -875,7 +1019,10 @@ void test_json(void) {
 	TEST("Load JSON object with null string", test_json17());
 	TEST("Load JSON object with bool fields", test_json18());
 	TEST("Load JSON object with string array", test_json19());
+	TEST("Load JSON object with empty string array", test_json19_2());
 	TEST("Load JSON object with string array escaping required", test_json20());
+	TEST("Load JSON object with map field", test_json21());
+	TEST("Load JSON object with empty map field", test_json22());
 
 	TEST("Load malformed JSON, no {}", test_json_malformed_1());
 	TEST("Load malformed JSON, missing quote", test_json_malformed_2());
