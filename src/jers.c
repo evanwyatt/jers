@@ -369,13 +369,6 @@ static void print_job(jersJob *j, int all) {
 		printf("Stdout: %s\n", j->stdout);
 		printf("Stderr: %s\n", j->stderr);
 
-		if (j->tag_count) {
-			printf("Tags\n");
-			for (int k = 0; k < j->tag_count; k++) {
-				printf("Tag[%d] %s%s%s\n", k, j->tags[k].key, j->tags[k].value ? "=":"", j->tags[k].value ? j->tags[k].value : "");
-			}
-		}
-
 		printf("Arguments:");
 
 		for (int k = 0; k < j->argc; k++) {
@@ -387,9 +380,21 @@ static void print_job(jersJob *j, int all) {
 
 		printf("\n");
 
+		if (j->tag_count) {
+			printf("Tags\n");
+			for (int k = 0; k < j->tag_count; k++) {
+				printf("Tag[%d] %s%s%s\n", k, j->tags[k].key, j->tags[k].value ? "=":"", j->tags[k].value ? j->tags[k].value : "");
+			}
+		}
+
 		if (j->env_count) {
 			for (int i = 0; i < j->env_count; i++)
 				printf("Env[%d]: %s\n", i, j->envs[i]);
+		}
+
+		if (j->res_count) {
+			for (int i = 0; i < j->res_count; i++)
+				printf("Res[%d]: %s\n", i, j->resources[i]);
 		}
 
 		if (j->pend_reason)

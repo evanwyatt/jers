@@ -662,6 +662,8 @@ JERS_EXPORT void jersInitJobMod(jersJobMod *j) {
 	j->priority = UNSET_32;
 	j->defer_time = UNSET_TIME_T;
 	j->env_count = UNSET_64;
+	j->tag_count = UNSET_64;
+	j->res_count = UNSET_64;
 }
 
 JERS_EXPORT int jersModJob(const jersJobMod *j) {
@@ -702,10 +704,10 @@ JERS_EXPORT int jersModJob(const jersJobMod *j) {
 	if (j->env_count != UNSET_64)
 		JSONAddStringArray(&b, ENVS, j->env_count, j->envs);
 
-	if (j->tag_count)
+	if (j->tag_count != UNSET_64)
 		JSONAddMap(&b, TAGS, j->tag_count, (key_val_t *)j->tags);
 
-	if (j->res_count)
+	if (j->res_count != UNSET_64)
 		JSONAddStringArray(&b, RESOURCES, j->res_count, j->resources);
 
 	if (j->clear_resources)
