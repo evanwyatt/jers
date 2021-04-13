@@ -131,6 +131,7 @@ typedef uint32_t jobid_t;
 
 /* Add Flags */
 #define JERS_JOBADD_PREAMBLE 0x0001 /* Add a preamble to the jobs stdout when it starts */
+#define JERS_JOBADD_SILENT   0x0002 /* Don't output any extra information to the stdout */
 
 /* An environment variable that contains an alert for the consumer
  * It's up to the consumer to clear this variable. Ie the API will only ever set this. */

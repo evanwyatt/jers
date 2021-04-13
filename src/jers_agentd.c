@@ -608,7 +608,7 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int _socket) {
 	}
 
 	/* Write the preamble if needed */
-	if ((j->flags &JERS_JOBADD_PREAMBLE)) {
+	if ((j->flags &JERS_JOBADD_PREAMBLE) && (j->flags &JERS_JOBADD_SILENT) == 0) {
 		char host[256];
 		gethostname(host, sizeof(host) - 1);
 		host[sizeof(host) - 1] = '\0';
@@ -771,22 +771,24 @@ spawn_exit:
 
 	/* Write a summary to the log file and flush it to disk
 	 * This output should be kept to 10 lines so tail works nicely */
-	lseek(stdout_fd, 0, SEEK_END);
-	dprintf(stdout_fd, "\n========= Job Summary =========\n");
-	dprintf(stdout_fd, " Elapsed Time : %s\n", print_time(&elapsed, 1));
-	dprintf(stdout_fd, " Start time   : %s\n", print_time(start, 0));
-	dprintf(stdout_fd, " End time     : %s\n", print_time(&end, 0));
-	dprintf(stdout_fd, " User CPU     : %s\n", print_time(&user_cpu, 1));
-	dprintf(stdout_fd, " Sys CPU      : %s\n", print_time(&sys_cpu, 1));
-	dprintf(stdout_fd, " Max RSS      : %ldKB\n", job_completion.rusage.ru_maxrss);
-	dprintf(stdout_fd, " UID          : %d (%s)\n", j->u->uid, j->u->username);
-	dprintf(stdout_fd, " Job ID       : %d\n", j->jobid);
-	dprintf(stdout_fd, " Exit Code    : %d", exit_code);
+	if ((j->flags &JERS_JOBADD_SILENT) == 0) {
+		lseek(stdout_fd, 0, SEEK_END);
+		dprintf(stdout_fd, "\n========= Job Summary =========\n");
+		dprintf(stdout_fd, " Elapsed Time : %s\n", print_time(&elapsed, 1));
+		dprintf(stdout_fd, " Start time   : %s\n", print_time(start, 0));
+		dprintf(stdout_fd, " End time     : %s\n", print_time(&end, 0));
+		dprintf(stdout_fd, " User CPU     : %s\n", print_time(&user_cpu, 1));
+		dprintf(stdout_fd, " Sys CPU      : %s\n", print_time(&sys_cpu, 1));
+		dprintf(stdout_fd, " Max RSS      : %ldKB\n", job_completion.rusage.ru_maxrss);
+		dprintf(stdout_fd, " UID          : %d (%s)\n", j->u->uid, j->u->username);
+		dprintf(stdout_fd, " Job ID       : %d\n", j->jobid);
+		dprintf(stdout_fd, " Exit Code    : %d", exit_code);
 
-	if (sig)
-		dprintf(stdout_fd, " (Signal %d - %s)\n", sig, getSignalName(sig));
-	else
-		write(stdout_fd, "\n", 1);
+		if (sig)
+			dprintf(stdout_fd, " (Signal %d - %s)\n", sig, getSignalName(sig));
+		else
+			write(stdout_fd, "\n", 1);
+	}
 
 	fdatasync(stdout_fd);
 
