@@ -190,6 +190,8 @@ enum field_type {
 
 	FLAGS,
 
+	RUNCOUNT,
+
 	ENDOFFIELDS
 };
 

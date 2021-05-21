@@ -581,6 +581,7 @@ int stateSaveJob(struct job * j) {
 	fprintf(f, "QUEUENAME %s\n", escapeString(j->queue->name, NULL));
 	fprintf(f, "SUBMITTIME %ld\n", j->submit_time);
 
+	fprintf(f, "RUNCOUNT %ld\n", j->run_count);
 	fprintf(f, "SUBMITTER %d\n", j->submitter);
 
 	fprintf(f, "ARGC %d\n", j->argc);
@@ -1355,6 +1356,8 @@ struct job * stateLoadJob(const char * fileName) {
 			}
 		} else if (strcmp(key, "UID") == 0) {
 			j->uid = atoi(value);
+		} else if (strcmp(key, "RUNCOUNT") == 0) {
+			j->run_count = atol(value);
 		} else if (strcmp(key, "SUBMITTER") == 0) {
 			j->submitter = atoi(value);
 		} else if (strcmp(key, "NICE") == 0) {

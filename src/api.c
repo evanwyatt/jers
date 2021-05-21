@@ -433,6 +433,7 @@ static int deserialize_jersJob(msg_item * item, jersJob *j) {
 			case JOBPID    : j->pid = getNumberField(&item->fields[i]); break;
 			case REVISION  : j->revision = getNumberField(&item->fields[i]); break;
 			case ENVS      : j->env_count = getStringArrayField(&item->fields[i], &j->envs); break;
+			case RUNCOUNT  : j->run_count = getNumberField(&item->fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n",item->fields[i].name); break;
 		}

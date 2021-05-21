@@ -205,6 +205,7 @@ struct job {
 	struct jobResource * req_resources;
 
 	int32_t internal_state;
+	int64_t run_count;
 
 	struct indexed_tag *index_table;
 

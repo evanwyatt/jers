@@ -284,6 +284,7 @@ int command_agent_jobstart(agent * a, msg_t * msg) {
 	j->pend_reason = 0;
 	j->pid = pid;
 	j->start_time = start_time;
+	j->run_count++;
 
 	if (server.recovery.in_progress && j->res_count)
 		allocateRes(j);

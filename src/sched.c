@@ -65,6 +65,7 @@ void sendStartCmd(struct job * j) {
 	JSONAddString(&b, JOBNAME, j->jobname);
 	JSONAddString(&b, QUEUENAME, j->queue->name);
 	JSONAddInt(&b, UID, j->uid);
+	JSONAddInt(&b, RUNCOUNT, j->run_count);
 
 	/* Work out what nice setting to use.
 	 * Use the following in order:

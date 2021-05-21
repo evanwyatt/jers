@@ -182,6 +182,7 @@ struct jersJobSpawn {
 	uid_t uid;
 	int nice;
 	int64_t flags;
+	int64_t run_count;
 
 	int64_t argc;
 	char ** argv;
@@ -646,7 +647,7 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int _socket) {
 		 *   are in a forked child.  */
 
 		/* Resize if needed */
-		int to_add = 10 + j->argc + j->env_count + j->res_count;
+		int to_add = 11 + j->argc + j->env_count + j->res_count;
 
 		if (to_add >= j->u->env_size - j->u->env_count)
 			j->u->users_env = realloc(j->u->users_env, sizeof(char *) * (j->u->env_count + to_add + 1));
@@ -670,6 +671,7 @@ void jersRunJob(struct jersJobSpawn * j, struct timespec * start, int _socket) {
 		if (asprintf(&j->u->users_env[j->u->env_count++],"JERS_JOBNAME=%s", j->name) <= 0) goto spawn_exit;
 		if (asprintf(&j->u->users_env[j->u->env_count++],"JERS_STDOUT=%s", j->stdout ? j->stdout : "/dev/null") <= 0) goto spawn_exit;
 		if (asprintf(&j->u->users_env[j->u->env_count++],"JERS_STDERR=%s", j->stderr ? j->stderr : j->stdout ? j->stdout : "/dev/null") <= 0) goto spawn_exit;
+		if (asprintf(&j->u->users_env[j->u->env_count++],"JERS_RUN_COUNT=%ld", j->run_count + 1) <= 0) goto spawn_exit;
 		if (asprintf(&j->u->users_env[j->u->env_count++],"JERS_ARGC=%ld", j->argc) <= 0) goto spawn_exit;
 
 		for (i = 0; i < j->argc; i++)
@@ -1258,6 +1260,7 @@ int start_command(msg_t * m) {
 			case WRAPPER  : j.wrapper = getStringField(&item->fields[i]) ; break;
 			case RESOURCES: j.res_count = getStringArrayField(&item->fields[i], &j.resources); break;
 			case FLAGS    : j.flags = getNumberField(&item->fields[i]); break;
+			case RUNCOUNT : j.run_count = getNumberField(&item->fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", item->fields[i].name); break;
 		}

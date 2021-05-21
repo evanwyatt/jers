@@ -347,6 +347,9 @@ void serialize_jersJob(buff_t *b, struct job *j, int fields) {
 	if (j->env_count && (fields == 0 || fields & JERS_RET_ENV))
 		JSONAddStringArray(b, ENVS, j->env_count, j->envs);
 
+	if (fields == 0 || fields &JERS_RET_RUNCOUNT)
+		JSONAddInt(b, RUNCOUNT, j->run_count);
+
 	if (j->pid && (fields == 0 || fields & JERS_RET_PID))
 		JSONAddInt(b, JOBPID, j->pid);
 

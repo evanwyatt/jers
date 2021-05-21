@@ -115,6 +115,7 @@ typedef uint32_t jobid_t;
 #define JERS_RET_PID		0x400000
 #define JERS_RET_REVISON	0x800000
 #define JERS_RET_ENV		0x10000000
+#define JERS_RET_RUNCOUNT	0x20000000
 
 #define JERS_RET_ALL        0x7FFFFFFFFFFFFFFF
 
@@ -314,7 +315,9 @@ typedef struct {
 	int env_count;
 	char **envs;
 
-	char filler[56];
+	int64_t run_count;
+
+	char filler[48];
 } jersJob;
 
 typedef struct {

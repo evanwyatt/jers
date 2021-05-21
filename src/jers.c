@@ -366,6 +366,7 @@ static void print_job(jersJob *j, int all) {
 		printf("Priority: %d\n", j->priority);
 		printf("Nice: %d\n", j->nice);
 		printf("Node: %s\n", j->node);
+		printf("Run Count: %ld\n", j->run_count);
 		printf("Stdout: %s\n", j->stdout);
 		printf("Stderr: %s\n", j->stderr);
 
