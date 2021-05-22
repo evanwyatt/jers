@@ -772,7 +772,7 @@ int show_resource(int argc, char *argv[]) {
 
 	for (int i = 0; all_res || args.resources[i]; i++) {
 		if (args.verbose)
-			fprintf(stderr, "Getting details for resource '%s'\n", args.resources[i]);
+			fprintf(stderr, "Getting details for resource '%s'\n",  all_res ? all_res : args.resources[i]);
 
 		if (jersGetResource(all_res ? all_res : args.resources[i], NULL, &info) != 0) {
 			fprintf(stderr, "Failed to get details of resource '%s': %s\n", args.resources[i], jersGetErrStr(jers_errno));

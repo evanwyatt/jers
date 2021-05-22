@@ -251,20 +251,14 @@ static int readResponse(void) {
 		/* Got a full message yet? */
 		nl = memchr(response.data + checked, '\n', bytes_read);
 
-		if (nl != NULL) {
-			*nl = '\0';
-			nl++;
+		if (nl != NULL)
 			break;
-		}
 
 		checked = response.used;
 	}
 
-	if (nl == NULL) {
-		setJersErrno(JERS_ERR_ERECV, NULL);
-		fprintf(stderr, "Failed to read response from jers daemon\n");
-		return 1;
-	}
+	*nl = '\0';
+	nl++;
 
 	if (load_message(response.data, &msg)) {
 		setJersErrno(JERS_ERR_INVRESP, NULL);
@@ -1038,11 +1032,9 @@ JERS_EXPORT int jersGetResource(const char * name, const jersResourceFilter *fil
 	if(readResponse())
 		return 1;
 
-	int64_t i;
-
 	info->resources = calloc(sizeof(jersResource) *  msg.item_count, 1);
 
-	for (i = 0; i < msg.item_count; i++) {
+	for (int64_t i = 0; i < msg.item_count; i++) {
 		deserialize_jersResource(&msg.items[i], &info->resources[i]);
 	}
 

@@ -1370,7 +1370,7 @@ int recon_command(msg_t * m) {
 	if (item != NULL) {
 		for (int i = 0; i < item->field_count; i++) {
 			switch(item->fields[i].number) {
-				case MSG_HMAC: hmac = getStringField(&item->fields[i]); break;
+				case MSG_HMAC: if (hmac == NULL) hmac = getStringField(&item->fields[i]); break;
 				case DATETIME: datetime = getNumberField(&item->fields[i]); break;
 
 				default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", item->fields[i].name); break;
@@ -1408,7 +1408,6 @@ int recon_command(msg_t * m) {
 		}
 
 		free(verify_hmac);
-		free(hmac);
 	}
 
 	/* The master daemon is requesting a list of all the jobs we have in memory.
@@ -1501,7 +1500,7 @@ int proxy_response(msg_t *m) {
 	for (int i = 0; i < item->field_count; i++) {
 		switch(item->fields[i].number) {
 			case PID: pid = getNumberField(&item->fields[i]); break;
-			case PROXYDATA: data = getStringField(&item->fields[i]); break;
+			case PROXYDATA: if (data == NULL) data = getStringField(&item->fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", item->fields[i].name); break;
 		}
