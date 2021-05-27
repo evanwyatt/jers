@@ -446,12 +446,20 @@ int command_add_job(client *c, void *args) {
 
 		if (j != NULL) {
 			/* If the job id requested exists, but is deleted, clean it up to reuse it */
-			if (j->internal_state &JERS_FLAG_DELETED && cleanupJob(j)) {
+			if (j->internal_state &JERS_FLAG_DELETED) {
+				if (cleanupJob(j) != 0)
+				{
+					sendError(c, JERS_ERR_JOBEXISTS, NULL);
+					return -1;
+				}
+
+				j = NULL;
+			}
+			else
+			{
 				sendError(c, JERS_ERR_JOBEXISTS, NULL);
 				return -1;
 			}
-
-			j = NULL;
 		}
 	}
 
