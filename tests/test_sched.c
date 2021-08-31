@@ -61,8 +61,8 @@ int test_releaseDeferred(void) {
 	jobid_t expected_pend[] = {5, 10, 32, 500};
 	int64_t expected_pend_count = 4;
 
-	jobid_t expected_defer[] = {10, 5, 500, 32, 12, 1020};
-	int64_t expected_defer_count = 6;
+	jobid_t expected_defer[] = {10, 5, 500, 32, 12, 1020, 1001};
+	int64_t expected_defer_count = 7;
 
 /* Load the jobs */
 #include <_test_gen_jobs2.c>
@@ -89,7 +89,7 @@ int test_releaseDeferred(void) {
 	{
 		printf("Unexpected number of jobs in deferred list, expected %ld, got %ld\n", expected_pend_count, count);
 		status = 1;
-		goto end;		
+		goto end;
 	}
 
 	releaseDeferred();

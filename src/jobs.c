@@ -293,7 +293,7 @@ int jobToJSON(struct job *j, buff_t *buff)
 
 /* Maintain the deferred job linked list */
 
-static inline int deferCmp(const struct job *a, const struct job *b) {
+static inline time_t deferCmp(const struct job *a, const struct job *b) {
 	return a->defer_time - b->defer_time;
 }
 
