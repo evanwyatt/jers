@@ -54,6 +54,31 @@ int flushDir(char *path);
 int flushStateDirs(void);
 void createDir(const char *path);
 
+static inline int64_t strtoint64(const char *str, int64_t *result) {
+	/* Given str, read in an int64_t, returning the number of bytes read */
+	*result = 0;
+	char neg = 0;
+	const char *pos = str;
+
+	if (*pos == '-') {
+		neg = 1;
+		pos++;
+	}
+
+	while (*pos != '\0') {
+		if (*pos < '0' || *pos > '9')
+			break;
+
+		*result = (*result * 10) + *pos - '0';
+		pos++;
+	}
+
+	if (neg)
+		*result = -(*result);
+
+	return pos - str;
+}
+
 /* Functions to save/recover the state to/from disk
  *   The state journals (journal.yyyymmdd) are written to when commands are received
  *   These commands are then applied to the job/queue/res files as needed */
@@ -1364,43 +1389,43 @@ struct job * stateLoadJob(const char * fileName) {
 		} else if (strcmp(key, "PRIORITY") == 0) {
 			j->priority = atoi(value);
 		} else if (strcmp(key, "SUBMITTIME") == 0) {
-			j->submit_time = atoi(value);
+			strtoint64(value, &j->submit_time);
 		} else if (strcmp(key, "DEFERTIME") == 0) {
-			j->defer_time = atoi(value);
+			strtoint64(value, &j->defer_time);
 		} else if (strcmp(key, "FINISHTIME") == 0) {
-			j->finish_time = atoi(value);
+			strtoint64(value, &j->finish_time);
 		} else if (strcmp(key, "STARTTIME") == 0) {
-			j->start_time = atoi(value);
+			strtoint64(value, &j->start_time);
 		} else if (strcmp(key, "EXITCODE") == 0) {
 			j->exitcode = atoi(value);
 		} else if (strcmp(key, "SIGNAL") == 0) {
 			j->signal = atoi(value);
 		} else if (strcmp(key, "FLAGS") == 0) {
-			j->flags = atol(value);
+			strtoint64(value, &j->flags);
 		} else if (strcmp(key, "REVISION") == 0) {
-			j->obj.revision = atol(value);
+			strtoint64(value, &j->obj.revision);
 		} else if (strcmp(key, "USAGE_UTIME_SEC") == 0) {
-			j->usage.ru_utime.tv_sec = atol(value);
+			strtoint64(value, &j->usage.ru_utime.tv_sec);
 		} else if (strcmp(key, "USAGE_UTIME_USEC") == 0) {
-			j->usage.ru_utime.tv_usec = atol(value);
+			strtoint64(value, &j->usage.ru_utime.tv_usec);
 		} else if (strcmp(key, "USAGE_STIME_SEC") == 0) {
-			j->usage.ru_stime.tv_sec = atol(value);
+			strtoint64(value, &j->usage.ru_stime.tv_sec);
 		} else if (strcmp(key, "USAGE_STIME_USEC") == 0) {
-			j->usage.ru_stime.tv_usec = atol(value);
+			strtoint64(value, &j->usage.ru_stime.tv_usec);
 		} else if (strcmp(key, "USAGE_MAXRSS") == 0) {
-			j->usage.ru_maxrss = atol(value);
+			strtoint64(value, &j->usage.ru_maxrss);
 		} else if (strcmp(key, "USAGE_MINFLT") == 0) {
-			j->usage.ru_minflt = atol(value);
+			strtoint64(value, &j->usage.ru_minflt);
 		} else if (strcmp(key, "USAGE_MAJFLT") == 0) {
-			j->usage.ru_majflt = atol(value);
+			strtoint64(value, &j->usage.ru_majflt);
 		} else if (strcmp(key, "USAGE_INBLOCK") == 0) {
-			j->usage.ru_inblock = atol(value);
+			strtoint64(value, &j->usage.ru_inblock);
 		} else if (strcmp(key, "USAGE_OUBLOCK") == 0) {
-			j->usage.ru_oublock = atol(value);
+			strtoint64(value, &j->usage.ru_oublock);
 		} else if (strcmp(key, "USAGE_NVCSW") == 0) {
-			j->usage.ru_nvcsw = atol(value);
+			strtoint64(value, &j->usage.ru_nvcsw);
 		} else if (strcmp(key, "USAGE_NIVCSW") == 0) {
-			j->usage.ru_nivcsw = atol(value);
+			strtoint64(value, &j->usage.ru_nivcsw);
 		}
 	}
 
@@ -1525,7 +1550,7 @@ struct queue * stateLoadQueue(const char * fileName) {
 		} else if (strcmp(key, "HOST") == 0) {
 			q->host = strdup(value);
 		} else if (strcmp(key, "REVISION") == 0) {
-			q->obj.revision = atol(value);
+			strtoint64(value, &q->obj.revision);
 		} else if (strcmp(key, "NICE") == 0) {
 			q->nice = atoi(value);
 		} else {
@@ -1645,7 +1670,7 @@ struct resource * stateLoadResource(const char * file_name) {
 		if (strcmp(key, "COUNT") == 0) {
 			r->count = atoi(value);
 		} else if (strcmp(key, "REVISION") == 0) {
-			r->obj.revision = atol(value);
+			strtoint64(value, &r->obj.revision);
 		} else {
 			print_msg(JERS_LOG_WARNING, "stateLoadRes: skipping unknown config '%s' for resource %s\n", key, name);
 		}
