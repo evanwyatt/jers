@@ -264,6 +264,48 @@ static void test_job_states(void) {
 
 	TEST("State{Save/load}Job - Exited job", test_job_state(&j) != 0);
 
+
+	/* Large int64_t fields populated */
+	memset(&j, 0, sizeof(struct job));
+	j.jobid = 102468;
+	j.obj.type = JERS_OBJECT_JOB;
+	j.obj.revision = (int64_t) UINT32_MAX + 100;
+	j.jobname = "Longer job name #123123123132";
+	j.argc = 5;
+	j.argv = args;
+	args[0] = "echo";
+	args[1] = "one";
+	args[2] = "t\tw\to";
+	args[3] = "";
+	args[4] = "    four";
+
+	j.submit_time = (time_t) UINT32_MAX + 100;
+	j.defer_time = (time_t) UINT32_MAX + 500;
+	j.state = JERS_JOB_DEFERRED;
+
+	j.submitter = getuid();
+	j.queue = q;
+	j.shell = "/bin/bash";
+	j.pre_cmd = "echo \"PRE\tCMD\"";
+	j.post_cmd = "echo post cmd ";
+
+	j.stdout = "/tmp/test_stdout.log";
+	j.stderr = "/tmp/test_stderr.log";
+
+	j.env_count = 2;
+	j.envs = envs;
+	envs[0] = "DEBUG=Y";
+	envs[1] = "ENV=VAR";
+
+	j.nice = 10;
+	j.priority = 5;
+
+	TEST("State{Save/load}Job - times > 2038 test", test_job_state(&j) != 0);
+
+
+
+
+
 	/* Remove our dummy queue */
 	HASH_DEL(server.queueTable, q);
 	free(q);
@@ -301,7 +343,7 @@ void test_queue_states(void) {
 	struct queue q = {0};
 
 	q.obj.type = JERS_OBJECT_QUEUE;
-	q.obj.revision = 2;
+	q.obj.revision = (int64_t) UINT32_MAX + 1000;
 	q.name = "test_queue1";
 	q.job_limit = 1;
 	q.desc = "#Description ";
