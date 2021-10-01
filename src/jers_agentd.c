@@ -403,7 +403,7 @@ int createTempScript(struct jersJobSpawn * j) {
 		return 1;
 	}
 
-	dprintf(fd, "#!%s\n", j->shell);
+	dprintf(fd, "#!%s\n", j->shell ? j->shell : j->u->shell);
 
 	if (j->pre_command)
 		dprintf(fd, "%s\n", j->pre_command);
