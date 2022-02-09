@@ -392,7 +392,7 @@ int command_add_job(client *c, void *args) {
 
 	if (unlikely(server.recovery.in_progress)) {
 		/* Have we already loaded this job? */
-		j = findJob(s->jobid);
+		j = findJob(server.recovery.jobid);
 
 		if (j)
 			return 0;
