@@ -1,6 +1,19 @@
 JERS 1.1 release notes
 =======================
 
+JERS 1.1.8 - 2022-02-09
+================================================================================
+Bug fixes:
+- Fix bug where a job deferred after 2038 would block prior deferred jobs from running
+- Fix loading of int64s from state files
+- Fix loading of accounting journals - Skip leading status byte
+- Fix recovery of adding jobs
+
+Changes:
+- Use the users default shell if one was not specified during submission
+- Log the UID of the process signalling a job into the job logfile
+- Wait for all PIDs in the process group to terminate before changing the status of a signalled job from 'RUN' -> 'EXIT(n)'
+
 JERS 1.1.7 - 2021-05-27
 ================================================================================
 - Fix bug where requesting a jobid that was in use would not return an error

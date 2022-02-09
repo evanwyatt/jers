@@ -40,7 +40,7 @@ typedef uint32_t jobid_t;
 
 #define JERS_MAJOR 1
 #define JERS_MINOR 1
-#define JERS_PATCH 7
+#define JERS_PATCH 8
 
 #define JERS_RES_NAME_MAX 64
 #define JERS_TAG_MAX 64
