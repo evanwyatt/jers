@@ -1027,6 +1027,7 @@ int command_sig_job(client * c, void * args) {
 
 	JSONAddInt(&sig_message, JOBID, js->jobid);
 	JSONAddInt(&sig_message, SIGNAL, js->signum);
+	JSONAddInt(&sig_message, UID, c->uid);
 
 	sendAgentMessage(j->queue->agent, &sig_message);
 
