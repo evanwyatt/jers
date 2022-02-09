@@ -1,4 +1,4 @@
-JERS_CFLAGS=$(CFLAGS) -g -fPIC -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -Werror -std=c11 -D_GNU_SOURCE -fvisibility=hidden -Wunreachable-code -Wstrict-prototypes
+JERS_CFLAGS=$(CFLAGS) -g -fPIC -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -Werror -std=c11 -D_GNU_SOURCE -fvisibility=hidden -Wunreachable-code -Wstrict-prototypes -Winline
 JERS_LDFLAGS=$(LD_FLAGS) -rdynamic
 
 ifeq ($(USE_SYSTEMD),)

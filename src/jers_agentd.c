@@ -78,7 +78,8 @@
 #define JERS_RUNDIR "/run/jers"
 #define RECONNECT_WAIT 20 // Seconds
 #define ADOPT_SLEEP 2
-
+#define SIGKILLJOB (SIGRTMIN + 1)
+#define HALF_SECOND_MICRO 500000
 struct runningJob;
 struct jersJobSpawn;
 
@@ -98,12 +99,29 @@ int job_stderr = STDERR_FILENO;
 pid_t job_pid = -1;
 
 volatile sig_atomic_t shutdown_requested = 0;
+volatile sig_atomic_t killed = 0;
 
 struct jobCompletion {
 	int exitcode;
 	time_t finish_time;
 	struct rusage rusage;
 };
+
+/* Cram enough data into 8 bytes to get sent with a signal */
+struct jobSignal {
+	uid_t uid;
+	char signum;
+	char spare[3];
+};
+
+/* Dirty hack to trick the compiler */
+union uJobSig {
+	void *p;
+	struct jobSignal sig;
+};
+
+_Static_assert(sizeof(union uJobSig) == sizeof(void *), "Expected sizeof(union uJobSig) to be sizeof(void *)");
+
 
 /* Linked list of active jobs
  *  * Note: the pid refers to the pid of the jersJob program. */
@@ -200,7 +218,7 @@ struct jersJobSpawn {
 
 struct agent agent;
 
-static int _strcpy_len(char *dst, const char *src) {
+static inline int _strcpy_len(char *dst, const char *src) {
 	int len = 0;
 
 	for (len = 0; src[len]; len++)
@@ -211,27 +229,49 @@ static int _strcpy_len(char *dst, const char *src) {
 	return len;
 }
 
+void setup_job_sighandler(void);
+
 void job_sighandler(int signum, siginfo_t *info, void *ucontext) {
 	/* This function needs to be signal safe, so functions like printf can not be used */
 	char buff[4096];
 	int len = 0;
+	struct jobSignal *killInfo = (struct jobSignal *)&info->si_value;
+	struct jobSignal termInfo = {0};
 
 	UNUSED(ucontext);
 
-	len += _strcpy_len(buff + len, "*** JERS - Signal received: ");
-	len += _strcpy_len(buff + len, getSignalName(signum));
-	len += _strcpy_len(buff + len, " From PID:");
-	len += int64tostr(buff + len, info->si_pid);
-	len += _strcpy_len(buff + len, " UID:");
-	len += int64tostr(buff + len, info->si_uid);
+	setup_job_sighandler();
 
+	if (signum != SIGKILLJOB)
+	{
+		/* Handle someone killing the jers_agentd[<jobid>] process directly.
+		 * Note: We can't do anything about SIGKILL */
+		if (signum == SIGTERM)
+		{
+			killInfo = &termInfo;
+			killInfo->signum = signum;
+			killInfo->uid = info->si_uid;
+		}
+		else
+		{
+			/* Not a signal we wanted to handle */
+			return;
+		}
+	}
+
+	killed = 1;
+
+	len += _strcpy_len(buff + len, "*** JERS - Signal received: ");
+	len += _strcpy_len(buff + len, getSignalName(killInfo->signum));
+	len += _strcpy_len(buff + len, " UID:");
+	len += int64tostr(buff + len, killInfo->uid);
 	buff[len++] = '\n';
 
 	write(job_stderr, buff, len);
 
 	/* Forward this signal to the entire process group */
 	if (job_pid != -1)
-		kill(-job_pid, signum);
+		kill(-job_pid, killInfo->signum);
 }
 
 void setup_job_sighandler(void) {
@@ -240,6 +280,7 @@ void setup_job_sighandler(void) {
 	sigemptyset(&sigact.sa_mask);
 	sigact.sa_flags = SA_NODEFER | SA_RESETHAND | SA_SIGINFO;
 	sigact.sa_sigaction = job_sighandler;
+	sigaction(SIGKILLJOB, &sigact, NULL);
 	sigaction(SIGTERM, &sigact, NULL);
 }
 
@@ -316,14 +357,13 @@ void loadConfig(char * config) {
  * It will try 10 times over 10 seconds to create the logfile
  * The fd to the logfile, or -1 on error is returned */
 
-int open_logfile(char * file) {
+int open_logfile(const char *file) {
 	int fd;
 	int attempts = 0;
 	int rename_attempts;
 	char * newfilename = NULL;
 
 	while (1) {
-
 		fd = open(file, O_CREAT|O_EXCL|O_WRONLY, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
 
 		if (fd != -1)
@@ -487,6 +527,78 @@ void deleteAdoptFile(jobid_t jobid) {
 	unlink(filename);
 
 	return;
+}
+
+int print_processgroup(int fd, pid_t target_pgrp) {
+	glob_t globbuff;
+	int rc;
+	char *line = NULL;
+	size_t line_size = 0;
+	int count = 0;
+
+	if ( (rc = glob("/proc/*/stat", 0, NULL, &globbuff)) != 0) {
+		if (rc == GLOB_NOMATCH)
+			return 0;
+
+		fprintf(stderr, "Failed to glob /proc/*/stat: %s\n",
+			rc == GLOB_ABORTED ? "Glob aborted" : rc == GLOB_NOSPACE ? "Glob nospace" : "Unknown glob error");
+
+		return 0;
+	}
+
+	for (size_t i = 0; i < globbuff.gl_pathc; i++) {
+		FILE *f = fopen(globbuff.gl_pathv[i], "r");
+
+		if (f == NULL)
+			continue;
+
+		ssize_t len = getline(&line, &line_size, f);
+
+		if (len <= 0) {
+				fclose(f);
+				continue;
+		}
+
+		fclose(f);
+
+		/* Extract the pgrp. Skip over the commandline first */
+		char *cmdstart = strchr(line, '(');
+		char *cmdend = strrchr(line, ')');
+
+		if (cmdstart == NULL || cmdend == NULL)
+			continue;
+
+		pid_t pid = 0, ppid = 0, pgrp = 0;
+
+		if (sscanf(cmdend + 1, " %*c %d %d %*[^\n]", &ppid, &pgrp) != 2)
+			continue;
+
+		pid = atoi(line);
+
+		if (pgrp != target_pgrp || pid == job_pid)
+			continue;
+
+		count++;
+
+		/* Get rid of the '(' */
+		cmdstart++;
+
+		if (fd != -1) {
+			if (count == 1) {
+				dprintf(fd, "*** JERS - Job terminated, but process(es) still exist in process group: %d\n", target_pgrp);
+				dprintf(fd, "*** JERS - Processes:\n");
+				dprintf(fd, "PID     PPID    PGRP    CMD\n");
+				dprintf(fd, "--------------------------------------------------\n");
+			}
+
+			dprintf(fd, "%-6d  %-6d  %-6d  %.*s\n", pid, ppid, pgrp, (int)(cmdend - cmdstart), cmdstart);
+		}
+	}
+
+	free(line);
+	globfree(&globbuff);
+
+	return count;
 }
 
 /* jersRunJob() is essentially a wrapper around a users job to setup the environment,
@@ -742,11 +854,39 @@ spawn_exit:
 
 	/* Wait for the job to complete */
 	while (wait4(jobPid, &rc, 0, &job_completion.rusage) < 0) {
-		if (errno == EINTR)
+		if (errno == EINTR) {
+			/* Skip cleaning up the shell, we want to keep it as a zombie until
+			 * we are sure everything else is gone. */
+			if (killed)
+				break;
+
 			continue;
+		}
 
 		fprintf(stderr, "wait4() failed pid:%d? %s\n", jobPid, strerror(errno));
 		_exit(JERS_FAIL_PID);
+	}
+
+	/* If we were killed, confirm all the subprocesses got killed off.
+	 * We only want to exit when all the processes are gone, otherwise
+	 * we might end up with phantom processes */
+
+	if (killed) {
+		int64_t i = 0;
+		int proc_count = 0;
+
+		do {
+			proc_count = print_processgroup(i++ % 60 == 0 ? stderr_fd : -1, jobPid);
+
+			/* Wait a little bit and try again */
+			usleep(HALF_SECOND_MICRO);
+		} while (proc_count != 0);
+
+		/* Cleanup the shell of the job */
+		while (wait4(jobPid, &rc, 0, &job_completion.rusage) < 0) {
+			if (errno == EINTR)
+				continue;
+		}
 	}
 
 	clock_gettime(CLOCK_REALTIME_COARSE, &end);
@@ -1081,18 +1221,6 @@ void check_children(void) {
 
 			if (status == -1 && (errno != EAGAIN && errno != EWOULDBLOCK))
 				fprintf(stderr, "Failed to read pid from job %d\n", j->jobID);
-
-			/* Check if we've been asked to send a signal to a batch job.
-			 * We might have gotten this request before we knew the PID */
-
-			if (j->job_pid && j->kill) {
-				print_msg(JERS_LOG_DEBUG, "Sending delayed signal to job:%d signum:%d\n", j->jobID, j->kill);
-
-				/* Send the saved signal to the job */
-				if (kill(-j->job_pid, j->kill)) {
-					print_msg(JERS_LOG_WARNING, "Failed to signal JOBID:%d with SIGNUM:%d", j->jobID, j->kill);
-				}
-			}
 		}
 
 		/* Check for any children we have cleaned up, but didn't get the completion information from */
@@ -1307,6 +1435,7 @@ int signal_command(msg_t * m) {
 	jobid_t id = 0;
 	int signum = 0;
 	int i;
+	uid_t uid = 0;
 	struct runningJob * j = NULL;
 
 	msg_item * item = &m->items[0];
@@ -1315,6 +1444,7 @@ int signal_command(msg_t * m) {
 		switch(item->fields[i].number) {
 			case JOBID    : id = getNumberField(&item->fields[i]); break;
 			case SIGNAL   : signum = getNumberField(&item->fields[i]); break;
+			case UID      : uid = getNumberField(&item->fields[i]); break;
 
 			default: fprintf(stderr, "Unknown field '%s' encountered - Ignoring\n", item->fields[i].name); break;
 		}
@@ -1338,14 +1468,19 @@ int signal_command(msg_t * m) {
 		return 0;
 	}
 
-	if (j->job_pid == 0) {
-		fprintf(stderr, "Got request to signal job %d, but it hasn't sent us its PID yet...\n", j->jobID);
-		/* Set a flag so its killed as soon as we get the PID */
-		j->kill = signum;
-		return 0;
-	}
+	/* We send a signal to the jers_agentd fork that is running the job. We send it
+	 * the information it needs to log and kill off the job */
+	union uJobSig s;
+	union sigval sigval;
 
-	if (kill(-j->job_pid, signum) != 0)
+	s.sig.uid = uid;
+	s.sig.signum = signum;
+
+	/* We've hidden our payload in a union to trick the compiler.
+	 * This trick is only required due to the large number of compiler warnings enabled */
+	sigval.sival_ptr = s.p;
+
+	if (sigqueue(j->pid, SIGKILLJOB, sigval) != 0)
 		print_msg(JERS_LOG_WARNING, "Failed to signal JOBID:%d with SIGNUM:%d", id, signum);
 
 	return 0;
