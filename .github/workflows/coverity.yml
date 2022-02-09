@@ -2,7 +2,8 @@ name: coverity
 on:
   push:
     branches:
-      - pre-rc-1.0.0
+      - unstable
+      - 1.1
 
 jobs:
   latest:
