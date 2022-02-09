@@ -481,7 +481,7 @@ static void acctMain(acctClient *a) {
 			jobid_t jobid;
 			int msg_offset;
 
-			int field_count = sscanf(record, " %64s\t%d\t%64s\t%u\t%ld\t%n", timestamp, (int *)&uid, command, &jobid, &revision, &msg_offset);
+			int field_count = sscanf(record, "%*c%64s\t%d\t%64s\t%u\t%ld\t%n", timestamp, (int *)&uid, command, &jobid, &revision, &msg_offset);
 
 			if (field_count != 5)
 				error_die("Failed to load 5 required fields from message");
