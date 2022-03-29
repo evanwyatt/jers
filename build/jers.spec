@@ -2,6 +2,8 @@
 %{!?major_ver: %define major_ver 0}
 %{!?minor_ver: %define minor_ver 0}
 %{!?patch: %define patch 0}
+%{!?dist: %define dist el%{rhel}}
+
 
 Name:		jers
 Version:	%{major_ver}.%{minor_ver}.%{patch}
