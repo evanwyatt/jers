@@ -310,7 +310,7 @@ int matches(const char *pattern, const char *string) {
 int check_name(char *name) {
 	static char *allowed = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-";
 
-	if (strspn(name, allowed) != strlen(name))
+	if (strspn(name, allowed) != strlen(name) || *name == '.')
 		return 1;
 
 	return 0;
