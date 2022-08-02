@@ -251,7 +251,7 @@ int locateJournal(acctClient *a, char *id) {
 	off_t current = 0;
 
 	while ((record_len = getline(&record, &record_size, a->journal)) != -1) {
-		if (*record == '\0')
+		if (*record == '\0' || *record == '$')
 			break;
 
 		if (++current == a->record)
@@ -419,7 +419,7 @@ static void acctMain(acctClient *a) {
 		current_pos = ftell(a->journal);
 
 		while ((record_len = getline(&record, &record_size, a->journal)) != -1) {
-			if (*record == '\0') {
+			if (*record == '\0' || *record == '$') {
 				fseek(a->journal, current_pos, SEEK_SET);
 
 				/* Check if we need to switch to a new journal file */
